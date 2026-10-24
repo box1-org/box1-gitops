@@ -176,10 +176,12 @@ installer sees that same file at `/dynamic-plugins-root/dynamic-plugins.extensio
 The 1.9.7 installer rejects duplicate plugin entries between included files,
 including overrides of plugins already present in its defaults. The startup
 adapter therefore stages the writable file's plugin entries as the main plugin
-list and includes the defaults once. It invokes the stock installer from a
-writable temporary directory, with links to the image's bundled packages. This
-preserves default frontend wiring and supports enabling/disabling bundled
-plugins without changing the image or patching the installer itself.
+list and includes the defaults once. It runs the image's installer from its
+original working directory so npm retains bundled dependencies. Only the
+input-config assignment is redirected in memory to the staged file; the image
+is unchanged. The adapter fails clearly if that assignment changes in a future
+image, so revalidate it with Operator upgrades. This preserves default frontend
+wiring and supports enabling/disabling bundled plugins.
 
 Git manages the bootstrap, environment, base app configuration, and storage.
 After bootstrap, the PVC file owns UI-managed plugin choices. Editing the seed
