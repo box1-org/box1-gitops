@@ -5,15 +5,7 @@ metadata:
   namespace: rhdh
 data:
   dynamic-plugins.yaml: |
-    extensions:
-      installation:
-        enabled: true
-        saveToSingleFile:
-          file: ./dynamic-plugins.yaml
     includes:
       - dynamic-plugins.default.yaml
-    plugins:
-      - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-github-dynamic
-        disabled: false
-      - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-github-org-dynamic
-        disabled: false
+      - /dynamic-plugins-root/dynamic-plugins.extensions.yaml
+    plugins: []

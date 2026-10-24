@@ -149,7 +149,54 @@ objects alone do not provide a dependable OLM/CRD readiness barrier. Do not add
 Pruning is not automatic; do not delete the namespace or database PVC as part of
 a routine upgrade.
 
-## Validation and references
+## Install plugins through Extensions (lab environment)
+
+This setup follows Red Hat's [Extensions installation procedure](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html/installing_and_viewing_plugins_in_red_hat_developer_hub/extensions-in-rhdh_plugins-in-rhdh#configure-rhdh-to-install-plugins-by-using-extensions_extensions-in-rhdh).
+The feature is Technology Preview and plugin installation through the UI requires
+`NODE_ENV=development`. GitHub authentication remains explicitly configured with
+`auth.environment=production`; guest access is not enabled.
+
+`dynamic-plugins-root` is a dedicated 5 GiB ReadWriteOnce PVC on `lvms-vg1`.
+The Backstage deployment patch clears the default ephemeral volume source and
+mounts this claim in both the installer and application containers. The claim is
+in the same sync wave as Backstage because `WaitForFirstConsumer` needs the Pod
+to schedule before binding the volume. It is excluded from Argo CD pruning.
+The Deployment uses `Recreate` so only one Pod writes this shared cache; restarts
+and upgrades cause a short outage. The PostgreSQL PVC is independent.
+
+The installer copies `developer-hub-extensions-seed` into the PVC **only if**
+`dynamic-plugins.extensions.yaml` is absent. This automates the documentation's
+manual `oc cp` bootstrap before the installer loads the file, including on a
+fresh installation. The seed enables GitHub discovery and the Extensions UI and
+backend; existing frontend wiring is inherited from the bundled defaults.
+The backend writes future UI changes to
+`/opt/app-root/src/dynamic-plugins-root/dynamic-plugins.extensions.yaml`; the
+installer sees that same file at `/dynamic-plugins-root/dynamic-plugins.extensions.yaml`.
+
+Git manages the bootstrap, environment, base app configuration, and storage.
+After bootstrap, the PVC file owns UI-managed plugin choices. Editing the seed
+ConfigMap does **not** overwrite an existing file or apply new plugin choices.
+Back up this file with the PVC and avoid putting plaintext credentials in plugin
+configuration. Continue to use environment variables backed by Secrets.
+The main `dynamic-plugins.yaml` has no plugin overrides, allowing UI settings to
+take effect. Enabling/disabling discovery plugins through the UI can affect
+GitHub catalog imports and sign-in identity provisioning.
+
+To use it:
+
+1. Sign in with GitHub and open **Administration > Extensions**.
+2. Select a plugin and choose **Install**, or use its Actions to configure or
+   enable/disable it. Save the configuration.
+3. Restart the application with
+   `oc -n rhdh rollout restart deployment/backstage-developer-hub`.
+4. Wait for readiness and verify the plugin on the Installed tab. Plugin changes
+   are loaded at startup; saving in the UI does not hot-reload the backend.
+
+RBAC is currently disabled. If RBAC is enabled later, grant the appropriate
+administrators the Extensions **Create** and **Read** permissions as described in
+section 6.5.1 of the linked procedure.
+
+## Manifest validation
 
 The GitHub catalog plugin package in the 1.9.7 image is
 `./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-github-dynamic`.
