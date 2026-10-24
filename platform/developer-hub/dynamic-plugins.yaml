@@ -5,6 +5,11 @@ metadata:
   namespace: rhdh
 data:
   dynamic-plugins.yaml: |
+    extensions:
+      installation:
+        enabled: true
+        saveToSingleFile:
+          file: ./dynamic-plugins.yaml
     includes:
       - dynamic-plugins.default.yaml
     plugins:
