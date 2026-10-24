@@ -45,7 +45,8 @@ data:
     catalog:
       providers:
         github:
-          box1-repositories:
+          # Match the bundled plugin default to override its GITHUB_ORG placeholder.
+          providerId:
             organization: box1-org
             catalogPath: /catalog-info.yaml
             filters:

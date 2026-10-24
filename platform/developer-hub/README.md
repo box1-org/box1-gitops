@@ -159,6 +159,11 @@ the correct package among the default disabled plugins. After publishing a
 correction, sync the ConfigMap through the `developer-hub` Argo CD application
 and verify that its replacement Pod completes `install-dynamic-plugins`.
 
+The GitHub discovery provider key is `providerId` to match the bundled plugin's
+default configuration. A different key adds another provider rather than
+replacing the default `${GITHUB_ORG}` placeholder, which can prevent the catalog
+plugin from starting when that variable is unset.
+
 Both targets can be rendered independently without a cluster:
 
 ```sh
