@@ -135,7 +135,7 @@ oc get crd backstages.rhdh.redhat.com \
 oc get storageclass
 oc apply --dry-run=server -k platform/developer-hub
 oc -n rhdh get backstage,pods,pvc,route
-oc -n rhdh logs deployment/backstage-developer-hub -c backstage
+oc -n rhdh logs deployment/backstage-developer-hub -c backstage-backend
 ```
 
 The two manual sync boundaries are intentional. Sync waves on child Application
@@ -145,6 +145,14 @@ Pruning is not automatic; do not delete the namespace or database PVC as part of
 a routine upgrade.
 
 ## Validation and references
+
+The GitHub catalog plugin package in the 1.9.7 image is
+`./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-github-dynamic`.
+Omitting `-dynamic` causes the plugin init container to fail with `npm pack`
+ENOENT because that alternate directory does not exist. The installer logs list
+the correct package among the default disabled plugins. After publishing a
+correction, sync the ConfigMap through the `developer-hub` Argo CD application
+and verify that its replacement Pod completes `install-dynamic-plugins`.
 
 Both targets can be rendered independently without a cluster:
 
