@@ -70,7 +70,12 @@ credentials, ExternalSecret resources, or assumed secret-manager installations.
 | `developer-hub-db` | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRESQL_ADMIN_PASSWORD` |
 
 Use independent, randomly generated values for backend, session, and database
-secrets. `BACKEND_SECRET` replaces the Operator default legacy backend token.
+secrets. When `POSTGRES_USER=postgres`, set `POSTGRES_PASSWORD` and
+`POSTGRESQL_ADMIN_PASSWORD` to the **same** generated database password: the
+PostgreSQL image initializes the postgres role with its admin password, while
+Backstage connects with `POSTGRES_PASSWORD`. Different values cause application
+startup to fail with password authentication errors.
+`BACKEND_SECRET` replaces the Operator default legacy backend token.
 `GITHUB_APP_PRIVATE_KEY` must be the complete multiline PEM private key, not a
 base64 representation of the PEM text. `POSTGRES_HOST` must be
 `backstage-psql-developer-hub`, `POSTGRES_PORT` must be `5432`, and
