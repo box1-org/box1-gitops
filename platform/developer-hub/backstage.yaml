@@ -28,14 +28,13 @@ spec:
         replicas: 1
         # One writer to the shared plugin cache and UI configuration file.
         strategy:
+          $patch: replace
           type: Recreate
-          rollingUpdate: null
         template:
           spec:
             volumes:
-              - name: dynamic-plugins-root
-                # Remove the default volume source when selecting the persistent claim.
-                ephemeral: null
+              - $patch: replace
+                name: dynamic-plugins-root
                 persistentVolumeClaim:
                   claimName: dynamic-plugins-root
               - name: extensions-bootstrap
