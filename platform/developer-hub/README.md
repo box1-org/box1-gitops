@@ -173,6 +173,14 @@ The backend writes future UI changes to
 `/opt/app-root/src/dynamic-plugins-root/dynamic-plugins.extensions.yaml`; the
 installer sees that same file at `/dynamic-plugins-root/dynamic-plugins.extensions.yaml`.
 
+The 1.9.7 installer rejects duplicate plugin entries between included files,
+including overrides of plugins already present in its defaults. The startup
+adapter therefore stages the writable file's plugin entries as the main plugin
+list and includes the defaults once. It invokes the stock installer from a
+writable temporary directory, with links to the image's bundled packages. This
+preserves default frontend wiring and supports enabling/disabling bundled
+plugins without changing the image or patching the installer itself.
+
 Git manages the bootstrap, environment, base app configuration, and storage.
 After bootstrap, the PVC file owns UI-managed plugin choices. Editing the seed
 ConfigMap does **not** overwrite an existing file or apply new plugin choices.

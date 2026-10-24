@@ -43,16 +43,8 @@ spec:
             initContainers:
               - name: install-dynamic-plugins
                 command:
-                  - /bin/sh
-                  - -ec
-                  - |
-                    extensions_file=/dynamic-plugins-root/dynamic-plugins.extensions.yaml
-                    if [ ! -e "$extensions_file" ]; then
-                      cp /extensions-bootstrap/dynamic-plugins.extensions.yaml "$extensions_file.tmp"
-                      chmod 600 "$extensions_file.tmp"
-                      mv "$extensions_file.tmp" "$extensions_file"
-                    fi
-                    exec ./install-dynamic-plugins.sh /dynamic-plugins-root
+                  - python3
+                  - /extensions-bootstrap/install-extensions.py
                 volumeMounts:
                   - name: extensions-bootstrap
                     mountPath: /extensions-bootstrap
