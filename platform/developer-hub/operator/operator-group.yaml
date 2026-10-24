@@ -1,0 +1,8 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhdh-operator
+  namespace: rhdh-operator
+# Only AllNamespaces is supported by the catalog's RHDH Operator.
+spec:
+  upgradeStrategy: Default

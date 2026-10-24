@@ -13,8 +13,6 @@ spec:
     server: https://kubernetes.default.svc
     namespace: rhdh
   syncPolicy:
-    automated:
-      selfHeal: true
-      prune: false
+    # Manual sync: wait for the separate Operator application and external secrets.
     syncOptions:
-      - CreateNamespace=true
+      - PruneLast=true

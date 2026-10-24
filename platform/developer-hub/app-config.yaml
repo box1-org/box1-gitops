@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: developer-hub-app-config
+  namespace: rhdh
+data:
+  app-config.yaml: |
+    app:
+      title: Box1 Developer Hub
+      baseUrl: https://developer-hub.apps.ocp.box1.org
+    organization:
+      name: box1-org
+    backend:
+      baseUrl: https://developer-hub.apps.ocp.box1.org
+      cors:
+        origin: https://developer-hub.apps.ocp.box1.org
+        credentials: true
+      auth:
+        externalAccess:
+          - type: legacy
+            options:
+              subject: box1-automation
+              secret: ${BACKEND_SECRET}
+    auth:
+      environment: production
+      session:
+        secret: ${AUTH_SESSION_SECRET}
+      providers:
+        github:
+          production:
+            clientId: ${GITHUB_APP_CLIENT_ID}
+            clientSecret: ${GITHUB_APP_CLIENT_SECRET}
+            signIn:
+              resolvers:
+                - resolver: usernameMatchingUserEntityName
+    signInPage: github
+    integrations:
+      github:
+        - host: github.com
+          apps:
+            - appId: ${GITHUB_APP_ID}
+              clientId: ${GITHUB_APP_CLIENT_ID}
+              clientSecret: ${GITHUB_APP_CLIENT_SECRET}
+              privateKey: ${GITHUB_APP_PRIVATE_KEY}
+    catalog:
+      providers:
+        github:
+          box1-repositories:
+            organization: box1-org
+            catalogPath: /catalog-info.yaml
+            filters:
+              branch: main
+              repository: '.*'
+            schedule:
+              frequency: { minutes: 30 }
+              timeout: { minutes: 10 }
+              initialDelay: { seconds: 30 }
+        githubOrg:
+          id: box1-org
+          githubUrl: https://github.com
+          orgs:
+            - box1-org
+          schedule:
+            frequency: { minutes: 30 }
+            timeout: { minutes: 10 }
+            initialDelay: { seconds: 15 }

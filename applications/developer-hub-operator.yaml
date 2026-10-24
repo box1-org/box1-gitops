@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: developer-hub-operator
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/developer-hub/operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rhdh-operator
+  # Manual sync; OLM InstallPlans also require explicit approval.
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true
