@@ -44,19 +44,50 @@ kubectl auth can-i update imagestreams.image.openshift.io --subresource=layers \
   -n box1-ci --as=system:serviceaccount:box1-ci:ci-build
 ```
 
-## Pending — exit criterion not met
+## GitHub acceptance completed
 
-- User selected a dedicated Pipelines GitHub App. It has not been registered or
-  installed by this rollout; Chrome automation was denied.
-- `openshift-pipelines/pipelines-as-code-secret` absent at final inspection.
-- `box1-ci/gitops-writer` absent at final inspection. A secret/renewal contract
-  is documented; it is not configured with a live credential.
-- No signed GitHub webhook delivery, GitHub-triggered run, successful PR check,
-  or repeated event-to-check test has been observed.
-- Registry RBAC was verified. Actual authenticated image push and digest output
-  await the Quarkus build task; RBAC checks alone do not prove a working push.
+The Phase 1 event-to-check exit criterion is met. Dedicated GitHub App
+`Box1 Pipelines` (`box1-pipelines`) is installed on `box1-org`; the user provisioned
+`openshift-pipelines/pipelines-as-code-secret` with the three expected keys.
+The installation currently selects all organization repositories. Tokens used by
+the phase-one pipelines remain scoped to their event repository, `box1-gitops`.
 
-Follow [README.md](README.md) to provision integration Secrets and perform the
-GitHub acceptance test. Neither manual run satisfies the Phase 1 exit criterion.
+Signed GitHub webhook deliveries were accepted with HTTP 202, and PAC created
+matching PipelineRuns and reported successful GitHub checks:
+
+| Event | Commit | PipelineRun | GitHub check |
+| --- | --- | --- | --- |
+| main push | `06adc2ec0ba0650df174c52d751f1916a001a06c` | `box1-phase1-smoke-744gs` | [success](https://github.com/box1-org/box1-gitops/runs/121054239862) |
+| main push, token write probe | `06adc2ec0ba0650df174c52d751f1916a001a06c` | `box1-gitops-auth-c8mmh` | [success](https://github.com/box1-org/box1-gitops/runs/121054239878) |
+| PR #1 opened | `77c2a5cf9145101901fd2532d078cea25fe744a5` | `box1-phase1-smoke-24z89` | [success](https://github.com/box1-org/box1-gitops/runs/121054060331) |
+| PR #1 second commit | `9e356468ce84caa758efbbfd084630be47a26a7a` | `box1-phase1-smoke-2b2sr` | [success](https://github.com/box1-org/box1-gitops/runs/121054358091) |
+
+Webhook evidence:
+
+| Event | Delivery ID | GUID | Response |
+| --- | --- | --- | --- |
+| main push | `3850214114349563904` | `951af4da-d01c-11f1-98a0-5f296668fb14` | 202 |
+| PR opened | `3850213998098120704` | `7470d790-d01c-11f1-8cce-e781324214cf` | 202 |
+| PR synchronize | `3850214190992072704` | `aa213240-d01c-11f1-926d-7703c614b385` | 202 |
+
+[Draft acceptance PR #1](https://github.com/box1-org/box1-gitops/pull/1) is left
+open for review; its documentation-only changes do not need to be merged to
+satisfy the test. Neither PR run mounted the GitOps credential. Main-only
+`gitops-auth-check.yaml` uses `ci-gitops` and PAC's generated short-lived token.
+Its write probe resubmitted the existing README Git blob, verified the identical
+SHA, and changed no branches, files, or workloads. No static bot PAT or
+`gitops-writer` Secret is required for this phase.
+
+Historical `box1-gitops-auth-cnkh6` failed because the first probe relied on a
+repository metadata permissions field absent from the App-token response.
+The corrected check verifies the Contents write API directly and passed.
+
+## Subsequent phases
+
+Registry RBAC was verified. Actual authenticated image push and digest output
+await the Quarkus build task; RBAC checks alone do not prove a working push.
 Application scaffolding, Quarkus build/test, GitOps image PR automation, runtime
-pull access, and Argo-managed application deployment belong to subsequent phases.
+pull access, and Argo-managed application deployment remain subsequent work.
+Cross-repository token scope for application release pipelines is not enabled by
+this foundation and must be explicitly configured and tested in the trusted
+release namespace. See [README.md](README.md) for credential boundaries.
