@@ -331,3 +331,31 @@ missing selector-matched Applications; it needs no browser session.
 References: [Red Hat 1.9 plugin configuration](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html-single/configuring_dynamic_plugins/index)
 and [Backstage Kubernetes configuration](https://backstage.io/docs/features/kubernetes/configuration/).
 
+
+## Provided APIs and endpoint testers
+
+The Quarkus template emits a Component and an OpenAPI API entity in the same
+`catalog-info.yaml`. `spec.providesApis` populates the service's **Provides APIs**
+card. API **Definition** uses Developer Hub's built-in Swagger renderer and
+**Try it out**; service Overview links also open the deployed `/q/swagger-ui/`.
+The API definition is read from that service's live `/q/openapi` endpoint, keeping
+it aligned with the deployed release. A new API entity needs the first service
+deployment before its definition can be ingested. The Component can register
+before deployment. Only `/q/openapi` reads under `*.apps.ocp.box1.org` are allowed
+by the Hub URL reader.
+
+Production OpenAPI documents name the public HTTPS Route as their server;
+`PUBLIC_API_URL` can override it. Services allow CORS from the exact Hub origin,
+with credentials disabled. Authentication added to a service must be represented
+in its contract and supplied through Swagger **Authorize**.
+
+Validate the catalog relationship, rendered contract, Swagger page, allowed
+Hub-origin request, and rejected untrusted origin without a browser:
+
+```sh
+kubectl -n rhdh exec -i deploy/backstage-developer-hub -c backstage-backend -- node \
+  < platform/developer-hub/scripts/verify-service-apis.cjs
+```
+
+References: [Red Hat API contracts and interactive testing](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html-single/navigate_red_hat_developer_hub_on_your_first_day/index)
+and [Quarkus OpenAPI and Swagger UI](https://quarkus.io/version/3.40/guides/openapi-swaggerui/).
