@@ -43,6 +43,11 @@ data:
               clientId: ${GITHUB_APP_CLIENT_ID}
               clientSecret: ${GITHUB_APP_CLIENT_SECRET}
               privateKey: ${GITHUB_APP_PRIVATE_KEY}
+    # Installed UI plugins stay available; configure real read-only connections separately.
+    kubernetes:
+      clusterLocatorMethods: []
+    argocd:
+      appLocatorMethods: []
     catalog:
       rules:
         - allow: [Component, System, API, Resource, Location, Template]
