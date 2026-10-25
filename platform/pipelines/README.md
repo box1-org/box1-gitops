@@ -122,14 +122,24 @@ these accounts receives application Deployment/Route/Service write permissions.
 Future runtime namespaces need a separate `system:image-puller` binding for their
 runtime ServiceAccount to pull from `box1-ci`; no wildcard pull access is added.
 
-For GitOps update tasks, provision Opaque Secret `gitops-writer` in the trusted
-build namespace with `username` and `token` keys. Use a separately scoped,
-short-lived GitHub App installation token, or a fine-grained token limited to
-`box1-org/box1-gitops` with Contents and Pull requests write. Use a bot username
-or `x-access-token` for GitHub App tokens. Tokens must be renewed by the external
-credential owner; storing an expiring token once is not a renewal solution.
-Mount this Secret only in the trusted GitOps update task, not on a ServiceAccount
-or in a PR test task. Do not widen PAC's per-repository event token globally.
+GitOps credentials use the dedicated Pipelines App's temporary installation
+credentials. PAC creates a new `{{git_auth_secret}}` for each run; its
+`git-provider-token` key is available to trusted tasks through an explicit
+`secretKeyRef`. There is no static `gitops-writer` Secret or PAT to renew.
+`.tekton/gitops-auth-check.yaml` validates write access to `box1-org/box1-gitops`
+on pushes to `main`, using `ci-gitops`. It runs only inline platform-owned code,
+does not clone or run application code, and never prints the token. PR smoke
+checks continue to use `ci-test` without mounting this credential.
+
+This works for Phase 1 because the event repository is itself `box1-gitops`.
+Future application release pipelines require an explicit, reviewed cross-repo
+token-scope configuration for `box1-org/box1-gitops`, with a matching PAC
+Repository registration in the trusted namespace and an App installation covering
+both repositories. Do not assume this is already enabled. Follow the installed
+PAC version's scope settings; keep any global extra-repository list empty and
+verify the issued token's actual access before onboarding a release pipeline.
+Mount tokens only in the GitOps update task, never in untrusted build/PR steps.
+Tokens expire; long-running tasks must finish within the issued token lifetime.
 
 Kubernetes ServiceAccounts are not a Secret-access boundary for someone who can
 create arbitrary Pods/PipelineRuns in the same namespace. Before onboarding
