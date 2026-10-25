@@ -59,11 +59,20 @@ spec:
       with urllib.request.urlopen(url+'.sha256',timeout=30) as response: expected=response.read().decode().strip()
       assert hashlib.sha256(binary).hexdigest()==expected
       kubectl=root/'kubectl'; kubectl.write_bytes(binary); kubectl.chmod(0o755)
-      rendered=subprocess.check_output([str(kubectl),'kustomize',str(checkout/'workloads/quarkus-reference')],text=True)
-      images=re.findall(r'^\s+image: (.+)$',rendered,re.M)
-      assert len(images)==1 and re.fullmatch(r'image-registry\.openshift-image-registry\.svc:5000/box1-ci/quarkus-reference@sha256:[a-f0-9]{64}',images[0]), 'Runtime image must be digest-pinned to box1 registry'
-      for kind in ['Deployment','Service','Route','ConfigMap','ServiceAccount','Namespace']:
-          assert 'kind: '+kind+'\n' in rendered, 'Missing '+kind
-      for probe in ['startupProbe:','readinessProbe:','livenessProbe:']:
-          assert probe in rendered
-      print('PASS: Kustomize render, required resources, health probes, and immutable registry digest for '+sha)
+      targets=sorted((checkout/'workloads').glob('*/kustomization.yaml'))
+      assert targets, 'No workload targets found'
+      for target in targets:
+          name=target.parent.name
+          assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name)
+          rendered=subprocess.check_output([str(kubectl),'kustomize',str(target.parent)],text=True)
+          images=re.findall(r'^\s+image: (.+)$',rendered,re.M)
+          expected=r'image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+name+r'@sha256:[a-f0-9]{64}'
+          assert len(images)==1 and re.fullmatch(expected,images[0]), 'Runtime image must be digest-pinned to its service in box1 registry'
+          for kind in ['Deployment','Service','Route','ConfigMap','ServiceAccount','Namespace']:
+              assert 'kind: '+kind+'\n' in rendered, 'Missing '+kind
+          for probe in ['startupProbe:','readinessProbe:','livenessProbe:']:
+              assert probe in rendered
+          if images[0].endswith('@sha256:'+'0'*64):
+              assert re.search(r'^  replicas: 0$',rendered,re.M), 'Unbuilt onboarding workloads must stay at zero replicas'
+          print('PASS: Kustomize, resources, probes, immutable image: '+name)
+      print('Validated '+str(len(targets))+' workloads at '+sha)

@@ -21,6 +21,9 @@ spec:
   - name: pipeline-run
     type: string
     default: ''
+  - name: application-name
+    type: string
+    default: quarkus-reference
   steps:
   - name: promote
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -40,6 +43,8 @@ spec:
         secretKeyRef:
           name: "$(params.git-auth-secret)"
           key: git-provider-token
+    - name: APPLICATION_NAME
+      value: "$(params.application-name)"
     script: |
       #!/usr/bin/env python3
       import base64, json, os, re, time, urllib.request, urllib.error
@@ -62,7 +67,9 @@ spec:
       source=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']; environment=os.environ['ENVIRONMENT']
       assert re.fullmatch('[a-f0-9]{40}',source) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
       assert environment in ['development','approval'], 'Unsupported promotion policy'
-      application='/repos/box1-org/quarkus-reference'
+      name=os.environ['APPLICATION_NAME']
+      assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name), 'Invalid application name'
+      application='/repos/box1-org/'+name
       gitops='/repos/box1-org/box1-gitops'
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
@@ -72,7 +79,7 @@ spec:
           raise SystemExit(0)
       base=github(gitops+'/git/ref/heads/main')['object']['sha']
       base_commit=github(gitops+'/git/commits/'+base)
-      paths=['workloads/quarkus-reference/kustomization.yaml','workloads/quarkus-reference/deployment.yaml']
+      paths=['workloads/'+name+'/kustomization.yaml','workloads/'+name+'/deployment.yaml']
       old={}; new={}
       for path in paths:
           old[path]=base64.b64decode(github(gitops+'/contents/'+path+'?ref='+base)['content']).decode()
@@ -82,15 +89,18 @@ spec:
       assert count==1, 'Source revision annotation missing'
       new[paths[1]],count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+os.environ['PIPELINE_RUN'],new[paths[1]])
       assert count==1
+      # First release activates the zero-replica onboarding deployment.
+      new[paths[1]],count=re.subn(r'(?m)^  replicas: 0$', '  replicas: 1', new[paths[1]])
+      assert count <= 1
       entries=[]
       for path in paths:
           blob=github(gitops+'/git/blobs','POST',{'content':new[path],'encoding':'utf-8'})
           entries.append({'path':path,'mode':'100644','type':'blob','sha':blob['sha']})
       tree=github(gitops+'/git/trees','POST',{'base_tree':base_commit['tree']['sha'],'tree':entries})
-      commit=github(gitops+'/git/commits','POST',{'message':'Promote quarkus-reference '+source[:12]+' to '+environment,'tree':tree['sha'],'parents':[base]})
-      branch='promote/quarkus-reference/'+source[:12]+'-'+os.environ['PIPELINE_RUN'][-5:]
+      commit=github(gitops+'/git/commits','POST',{'message':'Promote '+name+' '+source[:12]+' to '+environment,'tree':tree['sha'],'parents':[base]})
+      branch='promote/'+name+'/' +source[:12]+'-'+os.environ['PIPELINE_RUN'][-5:]
       github(gitops+'/git/refs','POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
-      pr=github(gitops+'/pulls','POST',{'title':'Promote quarkus-reference '+source[:12]+' to '+environment,'head':branch,'base':'main',
+      pr=github(gitops+'/pulls','POST',{'title':'Promote '+name+' '+source[:12]+' to '+environment,'head':branch,'base':'main',
           'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\nBuild: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
       result('pr-url',pr['html_url']); print('Created GitOps PR: '+pr['html_url'])
       if environment != 'development':

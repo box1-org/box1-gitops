@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -43,6 +44,13 @@ data:
               clientSecret: ${GITHUB_APP_CLIENT_SECRET}
               privateKey: ${GITHUB_APP_PRIVATE_KEY}
     catalog:
+      rules:
+        - allow: [Component, System, API, Resource, Location, Template]
+      locations:
+        - type: url
+          target: https://github.com/box1-org/box1-templates/blob/main/catalog-info.yaml
+          rules:
+            - allow: [Location, Template]
       providers:
         github:
           # Match the bundled plugin default to override its GITHUB_ORG placeholder.
