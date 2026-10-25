@@ -1,0 +1,25 @@
+# STAGED ONLY. Do not apply or add to applications/ before the migration review.
+# Helm remains the live owner. See MIGRATION.md for the activation requirements.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openshell
+  namespace: openshift-gitops
+spec:
+  project: default
+  sources:
+    - repoURL: ghcr.io/nvidia/openshell
+      chart: helm-chart
+      targetRevision: 0.1.5
+      helm:
+        releaseName: openshell
+        skipCrds: true
+        valueFiles:
+          - $values/platform/openshell/values.yaml
+    - repoURL: https://github.com/box1-org/box1-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshell
+  # No automated sync or deletion finalizer. This file is not registered live.

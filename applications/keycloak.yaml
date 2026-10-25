@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/box1-org/box1-gitops.git
     targetRevision: main
-    path: platform/identity/keycloak/instance
+    path: platform/identity/keycloak
   destination:
     server: https://kubernetes.default.svc
     namespace: keycloak

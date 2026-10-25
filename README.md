@@ -1,11 +1,15 @@
 # box1-gitops
 
-App of apps for gitops 
+Platform configuration for box1. `applications/` contains the child Applications
+registered by the `box1-root` app-of-apps when that root is installed.
 
-Applications:
-- Red Hat Developer Hub
+- [Developer Hub](platform/developer-hub/README.md): separate manual-sync
+  Operator and instance Applications.
+- [RH-SSO / Keycloak](platform/identity/keycloak/README.md): separate Operator
+  Application and a single Application aggregating database, instance, and realm.
+- [OpenShell](platform/openshell/README.md): validated Helm values and a staged
+  Argo Application. The existing Helm release remains live owner; the staged
+  Application is deliberately outside `applications/` and is not installed.
 
-Developer Hub manifests and the staged Operator/instance rollout are documented in
-[platform/developer-hub/README.md](platform/developer-hub/README.md).
-Both child applications require manual sync; the root can register them without
-installing the Operator or creating a Backstage instance.
+Credentials remain in Kubernetes Secrets, referenced by name. Do not commit live
+Secret exports, Helm backup manifests, tokens, private keys, or initial passwords.

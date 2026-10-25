@@ -1,0 +1,26 @@
+certManager:
+  enabled: true
+  serverDnsNames:
+  - openshell.apps.ocp.box1.org
+  serverIssuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-production
+openshiftRoute:
+  enabled: true
+  host: openshell.apps.ocp.box1.org
+podSecurityContext:
+  fsGroup: null
+securityContext:
+  runAsUser: null
+server:
+  auth:
+    allowUnauthenticatedUsers: false
+  disableTls: false
+  oidc:
+    adminRole: openshell-admin
+    audience: openshell-cli
+    issuer: https://keycloak.apps.ocp.box1.org/auth/realms/box1
+    rolesClaim: realm_access.roles
+    userRole: openshell-user
+  sandboxImagePullSecrets:
+  - name: openshell-sandbox-dockercfg-sp68l

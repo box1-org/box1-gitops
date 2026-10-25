@@ -49,7 +49,7 @@ OpenShell is outside this application's scope.
 
 ## OpenShell client
 
-`openshell-client.yaml` configures the public `openshell-cli` client for the
+`realm/openshell-client.yaml` configures the public `openshell-cli` client for the
 v0.1.5 CLI's Authorization Code flow with S256 PKCE and native loopback callback.
 The audience mapper adds `openshell-cli` to access tokens. Password grants,
 implicit flow, and service accounts are disabled. The realm declares
@@ -62,3 +62,28 @@ Its temporary initial password is in the out-of-Git Kubernetes Secret
 `openshell-mike-initial-login` in namespace `keycloak`. First browser login
 requires changing that password. User credentials and password changes remain
 in the persistent Keycloak database; no password is declared in these manifests.
+
+
+## Repository layout and ownership
+
+- `operator/`: namespace, OperatorGroup and Subscription; owned by the existing
+  `rhsso-operator` Application.
+- `database/`: PostgreSQL Deployment, Service and protected PVC.
+- `instance/`: Keycloak resource, public Certificate and Ingress.
+- `realm/`: box1 realm and OpenShell CLI client.
+
+The root Kustomization aggregates `database/`, `instance/` and `realm/` for the
+existing `keycloak` Application. It excludes `operator/` to avoid dual ownership.
+The directory split preserves all resource names, specs, sync waves and the
+existing Application identity. Each non-operator resource has one owner.
+
+Render the two independent targets with:
+
+```bash
+kubectl kustomize platform/identity/keycloak/operator
+kubectl kustomize platform/identity/keycloak
+```
+
+`applications/keycloak.yaml` now points to the aggregate root. On a cluster
+without `box1-root`, update that existing child Application explicitly after
+publishing the new path. Do not bootstrap a new root solely for this path change.
