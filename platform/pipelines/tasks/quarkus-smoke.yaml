@@ -1,0 +1,72 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-quarkus-smoke
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+    default: ''
+  - name: image-digest
+    type: string
+    default: ''
+  steps:
+  - name: observe-and-smoke
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: IMAGE_DIGEST
+      value: "$(params.image-digest)"
+    script: |
+      #!/usr/bin/env python3
+      import json, os, pathlib, re, ssl, time, urllib.error, urllib.request
+      revision=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']
+      assert re.fullmatch('[a-f0-9]{40}',revision) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
+      account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
+      context=ssl.create_default_context(cafile=str(account/'ca.crt'))
+      token=(account/'token').read_text()
+
+      def kube(path):
+          req=urllib.request.Request('https://kubernetes.default.svc'+path,headers={'Authorization':'Bearer '+token})
+          with urllib.request.urlopen(req,context=context,timeout=20) as response: return json.load(response)
+
+      expected='image-registry.openshift-image-registry.svc:5000/box1-ci/quarkus-reference@'+digest
+      deadline=time.monotonic()+900
+      while time.monotonic()<deadline:
+          app=kube('/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/quarkus-reference')
+          deployment=kube('/apis/apps/v1/namespaces/quarkus-reference/deployments/quarkus-reference')
+          pods=kube('/api/v1/namespaces/quarkus-reference/pods?labelSelector=app.kubernetes.io%2Fname%3Dquarkus-reference')['items']
+          desired=deployment['spec']['template']['spec']['containers'][0]['image']==expected
+          source=deployment['metadata'].get('annotations',{}).get('box1.org/source-revision')==revision
+          available=deployment.get('status',{}).get('availableReplicas',0)>=1
+          ready=any(not pod['metadata'].get('deletionTimestamp') and
+              any(c['type']=='Ready' and c['status']=='True' for c in pod.get('status',{}).get('conditions',[])) and
+              any(c.get('imageID','').endswith('@'+digest) for c in pod.get('status',{}).get('containerStatuses',[])) for pod in pods)
+          synced=app.get('status',{}).get('sync',{}).get('status')=='Synced'
+          healthy=app.get('status',{}).get('health',{}).get('status')=='Healthy'
+          if desired and source and available and ready and synced and healthy: break
+          time.sleep(10)
+      else: raise TimeoutError('Argo rollout did not reach the expected source revision and image digest')
+      base='https://quarkus-reference.apps.ocp.box1.org'
+
+      def get(path,accept='application/json'):
+          req=urllib.request.Request(base+path,headers={'Accept':accept})
+          with urllib.request.urlopen(req,timeout=20) as response:
+              assert response.status==200
+              return response.read().decode()
+      assert json.loads(get('/api/greetings?name=OpenShift'))['message']=='Hello from box1, OpenShift!'
+      assert json.loads(get('/api/info'))['javaVersion']==21
+      for name in ['live','ready','started']: assert json.loads(get('/q/health/'+name))['status']=='UP'
+      api=json.loads(get('/q/openapi')); assert '/api/greetings' in api['paths'] and '/api/info' in api['paths']
+      assert 'box1_greetings_total' in get('/q/metrics','text/plain')
+      try:
+          get('/api/greetings?name=%20')
+          raise AssertionError('Blank name should be rejected')
+      except urllib.error.HTTPError as error: assert error.code==400
+      print('PASS: Argo Synced/Healthy, expected source and runtime digest, REST, Java 21, health, OpenAPI, metrics, validation.')
+      print('Source: '+revision+' image: '+digest+' Route: '+base)

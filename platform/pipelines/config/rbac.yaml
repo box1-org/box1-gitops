@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: box1-gitops-tektonconfig
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+rules:
+  - apiGroups: [operator.tekton.dev]
+    resources: [tektonconfigs]
+    resourceNames: [config]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-gitops-tektonconfig
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: box1-gitops-tektonconfig
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops

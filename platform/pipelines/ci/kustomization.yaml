@@ -6,3 +6,6 @@ resources:
   - registry-rbac.yaml
   - repository.yaml
   - quarkus-reference-pull.yaml
+  - quarkus-reference-repository.yaml
+  - observe-rbac.yaml
+  - ../tasks

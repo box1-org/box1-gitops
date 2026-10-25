@@ -1,0 +1,117 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-quarkus-maven
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+    default: ''
+  - name: source-repo
+    type: string
+    default: box1-org/quarkus-reference
+  - name: git-auth-secret
+    type: string
+    default: ''
+  - name: push-image
+    type: string
+    default: 'false'
+  - name: image-name
+    type: string
+    default: quarkus-reference
+  steps:
+  - name: fetch
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: SOURCE_REPO
+      value: "$(params.source-repo)"
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: "$(params.git-auth-secret)"
+          key: git-provider-token
+    volumeMounts:
+    - name: source
+      mountPath: "/workspace"
+    script: |
+      #!/usr/bin/env python3
+      import hashlib, io, os, pathlib, re, shutil, urllib.request, zipfile
+      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
+      assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
+      req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
+          headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
+      with urllib.request.urlopen(req,timeout=60) as response:
+          archive=zipfile.ZipFile(io.BytesIO(response.read()))
+      root=pathlib.Path('/workspace'); unpack=root/'unpack'
+      for entry in archive.infolist():
+          path=pathlib.PurePosixPath(entry.filename)
+          assert not path.is_absolute() and '..' not in path.parts, 'Unsafe source archive'
+      archive.extractall(unpack)
+      folders=list(unpack.iterdir()); assert len(folders)==1
+      shutil.move(str(folders[0]),str(root/'application'))
+      url='https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip'
+      # Platform-owned checksum, independent of untrusted PR wrapper properties.
+      expected='5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce'
+      with urllib.request.urlopen(url,timeout=60) as response: data=response.read()
+      assert hashlib.sha256(data).hexdigest()==expected, 'Maven checksum mismatch'
+      tools=root/'tools'; zipfile.ZipFile(io.BytesIO(data)).extractall(tools)
+      (tools/'apache-maven-3.9.16/bin/mvn').chmod(0o755)
+      print('Fetched '+repo+' at '+revision+'; checksum-verified Maven 3.9.16')
+  - name: verify-and-publish
+    image: registry.access.redhat.com/ubi9/openjdk-21@sha256:bd995811a45eb587f97a105796f8f43df466a4269411a2a1642f0f9799f885db
+    workingDir: "/workspace"
+    computeResources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '2'
+        memory: 3Gi
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: MAVEN_OPTS
+      value: "-Xmx1024m -Duser.home=/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: PUSH_IMAGE
+      value: "$(params.push-image)"
+    - name: IMAGE_NAME
+      value: "$(params.image-name)"
+    volumeMounts:
+    - name: source
+      mountPath: "/workspace"
+    script: |
+      #!/bin/sh
+      set -eu
+      cd /workspace/application
+      /workspace/tools/apache-maven-3.9.16/bin/mvn -B -ntp -Dmaven.repo.local=/workspace/m2 verify -DskipITs=false
+      # The PR service account has no API token. Only trusted main builds publish.
+      if [ "$PUSH_IMAGE" = true ]; then
+        export QUARKUS_CONTAINER_IMAGE_USERNAME=serviceaccount
+        export QUARKUS_CONTAINER_IMAGE_PASSWORD="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+        /workspace/tools/apache-maven-3.9.16/bin/mvn -B -ntp -Dmaven.repo.local=/workspace/m2 package -DskipTests \
+          -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true \
+          -Dquarkus.container-image.registry=registry.apps.ocp.box1.org \
+          -Dquarkus.container-image.group=box1-ci -Dquarkus.container-image.name="$IMAGE_NAME" \
+          -Dquarkus.container-image.tag="$REVISION"
+        unset QUARKUS_CONTAINER_IMAGE_PASSWORD
+        grep -Eq '^sha256:[a-f0-9]{64}$' target/jib-image.digest
+        tr -d '\n' < target/jib-image.digest > "$(results.image-digest.path)"
+        printf 'Published digest: '; cat target/jib-image.digest
+      else
+        printf 'not-published' > "$(results.image-digest.path)"
+      fi
+  results:
+  - name: image-digest
+    type: string
+  volumes:
+  - name: source
+    emptyDir: {}

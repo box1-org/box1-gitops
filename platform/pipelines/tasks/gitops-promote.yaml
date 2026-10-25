@@ -1,0 +1,134 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-gitops-promote
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+    default: ''
+  - name: image-digest
+    type: string
+    default: ''
+  - name: git-auth-secret
+    type: string
+    default: ''
+  - name: environment
+    type: string
+    default: approval
+  - name: pipeline-run
+    type: string
+    default: ''
+  steps:
+  - name: promote
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: IMAGE_DIGEST
+      value: "$(params.image-digest)"
+    - name: ENVIRONMENT
+      value: "$(params.environment)"
+    - name: PIPELINE_RUN
+      value: "$(params.pipeline-run)"
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: "$(params.git-auth-secret)"
+          key: git-provider-token
+    script: |
+      #!/usr/bin/env python3
+      import base64, json, os, re, time, urllib.request, urllib.error
+
+      def github(path, method='GET', body=None):
+          request=urllib.request.Request('https://api.github.com'+path, method=method,
+              data=None if body is None else json.dumps(body).encode(),
+              headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],
+                       'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',
+                       'User-Agent':'box1-tekton'})
+          try:
+              with urllib.request.urlopen(request,timeout=45) as response:
+                  data=response.read()
+                  return json.loads(data) if data else None
+          except urllib.error.HTTPError as error:
+              detail=json.loads(error.read())
+              raise RuntimeError('GitHub API %s %s: %s %s' % (method,path,error.code,detail.get('message',''))) from None
+
+      import pathlib
+      source=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']; environment=os.environ['ENVIRONMENT']
+      assert re.fullmatch('[a-f0-9]{40}',source) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
+      assert environment in ['development','approval'], 'Unsupported promotion policy'
+      application='/repos/box1-org/quarkus-reference'
+      gitops='/repos/box1-org/box1-gitops'
+
+      def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
+      result('promoted','false'); result('gitops-revision','not-merged'); result('pr-url','not-created')
+      if github(application+'/commits/main')['sha'] != source:
+          print('Source revision was superseded; no promotion is performed.')
+          raise SystemExit(0)
+      base=github(gitops+'/git/ref/heads/main')['object']['sha']
+      base_commit=github(gitops+'/git/commits/'+base)
+      paths=['workloads/quarkus-reference/kustomization.yaml','workloads/quarkus-reference/deployment.yaml']
+      old={}; new={}
+      for path in paths:
+          old[path]=base64.b64decode(github(gitops+'/contents/'+path+'?ref='+base)['content']).decode()
+      new[paths[0]],count=re.subn(r'(?m)^    digest: sha256:[a-f0-9]{64}$','    digest: '+digest,old[paths[0]])
+      assert count==1, 'Exactly one digest entry required'
+      new[paths[1]],count=re.subn(r'(?m)^    box1\.org/source-revision: [a-f0-9]{40}$','    box1.org/source-revision: '+source,old[paths[1]])
+      assert count==1, 'Source revision annotation missing'
+      new[paths[1]],count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+os.environ['PIPELINE_RUN'],new[paths[1]])
+      assert count==1
+      entries=[]
+      for path in paths:
+          blob=github(gitops+'/git/blobs','POST',{'content':new[path],'encoding':'utf-8'})
+          entries.append({'path':path,'mode':'100644','type':'blob','sha':blob['sha']})
+      tree=github(gitops+'/git/trees','POST',{'base_tree':base_commit['tree']['sha'],'tree':entries})
+      commit=github(gitops+'/git/commits','POST',{'message':'Promote quarkus-reference '+source[:12]+' to '+environment,'tree':tree['sha'],'parents':[base]})
+      branch='promote/quarkus-reference/'+source[:12]+'-'+os.environ['PIPELINE_RUN'][-5:]
+      github(gitops+'/git/refs','POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
+      pr=github(gitops+'/pulls','POST',{'title':'Promote quarkus-reference '+source[:12]+' to '+environment,'head':branch,'base':'main',
+          'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\nBuild: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
+      result('pr-url',pr['html_url']); print('Created GitOps PR: '+pr['html_url'])
+      if environment != 'development':
+          print('Approval policy selected; PR left open for a reviewer.')
+          raise SystemExit(0)
+      expected_head=commit['sha']
+      required=['Pipelines as Code CI / box1-phase1-smoke-','Pipelines as Code CI / box1-gitops-validate-']
+      deadline=time.monotonic()+900
+      while time.monotonic()<deadline:
+          current=github(gitops+'/pulls/'+str(pr['number']))
+          assert current['state']=='open' and current['head']['sha']==expected_head, 'GitOps PR changed during validation'
+          checks=github(gitops+'/commits/'+expected_head+'/check-runs?per_page=100')['check_runs']
+          selected={}
+          for check in sorted(checks,key=lambda value:value['id']):
+              if check['name'] in required and check['app']['slug']=='box1-pipelines': selected[check['name']]=check
+          failed=[name for name,check in selected.items() if check['status']=='completed' and check['conclusion']!='success']
+          assert not failed, 'Required GitOps check failed: '+', '.join(failed)
+          if len(selected)==len(required) and all(c['status']=='completed' and c['conclusion']=='success' for c in selected.values()): break
+          time.sleep(10)
+      else: raise TimeoutError('Timed out waiting for required checks on GitOps PR')
+      # Validate the full file contents again, after checks, before the exact-SHA merge.
+      changed=github(gitops+'/pulls/'+str(pr['number'])+'/files?per_page=100')
+      assert sorted(f['filename'] for f in changed)==sorted(paths), 'Promotion changed unexpected paths'
+      for path in paths:
+          actual=base64.b64decode(github(gitops+'/contents/'+path+'?ref='+expected_head)['content']).decode()
+          assert actual==new[path], 'Promotion contents changed'
+      if github(application+'/commits/main')['sha'] != source:
+          github(gitops+'/pulls/'+str(pr['number']),'PATCH',{'state':'closed'})
+          print('A newer source commit superseded this release; stale PR closed.')
+          raise SystemExit(0)
+      merged=github(gitops+'/pulls/'+str(pr['number'])+'/merge','PUT',{'sha':expected_head,'merge_method':'squash'})
+      assert merged.get('merged'), 'GitOps merge rejected'
+      result('promoted','true'); result('gitops-revision',merged['sha'])
+      print('Merged development GitOps PR after exact-head required checks: '+merged['sha'])
+  results:
+  - name: pr-url
+    type: string
+  - name: gitops-revision
+    type: string
+  - name: promoted
+    type: string
