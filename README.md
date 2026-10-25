@@ -9,8 +9,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   Application and a single Application aggregating database, instance, and realm.
 - [Quarkus reference](workloads/quarkus-reference/README.md): tested Java 21 JVM
   application, digest-pinned Jib image, and Argo-managed OpenShift runtime.
-- [Pipelines](platform/pipelines/README.md): Operator installation, trusted CI
-  namespace, dedicated GitHub App setup, and event-to-check acceptance procedure.
+- [Pipelines](platform/pipelines/README.md): Operator installation, shared Tasks,
+  scoped GitHub App credentials, and [automated CI/CD](platform/pipelines/AUTOMATION.md).
 - [OpenShell](platform/openshell/README.md): validated Helm values and a staged
   Argo Application. The existing Helm release remains live owner; the staged
   Application is deliberately outside `applications/` and is not installed.

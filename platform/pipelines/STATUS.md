@@ -90,8 +90,8 @@ Argo-managed Quarkus deployment with a successful external HTTP smoke test.
 The build uses a manual Tekton PipelineRun and the GitOps image digest is
 updated by the platform operator for this reference proof.
 
-Application scaffolding, automatic source CI triggers and GitOps image PR
-updates remain subsequent work. Cross-repository token scope for automatic
-application release pipelines is not enabled by this foundation and must be
-explicitly configured and tested in the trusted release namespace. See
-[README.md](README.md) for credential boundaries.
+[Phase 3 automation](AUTOMATION.md) now supplies GitHub PR validation, main
+release builds, explicit cross-repository token scope, checked development
+GitOps promotion, and read-only rollout/smoke verification. See its acceptance
+[evidence](PHASE3-VERIFICATION.md) for the real application merge-to-deployment test. Developer Hub
+self-service scaffolding remains subsequent work.

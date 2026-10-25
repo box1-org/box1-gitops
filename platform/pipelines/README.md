@@ -1,6 +1,6 @@
 # Box1 CI/CD foundation
 
-See [rollout evidence and remaining dependencies](STATUS.md) for live verification.
+See [rollout evidence](STATUS.md) and [GitHub-driven CI/CD](AUTOMATION.md).
 
 Developer Hub scaffolds applications, Tekton tests/builds/pushes images and proposes
 GitOps changes, and Argo CD alone reconciles application workloads. No application
@@ -133,22 +133,21 @@ Contents write permission by resubmitting an existing README blob to the Git
 object API and checking the identical SHA; no branch or file is changed. PR smoke
 checks continue to use `ci-test` without mounting this credential.
 
-This works for Phase 1 because the event repository is itself `box1-gitops`.
-Future application release pipelines require an explicit, reviewed cross-repo
-token-scope configuration for `box1-org/box1-gitops`, with a matching PAC
-Repository registration in the trusted namespace and an App installation covering
-both repositories. Do not assume this is already enabled. Follow the installed
-PAC version's scope settings; keep any global extra-repository list empty and
-verify the issued token's actual access before onboarding a release pipeline.
-Mount tokens only in the GitOps update task, never in untrusted build/PR steps.
-Tokens expire; long-running tasks must finish within the issued token lifetime.
+Phase 3 registers `quarkus-reference` alongside `box1-gitops` and explicitly
+scopes its event token to those two repositories. The GitOps Repository explicitly
+scopes its token to itself. `pipelines-config` manages the operator setting needed
+for repository-level scope lists; no global extra-repository list is configured.
+The shared Tasks keep credentials out of untrusted Maven test containers. See
+[AUTOMATION.md](AUTOMATION.md) for the trust boundary and promotion checks. Tokens
+expire; long-running tasks must finish within the issued token lifetime.
 
 Kubernetes ServiceAccounts are not a Secret-access boundary for someone who can
 create arbitrary Pods/PipelineRuns in the same namespace. Before onboarding
-application contributors or executing arbitrary PR code, provision separate
-untrusted-test and trusted-release namespaces/controllers or enforce equivalent
-admission policy. The shared `box1-ci` namespace here is for platform-maintainer
-smoke testing only. Provenance `default_branch` keeps PR pipeline definitions
+application contributors or executing arbitrary PR code, use separate
+untrusted-test and trusted-release namespaces/controllers, or an equivalently
+controlled workflow with trusted definitions and no credentials in test steps. The shared `box1-ci` namespace grants direct workload creation only to trusted
+platform maintainers; the automated source workflow has default-branch provenance
+and fixed central Tasks. Provenance `default_branch` keeps PR pipeline definitions
 from replacing the smoke check; it does not make arbitrary PR code safe to run
 with a mounted credential.
 
