@@ -359,3 +359,17 @@ kubectl -n rhdh exec -i deploy/backstage-developer-hub -c backstage-backend -- n
 
 References: [Red Hat API contracts and interactive testing](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html-single/navigate_red_hat_developer_hub_on_your_first_day/index)
 and [Quarkus OpenAPI and Swagger UI](https://quarkus.io/version/3.40/guides/openapi-swaggerui/).
+
+## Workload topology
+
+The platform requires the bundled Topology plugin (2.9.4 in the 1.9.7 image).
+Its Git-managed entry overrides the disabled Extensions choice and inherits the
+image's `entity.page.topology/cards` mount point. Open a service's **Topology**
+tab to view workloads and Pods. The existing Kubernetes connection, entity-ID
+labels, Routes/Tekton custom resource configuration and reader permissions are
+reused; no broader credentials are needed.
+
+The **CD** tab continues to show Argo CD application details. Argo CD's own UI
+provides its complete application resource tree; Topology is the Hub's workload
+visualization. A browser-blocked Segment analytics request is independent of
+both data connections.
