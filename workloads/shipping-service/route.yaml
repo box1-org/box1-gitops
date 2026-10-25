@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shipping-service
+  namespace: shipping-service-dev
+spec:
+  host: shipping-service-dev.apps.ocp.box1.org
+  to:
+    kind: Service
+    name: shipping-service
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
