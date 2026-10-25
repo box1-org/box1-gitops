@@ -33,18 +33,28 @@ spec:
                 import os
                 import urllib.request
 
-                request = urllib.request.Request(
-                    'https://api.github.com/repos/box1-org/box1-gitops',
-                    headers={
-                        'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
-                        'Accept': 'application/vnd.github+json',
-                        'User-Agent': 'box1-gitops-auth-check',
-                        'X-GitHub-Api-Version': '2022-11-28',
-                    },
-                )
-                with urllib.request.urlopen(request, timeout=30) as response:
-                    repo = json.load(response)
-                assert repo['full_name'] == 'box1-org/box1-gitops'
-                assert repo.get('permissions', {}).get('push'), 'GitOps write access missing'
-                print('PAC-generated installation token has GitOps repository write access.')
-                print('No GitHub or cluster resources were modified by this check.')
+                def github(path, payload=None):
+                    request = urllib.request.Request(
+                        'https://api.github.com' + path,
+                        data=None if payload is None else json.dumps(payload).encode(),
+                        headers={
+                            'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+                            'Accept': 'application/vnd.github+json',
+                            'User-Agent': 'box1-gitops-auth-check',
+                            'X-GitHub-Api-Version': '2022-11-28',
+                        },
+                    )
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        return json.load(response)
+
+                prefix = '/repos/box1-org/box1-gitops'
+                existing = github(prefix + '/contents/README.md?ref=main')
+                # This write API requires Contents:write. Resubmit existing bytes,
+                # yielding the same content-addressed blob; no refs/files change.
+                result = github(prefix + '/git/blobs', {
+                    'content': existing['content'],
+                    'encoding': 'base64',
+                })
+                assert result['sha'] == existing['sha'], 'Blob identity mismatch'
+                print('PAC-generated token successfully used the GitOps Contents:write API.')
+                print('Existing blob verified; no branches, files, or workloads changed.')

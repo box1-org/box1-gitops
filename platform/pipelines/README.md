@@ -128,7 +128,9 @@ credentials. PAC creates a new `{{git_auth_secret}}` for each run; its
 `secretKeyRef`. There is no static `gitops-writer` Secret or PAT to renew.
 `.tekton/gitops-auth-check.yaml` validates write access to `box1-org/box1-gitops`
 on pushes to `main`, using `ci-gitops`. It runs only inline platform-owned code,
-does not clone or run application code, and never prints the token. PR smoke
+does not clone or run application code, and never prints the token. It proves
+Contents write permission by resubmitting an existing README blob to the Git
+object API and checking the identical SHA; no branch or file is changed. PR smoke
 checks continue to use `ci-test` without mounting this credential.
 
 This works for Phase 1 because the event repository is itself `box1-gitops`.
