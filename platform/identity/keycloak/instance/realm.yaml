@@ -2,6 +2,8 @@ apiVersion: keycloak.org/v1alpha1
 kind: KeycloakRealm
 metadata:
   name: box1
+  labels:
+    realm: box1
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
@@ -15,3 +17,9 @@ spec:
     displayName: Box1
     sslRequired: external
     registrationAllowed: false
+    roles:
+      realm:
+        - name: openshell-user
+          description: OpenShell standard user
+        - name: openshell-admin
+          description: OpenShell administrator

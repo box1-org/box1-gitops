@@ -1,0 +1,43 @@
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: openshell-cli
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: openshell-cli
+    name: OpenShell CLI
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+    # Native loopback redirect: Keycloak allows the CLI's ephemeral port.
+    redirectUris:
+      - http://127.0.0.1/callback
+    webOrigins: []
+    attributes:
+      pkce.code.challenge.method: S256
+    defaultClientScopes:
+      - profile
+      - email
+      - roles
+      - web-origins
+    optionalClientScopes:
+      - offline_access
+    protocolMappers:
+      - name: openshell-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: openshell-cli
+          access.token.claim: "true"
+          id.token.claim: "false"

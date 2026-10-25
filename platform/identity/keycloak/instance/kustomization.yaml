@@ -7,3 +7,4 @@ resources:
   - keycloak.yaml
   - ingress.yaml
   - realm.yaml
+  - openshell-client.yaml
