@@ -1,0 +1,9 @@
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: box1-gitops
+  namespace: box1-ci
+spec:
+  url: https://github.com/box1-org/box1-gitops
+  settings:
+    pipelinerun_provenance: default_branch

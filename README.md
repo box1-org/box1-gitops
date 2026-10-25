@@ -7,6 +7,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   Operator and instance Applications.
 - [RH-SSO / Keycloak](platform/identity/keycloak/README.md): separate Operator
   Application and a single Application aggregating database, instance, and realm.
+- [Pipelines](platform/pipelines/README.md): Operator installation, trusted CI
+  namespace, dedicated GitHub App setup, and event-to-check acceptance procedure.
 - [OpenShell](platform/openshell/README.md): validated Helm values and a staged
   Argo Application. The existing Helm release remains live owner; the staged
   Application is deliberately outside `applications/` and is not installed.

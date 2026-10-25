@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pipelines-operator
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/pipelines/operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-operators
+  # Sync the Operator first; wait for OLM and Tekton/PAC CRDs before CI.
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true
