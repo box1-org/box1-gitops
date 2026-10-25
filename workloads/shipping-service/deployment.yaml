@@ -5,9 +5,9 @@ metadata:
   namespace: shipping-service-dev
   annotations:
     box1.org/source-revision: 86c77b6b87a7eea46d2638f305ecf5748ca2c9ea
-    box1.org/build-pipelinerun: awaiting-first-release
+    box1.org/build-pipelinerun: box1-ci/onb-shipping-service-86c77b6b
 spec:
-  replicas: 0
+  replicas: 1
   revisionHistoryLimit: 3
   progressDeadlineSeconds: 300
   strategy:

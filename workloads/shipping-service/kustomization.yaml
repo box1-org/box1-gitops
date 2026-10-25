@@ -21,4 +21,4 @@ configMapGenerator:
 images:
   - name: shipping-service
     newName: image-registry.openshift-image-registry.svc:5000/box1-ci/shipping-service
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    digest: sha256:57a4ba5e24be99070f55f4db9e41a6348802224735e57bec9f7741b7a611c184
