@@ -4,10 +4,10 @@ metadata:
   name: quarkus-golden-path-smoke
   namespace: quarkus-golden-path-smoke
   annotations:
-    box1.org/source-revision: 748fe602bce11bfc9c0ccdb128be102e528908ac
-    box1.org/build-pipelinerun: awaiting-first-release
+    box1.org/source-revision: 01922f3d20c131b139a80951675b8d85b276e389
+    box1.org/build-pipelinerun: box1-ci/quarkus-golden-path-smoke-release-jsg22
 spec:
-  replicas: 0
+  replicas: 1
   revisionHistoryLimit: 3
   progressDeadlineSeconds: 300
   strategy:
