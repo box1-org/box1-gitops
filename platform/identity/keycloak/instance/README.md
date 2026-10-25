@@ -46,3 +46,19 @@ in wave 0, and the `box1` realm in wave 1. Automatic pruning is disabled.
 The installed operator CSV was Succeeded on OpenShift 5.0.0-rc.7 during
 preflight; this is an operational observation, not a vendor support claim.
 OpenShell is outside this application's scope.
+
+## OpenShell client
+
+`openshell-client.yaml` configures the public `openshell-cli` client for the
+v0.1.5 CLI's Authorization Code flow with S256 PKCE and native loopback callback.
+The audience mapper adds `openshell-cli` to access tokens. Password grants,
+implicit flow, and service accounts are disabled. The realm declares
+`openshell-admin` and `openshell-user`; on the existing realm those roles were
+also bootstrapped through the Admin API because the legacy operator did not
+add them during realm update.
+
+The `mike` account was provisioned through the Admin API with both roles.
+Its temporary initial password is in the out-of-Git Kubernetes Secret
+`openshell-mike-initial-login` in namespace `keycloak`. First browser login
+requires changing that password. User credentials and password changes remain
+in the persistent Keycloak database; no password is declared in these manifests.
