@@ -39,6 +39,7 @@ spec:
               box1.org/onboarding-plugin-sha: c0664f02ba03b0fe572f04c460951b6d6547b2672df48e1cfb323182c3b19441
           spec:
             serviceAccountName: developer-hub-onboarding
+            automountServiceAccountToken: true
             volumes:
               - $patch: replace
                 name: dynamic-plugins-root
