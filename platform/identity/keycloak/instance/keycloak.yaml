@@ -1,0 +1,28 @@
+apiVersion: keycloak.org/v1alpha1
+kind: Keycloak
+metadata:
+  name: box1-keycloak
+  labels:
+    app: box1-sso
+spec:
+  instances: 1
+  externalDatabase:
+    enabled: true
+  # A separate Ingress supplies the public hostname and cert-manager TLS secret.
+  externalAccess:
+    enabled: false
+  keycloakDeploymentSpec:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    experimental:
+      env:
+        - name: SSO_HOSTNAME
+          value: keycloak.apps.ocp.box1.org
+        - name: KEYCLOAK_FRONTEND_URL
+          value: https://keycloak.apps.ocp.box1.org/auth
+        - name: PROXY_ADDRESS_FORWARDING
+          value: "true"

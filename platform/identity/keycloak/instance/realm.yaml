@@ -1,0 +1,17 @@
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakRealm
+metadata:
+  name: box1
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  instanceSelector:
+    matchLabels:
+      app: box1-sso
+  realm:
+    id: box1
+    realm: box1
+    enabled: true
+    displayName: Box1
+    sslRequired: external
+    registrationAllowed: false
