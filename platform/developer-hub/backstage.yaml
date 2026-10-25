@@ -34,7 +34,11 @@ spec:
           $patch: replace
           type: Recreate
         template:
+          metadata:
+            annotations:
+              box1.org/onboarding-plugin-sha: c0664f02ba03b0fe572f04c460951b6d6547b2672df48e1cfb323182c3b19441
           spec:
+            serviceAccountName: developer-hub-onboarding
             volumes:
               - $patch: replace
                 name: dynamic-plugins-root
@@ -49,6 +53,11 @@ spec:
               - name: platform-trust
                 configMap:
                   name: developer-hub-platform-trust
+              - name: onboarding-staged
+                emptyDir: {}
+              - name: onboarding-plugin
+                configMap:
+                  name: developer-hub-onboarding-plugin
             containers:
               - name: backstage-backend
                 env:
@@ -70,6 +79,11 @@ spec:
                   - python3
                   - /extensions-bootstrap/install-extensions.py
                 volumeMounts:
+                  - name: onboarding-staged
+                    mountPath: /opt/app-root/src/box1-scaffolder-onboarding-dynamic
+                  - name: onboarding-plugin
+                    mountPath: /onboarding-plugin-source
+                    readOnly: true
                   - name: extensions-bootstrap
                     mountPath: /extensions-bootstrap
                     readOnly: true

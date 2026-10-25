@@ -10,6 +10,8 @@ data:
       - dynamic-plugins.default.yaml
       - /dynamic-plugins-root/dynamic-plugins.extensions.yaml
     plugins:
+      - package: ./box1-scaffolder-onboarding-dynamic
+        disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-github-dynamic
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-kubernetes

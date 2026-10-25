@@ -8,4 +8,14 @@ resources:
   - extensions-seed.yaml
   - dynamic-plugins-pvc.yaml
   - kubernetes-access.yaml
+  - onboarding/access.yaml
   - backstage.yaml
+configMapGenerator:
+  - name: developer-hub-onboarding-plugin
+    namespace: rhdh
+    files:
+      - onboarding/plugin/package.json
+      - onboarding/plugin/index.cjs
+      - onboarding/plugin/workflow.cjs
+    options:
+      disableNameSuffixHash: true

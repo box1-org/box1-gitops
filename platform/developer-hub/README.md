@@ -373,3 +373,35 @@ The **CD** tab continues to show Argo CD application details. Argo CD's own UI
 provides its complete application resource tree; Topology is the Hub's workload
 visualization. A browser-blocked Segment analytics request is independent of
 both data connections.
+
+## Zero-touch development onboarding
+
+The Quarkus 1.1.0 template uses the `box1-scaffolder-onboarding-dynamic` module.
+Canonical source and tests are in `box1-templates/plugins/box1-onboarding`;
+`onboarding/plugin/` is generated transport for the runtime ConfigMap. The init
+adapter copies ConfigMap data into a writable emptyDir before npm packaging,
+and invalidates this module's cached install when its source hash changes.
+
+The Pod uses a dedicated `developer-hub-onboarding` ServiceAccount for durable
+state/leases, initial build Secrets/PipelineRuns, and readiness GET requests.
+It cannot mutate workload Deployments, Argo Applications, Namespaces or RBAC.
+The Kubernetes and Argo CD plugin connections continue using their separate
+read-only credentials. Application resources are reconciled by Argo only after
+validated, development-only PR merges.
+
+Inspect provisioning state and task logs if onboarding fails:
+
+```sh
+kubectl -n rhdh get configmap box1-onboard-SERVICE -o jsonpath='{.data.status\.json}'
+kubectl -n rhdh get lease box1-onboard-SERVICE
+kubectl -n box1-ci get pipelinerun -l backstage.io/kubernetes-id=SERVICE
+```
+
+Retry the template with the same request parameters to resume its repository,
+PR and build checkpoints. Active tasks hold renewable service-specific leases.
+Completed first builds are reused; failed first builds allow at most three
+recorded attempts across resumptions. Build tokens are one-hour, source-only
+Contents-read GitHub installation tokens stored only in Kubernetes Secrets.
+The workflow deletes the Secret on successful build; a PipelineRun owner
+reference also enables normal garbage collection. Other environments need a
+separate approved workflow.

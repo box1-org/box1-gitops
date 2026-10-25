@@ -1,0 +1,94 @@
+# Runtime provisioner. Plugin read-only connection credentials are separate.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: developer-hub-onboarding
+  namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-hub-onboarding-state
+  namespace: rhdh
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [get, create, update]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-hub-onboarding-state
+  namespace: rhdh
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-hub-onboarding-state
+subjects:
+  - kind: ServiceAccount
+    name: developer-hub-onboarding
+    namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-hub-onboarding-build
+  namespace: box1-ci
+rules:
+  - apiGroups: [tekton.dev]
+    resources: [pipelineruns]
+    verbs: [get, create]
+  - apiGroups: ['']
+    resources: [secrets]
+    verbs: [get, create, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-hub-onboarding-build
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-hub-onboarding-build
+subjects:
+  - kind: ServiceAccount
+    name: developer-hub-onboarding
+    namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: developer-hub-onboarding-observe
+rules:
+  - apiGroups: ['']
+    resources: [namespaces, serviceaccounts]
+    verbs: [get]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings]
+    verbs: [get]
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+  - apiGroups: [pipelinesascode.tekton.dev]
+    resources: [repositories]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: developer-hub-onboarding-observe
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: developer-hub-onboarding-observe
+subjects:
+  - kind: ServiceAccount
+    name: developer-hub-onboarding
+    namespace: rhdh

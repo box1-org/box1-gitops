@@ -8,6 +8,7 @@ data:
   install-extensions.py: |
     """Stage UI overrides at the main-config level for the RHDH 1.9 installer."""
     import os
+    import hashlib
     import shutil
     import sys
     import tempfile
@@ -17,6 +18,22 @@ data:
     app_root = Path("/opt/app-root/src")
     cache_root = Path("/dynamic-plugins-root")
     extensions_file = cache_root / "dynamic-plugins.extensions.yaml"
+    # npm pack ignores the symlinks in a ConfigMap volume. Stage real files first.
+    onboarding_source = Path("/onboarding-plugin-source")
+    if onboarding_source.exists():
+        onboarding_target = app_root / "box1-scaffolder-onboarding-dynamic"
+        onboarding_target.mkdir(exist_ok=True)
+        digest = hashlib.sha256()
+        for name in ("package.json", "index.cjs", "workflow.cjs"):
+            content = (onboarding_source / name).read_bytes()
+            digest.update(content)
+            (onboarding_target / name).write_bytes(content)
+        marker = cache_root / ".box1-onboarding-source-sha256"
+        value = digest.hexdigest()
+        if not marker.exists() or marker.read_text() != value:
+            for cached_hash in cache_root.glob("box1-scaffolder-onboarding-dynamic*/dynamic-plugin-config.hash"):
+                cached_hash.unlink()
+            marker.write_text(value)
     if not extensions_file.exists():
         temporary_file = extensions_file.with_suffix(".yaml.tmp")
         shutil.copyfile("/extensions-bootstrap/dynamic-plugins.extensions.yaml", temporary_file)
