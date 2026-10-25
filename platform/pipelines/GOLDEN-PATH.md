@@ -89,3 +89,14 @@ Both Apps must remain installed on all new repositories. Shared CI accounts and
 Tasks are prerequisites; onboarding does not clone their definitions. Platform
 maintainers review onboarding permissions. The shared namespace trust boundary
 and promotion gate remain as described in [AUTOMATION.md](AUTOMATION.md).
+
+## Orders service milestone
+
+The complete creation → build → deployment → REST PR → redeployment → image
+rollback demonstration passed for `orders-service` in `orders-service-dev`.
+Creation used the Hub API at the user's request. Source PR #1 and GitOps
+onboarding/promotion/rollback PRs #8–#11 retain the audit trail. The service is
+left on the baseline image after the successful GitOps rollback; source main
+retains the endpoint update.
+
+[Milestone evidence and live snapshots](https://github.com/box1-org/box1-templates/blob/main/MILESTONE-DEMO.md).

@@ -188,8 +188,9 @@ After bootstrap, the PVC file owns UI-managed plugin choices. Editing the seed
 ConfigMap does **not** overwrite an existing file or apply new plugin choices.
 Back up this file with the PVC and avoid putting plaintext credentials in plugin
 configuration. Continue to use environment variables backed by Secrets.
-The main `dynamic-plugins.yaml` has no plugin overrides, allowing UI settings to
-take effect. Enabling/disabling discovery plugins through the UI can affect
+The main `dynamic-plugins.yaml` requires the GitHub scaffolder backend for the
+Quarkus golden path. Other plugin choices come from the UI file; the installer
+merges entries by package name and gives platform requirements precedence. Enabling/disabling discovery plugins through the UI can affect
 GitHub catalog imports and sign-in identity provisioning.
 
 To use it:

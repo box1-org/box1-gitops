@@ -95,3 +95,12 @@ release builds, explicit cross-repository token scope, checked development
 GitOps promotion, and read-only rollout/smoke verification. See its acceptance
 [evidence](PHASE3-VERIFICATION.md) for the real application merge-to-deployment test. Developer Hub
 self-service scaffolding remains subsequent work.
+
+## Phase 4 — Quarkus golden path complete
+
+`box1-org/box1-templates` supplies **Create Quarkus Service** in Developer Hub.
+Generated services include application/tests, Jib/PAC definitions, catalog and
+ownership metadata, development manifests, and a reviewed GitOps onboarding PR.
+The orders-service milestone passed initial delivery, endpoint PR validation,
+automatic redeployment into orders-service-dev, and a GitOps image rollback.
+See [GOLDEN-PATH.md](GOLDEN-PATH.md) and the linked milestone evidence.
