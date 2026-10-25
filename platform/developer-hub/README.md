@@ -380,7 +380,8 @@ The Quarkus 1.1.0 template uses the `box1-scaffolder-onboarding-dynamic` module.
 Canonical source and tests are in `box1-templates/plugins/box1-onboarding`;
 `onboarding/plugin/` is generated transport for the runtime ConfigMap. The init
 adapter copies ConfigMap data into a writable emptyDir before npm packaging,
-and invalidates this module's cached install when its source hash changes.
+and invalidates this local module's cache hash on every boot to avoid the 1.9
+installer deleting its reinstalled directory during stale-hash cleanup.
 
 The Pod uses a dedicated `developer-hub-onboarding` ServiceAccount for durable
 state/leases, initial build Secrets/PipelineRuns, and readiness GET requests.

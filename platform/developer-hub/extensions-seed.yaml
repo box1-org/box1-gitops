@@ -30,10 +30,12 @@ data:
             (onboarding_target / name).write_bytes(content)
         marker = cache_root / ".box1-onboarding-source-sha256"
         value = digest.hexdigest()
-        if not marker.exists() or marker.read_text() != value:
-            for cached_hash in cache_root.glob("box1-scaffolder-onboarding-dynamic*/dynamic-plugin-config.hash"):
-                cached_hash.unlink()
-            marker.write_text(value)
+        # The 1.9 local-package installer always repacks, but otherwise leaves the
+        # old hash in its cleanup map and deletes the newly reinstalled directory.
+        # Exclude this small local module from that stale-hash cleanup on every boot.
+        for cached_hash in cache_root.glob("box1-scaffolder-onboarding-dynamic*/dynamic-plugin-config.hash"):
+            cached_hash.unlink()
+        marker.write_text(value)
     if not extensions_file.exists():
         temporary_file = extensions_file.with_suffix(".yaml.tmp")
         shutil.copyfile("/extensions-bootstrap/dynamic-plugins.extensions.yaml", temporary_file)
