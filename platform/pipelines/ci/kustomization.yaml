@@ -5,3 +5,4 @@ resources:
   - serviceaccounts.yaml
   - registry-rbac.yaml
   - repository.yaml
+  - quarkus-reference-pull.yaml
