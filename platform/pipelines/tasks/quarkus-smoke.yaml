@@ -15,6 +15,9 @@ spec:
   - name: application-name
     type: string
     default: quarkus-reference
+  - name: application-namespace
+    type: string
+    default: ''
   steps:
   - name: observe-and-smoke
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -27,6 +30,8 @@ spec:
       value: "$(params.image-digest)"
     - name: APPLICATION_NAME
       value: "$(params.application-name)"
+    - name: APPLICATION_NAMESPACE
+      value: "$(params.application-namespace)"
     script: |
       #!/usr/bin/env python3
       import json, os, pathlib, re, ssl, time, urllib.error, urllib.request
@@ -34,6 +39,8 @@ spec:
       assert re.fullmatch('[a-f0-9]{40}',revision) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
       name=os.environ['APPLICATION_NAME']
       assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name)
+      namespace=os.environ['APPLICATION_NAMESPACE'] or name
+      assert re.fullmatch('[a-z][a-z0-9-]{2,62}',namespace)
       account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
       context=ssl.create_default_context(cafile=str(account/'ca.crt'))
       token=(account/'token').read_text()
@@ -46,8 +53,8 @@ spec:
       deadline=time.monotonic()+900
       while time.monotonic()<deadline:
           app=kube('/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/'+name)
-          deployment=kube('/apis/apps/v1/namespaces/'+name+'/deployments/'+name)
-          pods=kube('/api/v1/namespaces/'+name+'/pods?labelSelector=app.kubernetes.io%2Fname%3D'+name)['items']
+          deployment=kube('/apis/apps/v1/namespaces/'+namespace+'/deployments/'+name)
+          pods=kube('/api/v1/namespaces/'+namespace+'/pods?labelSelector=app.kubernetes.io%2Fname%3D'+name)['items']
           desired=deployment['spec']['template']['spec']['containers'][0]['image']==expected
           source=deployment['metadata'].get('annotations',{}).get('box1.org/source-revision')==revision
           available=deployment.get('status',{}).get('availableReplicas',0)>=1
@@ -59,7 +66,7 @@ spec:
           if desired and source and available and ready and synced and healthy: break
           time.sleep(10)
       else: raise TimeoutError('Argo rollout did not reach the expected source revision and image digest')
-      base='https://'+name+'.apps.ocp.box1.org'
+      base='https://'+namespace+'.apps.ocp.box1.org'
 
       def get(path,accept='application/json'):
           req=urllib.request.Request(base+path,headers={'Accept':accept})

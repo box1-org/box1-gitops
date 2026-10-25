@@ -1,6 +1,7 @@
 # GitHub-driven Quarkus CI/CD
 
 [Phase 3 acceptance evidence](PHASE3-VERIFICATION.md) records the real PR merge test.
+[Phase 4 golden path](GOLDEN-PATH.md) documents self-service onboarding.
 
 `quarkus-reference/.tekton/` owns application event-to-pipeline definitions.
 `box1-gitops/platform/pipelines/tasks/` owns shared platform Tasks. Argo CD installs
@@ -54,10 +55,11 @@ for the existing TektonConfig named `config`.
 
 ## Development promotion gate
 
-The central promotion Task creates a GitOps PR changing only:
+The central promotion Task accepts a validated `application-name` (default
+`quarkus-reference`) and creates a GitOps PR changing only:
 
-- `workloads/quarkus-reference/kustomization.yaml`: immutable image digest.
-- `workloads/quarkus-reference/deployment.yaml`: source SHA/build provenance.
+- `workloads/<application-name>/kustomization.yaml`: immutable image digest.
+- `workloads/<application-name>/deployment.yaml`: source SHA/build provenance.
 
 Before merging it verifies the exact file contents, unchanged PR head, expected
 App identity, current source-main SHA, and successful checks on that exact head:

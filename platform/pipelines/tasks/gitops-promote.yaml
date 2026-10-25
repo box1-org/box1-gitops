@@ -89,9 +89,10 @@ spec:
       assert count==1, 'Source revision annotation missing'
       new[paths[1]],count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+os.environ['PIPELINE_RUN'],new[paths[1]])
       assert count==1
-      # First release activates the zero-replica onboarding deployment.
-      new[paths[1]],count=re.subn(r'(?m)^  replicas: 0$', '  replicas: 1', new[paths[1]])
-      assert count <= 1
+      # Activate only the unbuilt onboarding deployment; preserve later operator scaling choices.
+      if 'digest: sha256:'+'0'*64 in old[paths[0]]:
+          new[paths[1]],count=re.subn(r'(?m)^  replicas: 0$', '  replicas: 1', new[paths[1]])
+          assert count == 1, 'Unbuilt onboarding deployment must have zero replicas'
       entries=[]
       for path in paths:
           blob=github(gitops+'/git/blobs','POST',{'content':new[path],'encoding':'utf-8'})

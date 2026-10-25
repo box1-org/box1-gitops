@@ -87,10 +87,10 @@ is missing; preprovision it to keep credential ownership external.
 Register/install a GitHub App under **box1-org**. Set its homepage to
 `https://developer-hub.apps.ocp.box1.org` and authorization callback to
 `https://developer-hub.apps.ocp.box1.org/api/auth/github/handler/frame`.
-Disable webhooks for this configuration. Grant organization Members read access,
-repository Contents read access, and Metadata read access. Install it on the
-repositories to discover. Add write permissions only if future templates need
-them. Both the authentication provider and integration use the same App's client
+Disable webhooks for this configuration. Grant organization Members read access and repository Metadata read access.
+The Quarkus golden path additionally requires Administration, Contents, and
+Pull requests write access. Install it on all organization repositories so newly
+generated services are accessible immediately. Both the authentication provider and integration use the same App's client
 credentials. Organization users must be discoverable by that App.
 
 Example commands for a **later, authorized rollout**, with actual values kept
@@ -255,3 +255,17 @@ Primary references:
 - [Operator 1.9 CRD schema](https://github.com/redhat-developer/rhdh-operator/blob/release-1.9/config/crd/bases/rhdh.redhat.com_backstages.yaml)
 - [Operator default PostgreSQL StatefulSet](https://github.com/redhat-developer/rhdh-operator/blob/release-1.9/config/profile/rhdh/default-config/db-statefulset.yaml)
 - [Operator default Route](https://github.com/redhat-developer/rhdh-operator/blob/release-1.9/config/profile/rhdh/default-config/route.yaml)
+
+## Quarkus Software Template
+
+Phase 4 registers `box1-org/box1-templates/catalog-info.yaml` and its
+`quarkus-rest-service` template. Open **Create → Create Quarkus Service**.
+The required GitHub scaffolder backend module is managed in
+`dynamic-plugins.yaml`; the installer deduplicates platform and UI entries by
+package, with platform settings taking precedence. The Developer Hub App now
+has Administration, Contents, and Pull requests write permissions and an
+all-repositories installation. See [the golden-path guide](../pipelines/GOLDEN-PATH.md).
+
+Kubernetes and Argo CD plugins enabled through Extensions had incomplete
+connection placeholders. Their locator lists are explicitly empty until real
+read-only connections are configured, preserving a healthy Hub startup.
