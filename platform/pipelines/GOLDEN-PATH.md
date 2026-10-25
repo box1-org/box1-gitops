@@ -3,8 +3,8 @@
 Developer Hub **Create → Create Quarkus Service** loads
 [`box1-org/box1-templates`](https://github.com/box1-org/box1-templates).
 The platform-owned `quarkus-rest-service` template uses the installed
-`fetch:template`, `publish:github`, `publish:github:pull-request`, and
-`catalog:register` actions. Authentication uses the Developer Hub GitHub App;
+`fetch:template`, `box1:repository:ensure`, `box1:development:onboard`, and
+`box1:catalog:ensure` actions (template 1.1.0). Authentication uses the Developer Hub GitHub App;
 no personal token is requested from developers.
 
 The form takes a unique DNS-safe service/repository name, description, catalog
@@ -28,7 +28,7 @@ The authoritative desired state lives in GitOps after onboarding.
 The development namespace and Route use `<service>-dev`; the repository, image,
 Deployment, and Argo Application keep `<service>` as their identity.
 
-One reviewed onboarding PR adds only a new `applications/<service>.yaml` and
+One automatically validated, development-only onboarding PR adds only a new `applications/<service>.yaml` and
 `workloads/<service>/` directory. The new app is discovered by the existing
 app-of-apps and reconciles automatically. Its resources include:
 
@@ -45,12 +45,23 @@ PAC and observation RBAC retain `box1-ci` / `openshift-gitops` namespaces.
 
 The initial Deployment has zero replicas and a non-runnable zero image digest.
 No reference-app image or unbuilt application image runs under the new identity.
-After the onboarding PR merges and Argo finishes, the first application change
-starts delivery. The initial repository-creation webhook precedes registration
-and is not assumed to be replayed. An empty Git commit can start acceptance
-without changing code; the generated README includes that command.
+The workflow merges the allowlisted onboarding PR only after its exact-head
+required checks pass. It then observes the active Namespace, required
+ServiceAccounts, registry and observer bindings, PAC Repository, synced Argo
+Application and initial Deployment. Only then does it create the first
+PipelineRun, reusing `box1-quarkus-maven`. A source-only, one-hour GitHub App
+Contents-read token is persisted in a Secret before PipelineRun creation and
+removed after the build. No extra source commit or manual sequencing is needed.
 
-The shared promotion Task accepts `application-name` (defaulting to the existing
+The first immutable image is proposed in a second checked development PR,
+merged automatically by the Hub App, and reconciled by Argo. Completion requires
+the expected image, an available current Deployment generation, Argo health,
+public readiness, the original source SHA in `/api/info`, and catalog
+registration. The durable `rhdh/box1-onboard-<service>` status record and renewable
+Lease support partial-failure resumption without duplicate resources. Task
+outputs include source, catalog, initial CI, deployment and Argo links.
+
+Subsequent main pushes use the existing shared promotion Task. It accepts `application-name` (defaulting to the existing
 reference service), verifies its source main SHA, and changes exactly that
 service's digest/provenance files. Its first successful promotion activates the
 Deployment at one replica. The normal exact-head check gate then merges the
@@ -71,15 +82,19 @@ precedence. Other UI choices remain on the PVC. The App is installed for all
 organization repositories and grants Administration/Contents/Pull requests write
 permissions for repository creation and GitOps proposals.
 
-A restart also exposed previously enabled Kubernetes and Argo CD plugins with
-incomplete default connection placeholders. App configuration clears those
-connection lists so the Hub starts. Their read-only cluster/UI connections remain
-a separate configuration task; catalog annotations are already generated.
+Kubernetes, Argo CD, Tekton and Topology use the configured live read-only
+connections. The separate onboarding runtime ServiceAccount has state/lease and
+initial-build permissions plus readiness reads; it cannot mutate workload
+Deployments, Namespaces, Applications or RBAC. Its projected token rotates
+automatically. The GitHub App performs repository creation and checked GitOps
+merges. Runtime source and tests live in `box1-templates/plugins/box1-onboarding`;
+GitOps transports the module using the generated ConfigMap.
 
 ## Validation and operations
 
 See `box1-templates/VERIFICATION.md` for the real scaffolder task, onboarding PR,
-first release, and live Route evidence. The template repository's `npm run
+first release, and live Route evidence. Current zero-touch acceptance and replay
+evidence is in `box1-templates/verification/shipping-service/README.md`. The template repository's `npm run
 validate` renders multiple names (including the maximum length) with Nunjucks, validates both Kustomizations,
 checks cross-namespace identities and pipeline parameters, and rejects unsafe
 names. `ACTION_SCHEMAS=<exported live actions JSON>` additionally checks action
@@ -90,7 +105,7 @@ Tasks are prerequisites; onboarding does not clone their definitions. Platform
 maintainers review onboarding permissions. The shared namespace trust boundary
 and promotion gate remain as described in [AUTOMATION.md](AUTOMATION.md).
 
-## Orders service milestone
+## Earlier orders service milestone
 
 The complete creation → build → deployment → REST PR → redeployment → image
 rollback demonstration passed for `orders-service` in `orders-service-dev`.
@@ -100,3 +115,8 @@ left on the baseline image after the successful GitOps rollback; source main
 retains the endpoint update.
 
 [Milestone evidence and live snapshots](https://github.com/box1-org/box1-templates/blob/main/MILESTONE-DEMO.md).
+
+The Workstream 3 regression baseline is captured separately in
+`box1-templates/verification/shipping-service/orders-regression.json`. Its
+Deployment spec, UID, generation, image, Application spec and Pod UIDs remained
+unchanged throughout shipping-service onboarding.

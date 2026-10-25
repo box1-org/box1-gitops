@@ -383,7 +383,8 @@ adapter copies ConfigMap data into a writable emptyDir before npm packaging,
 and invalidates this local module's cache hash on every boot to avoid the 1.9
 installer deleting its reinstalled directory during stale-hash cleanup.
 
-The Pod uses a dedicated `developer-hub-onboarding` ServiceAccount for durable
+The Pod uses an automatically rotated projected token for the dedicated
+`developer-hub-onboarding` ServiceAccount, with permissions for durable
 state/leases, initial build Secrets/PipelineRuns, and readiness GET requests.
 It cannot mutate workload Deployments, Argo Applications, Namespaces or RBAC.
 The Kubernetes and Argo CD plugin connections continue using their separate
@@ -406,3 +407,9 @@ Contents-read GitHub installation tokens stored only in Kubernetes Secrets.
 The workflow deletes the Secret on successful build; a PipelineRun owner
 reference also enables normal garbage collection. Other environments need a
 separate approved workflow.
+
+Provisioning is marked COMPLETE only after the verified deployment and
+idempotent catalog registration both succeed. Catalog conflicts reuse the
+matching entry; other registration errors fail the task and status record.
+The final Hub API acceptance, partial-failure resume and completed replay for
+shipping-service are recorded in `box1-templates/verification/shipping-service`.
