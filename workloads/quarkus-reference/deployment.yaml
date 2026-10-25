@@ -4,8 +4,8 @@ metadata:
   name: quarkus-reference
   namespace: quarkus-reference
   annotations:
-    box1.org/source-revision: b1a2026552bd9bf09f091b05d6b1cba41ea4b72d
-    box1.org/build-pipelinerun: box1-ci/quarkus-release-psdzf
+    box1.org/source-revision: d8431b784cb59479d02c33ab880fb7cdffe71f01
+    box1.org/build-pipelinerun: box1-ci/quarkus-release-5wjb5
 spec:
   replicas: 1
   revisionHistoryLimit: 3
