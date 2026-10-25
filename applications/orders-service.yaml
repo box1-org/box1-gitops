@@ -4,6 +4,8 @@ kind: Application
 metadata:
   name: "orders-service"
   namespace: openshift-gitops
+  labels:
+    backstage.io/kubernetes-id: orders-service
 spec:
   project: default
   source:

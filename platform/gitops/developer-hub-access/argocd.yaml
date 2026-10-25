@@ -1,0 +1,17 @@
+# Manage integration fields on the existing Operator-owned instance.
+apiVersion: argoproj.io/v1beta1
+kind: ArgoCD
+metadata:
+  name: openshift-gitops
+  namespace: openshift-gitops
+spec:
+  extraConfig:
+    accounts.developer-hub: apiKey
+  rbac:
+    defaultPolicy: ""
+    scopes: '[groups]'
+    policy: |
+      g, system:cluster-admins, role:admin
+      g, cluster-admins, role:admin
+      p, role:developer-hub-reader, applications, get, default/*, allow
+      g, developer-hub, role:developer-hub-reader

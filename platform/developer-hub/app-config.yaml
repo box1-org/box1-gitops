@@ -43,11 +43,43 @@ data:
               clientId: ${GITHUB_APP_CLIENT_ID}
               clientSecret: ${GITHUB_APP_CLIENT_SECRET}
               privateKey: ${GITHUB_APP_PRIVATE_KEY}
-    # Installed UI plugins stay available; configure real read-only connections separately.
     kubernetes:
-      clusterLocatorMethods: []
+      serviceLocatorMethod:
+        type: multiTenant
+      # CI is in box1-ci; select by entity ID across namespaces.
+      clusterLocatorMethods:
+        - type: config
+          clusters:
+            - name: box1
+              url: https://api.ocp.box1.org:6443
+              authProvider: serviceAccount
+              skipTLSVerify: false
+              skipMetricsLookup: true
+              serviceAccountToken: ${K8S_SERVICE_ACCOUNT_TOKEN}
+              caFile: /platform/kubernetes/ca.crt
+      customResources:
+        - group: route.openshift.io
+          apiVersion: v1
+          plural: routes
+        - group: tekton.dev
+          apiVersion: v1
+          plural: pipelineruns
+        - group: tekton.dev
+          apiVersion: v1
+          plural: taskruns
+        - group: tekton.dev
+          apiVersion: v1
+          plural: pipelines
+        - group: tekton.dev
+          apiVersion: v1
+          plural: tasks
     argocd:
-      appLocatorMethods: []
+      appLocatorMethods:
+        - type: config
+          instances:
+            - name: openshift-gitops
+              url: https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org
+              token: ${ARGOCD_AUTH_TOKEN}
     catalog:
       rules:
         - allow: [Component, System, API, Resource, Location, Template]

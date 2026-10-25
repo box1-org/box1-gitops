@@ -267,6 +267,67 @@ package, with platform settings taking precedence. The Developer Hub App now
 has Administration, Contents, and Pull requests write permissions and an
 all-repositories installation. See [the golden-path guide](../pipelines/GOLDEN-PATH.md).
 
-Kubernetes and Argo CD plugins enabled through Extensions had incomplete
-connection placeholders. Their locator lists are explicitly empty until real
-read-only connections are configured, preserving a healthy Hub startup.
+## Live platform connections
+
+The Hub connects to `https://api.ocp.box1.org:6443` as cluster `box1` using
+`rhdh/developer-hub-reader`. The token controller populates the Git-managed
+`developer-hub-kubernetes-token` Secret; its `token` is injected through the
+Deployment patch, and `ca.crt` is mounted for strict API TLS validation.
+The read-only ClusterRole covers application resources, Routes, Pod logs and
+Tekton v1 objects. It cannot read Secrets, execute in Pods, or mutate workloads.
+Reads span namespaces because workloads and CI runs live in different namespaces.
+ConfigMaps and Pod logs are readable; do not store credentials in either.
+
+The existing OpenShift GitOps instance has a dedicated `developer-hub` apiKey
+account with only `applications,get,default/*`. It has no login, sync, create,
+delete, or administrative permissions. The separate manual-sync
+`developer-hub-gitops-access` Application manages integration fields on its
+Operator-owned ArgoCD CR while preserving the existing administrator groups.
+No second Argo CD instance or administrator runtime credential is created.
+
+Bootstrap order (also suitable for credential repair):
+
+```sh
+kubectl apply -f platform/developer-hub/kubernetes-access.yaml
+kubectl apply -k platform/gitops/developer-hub-access
+python3 platform/developer-hub/scripts/provision-connections.py
+# Publish/reconcile GitOps, then sync the manual developer-hub application.
+kubectl apply -k platform/developer-hub
+kubectl -n rhdh rollout status deployment/backstage-developer-hub
+kubectl -n rhdh exec -i deploy/backstage-developer-hub -c backstage-backend -- node \
+  < platform/developer-hub/scripts/verify-connections.cjs
+```
+
+The bootstrap script uses existing administrative access to mint the dedicated
+Argo token and writes it directly to `developer-hub-platform-secrets`; it prints
+no credentials. The token expires in 90 days. Before expiry run with
+`--rotate-argocd`, restart Hub, verify, and revoke the previous token by ID from
+the Argo account. The Secret annotation records the new ID and creation time.
+The service-account token is controller-managed and long lived; rotate by
+recreating its Secret, waiting for population, and restarting Hub. Run the
+provisioner after ingress CA rotation to refresh the mounted trust ConfigMap,
+then restart Hub. TLS verification stays enabled; `NODE_EXTRA_CA_CERTS` adds the
+cluster ingress CA for the Argo HTTPS route. Secret values and CA material are
+provisioned from the live cluster and never committed to Git.
+
+Platform plugin requirements are pinned in `dynamic-plugins.yaml` and override
+incomplete UI connection placeholders for the same packages at installation.
+The existing OCI Argo CD 1.0.2 backend and 2.4.3 frontend are retained.
+
+All components use `backstage.io/kubernetes-id=<entity-name>` on workloads,
+Pod templates, PipelineRuns and Argo CD Applications. Catalog annotations use
+that ID, `janus-idp.io/tekton`, `argocd/instance-name=openshift-gitops`, and
+`argocd/app-selector=backstage.io/kubernetes-id=<entity-name>`. There is no
+namespace annotation, so the Hub can resolve CI runs in `box1-ci` as well as
+Pods in the application namespace. Tekton propagates PipelineRun labels to
+new TaskRuns/Pods. Existing retained CI runs are labeled once during rollout.
+The template generates these same labels and annotations for future services.
+
+The verification script uses the existing backend automation credential to
+query the actual catalog, Kubernetes and Argo CD backend endpoints. It fails
+on absent entities, missing workloads/Pods/Routes/CI runs, backend errors, or
+missing selector-matched Applications; it needs no browser session.
+
+References: [Red Hat 1.9 plugin configuration](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html-single/configuring_dynamic_plugins/index)
+and [Backstage Kubernetes configuration](https://backstage.io/docs/features/kubernetes/configuration/).
+

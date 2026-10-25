@@ -7,4 +7,5 @@ resources:
   - dynamic-plugins.yaml
   - extensions-seed.yaml
   - dynamic-plugins-pvc.yaml
+  - kubernetes-access.yaml
   - backstage.yaml

@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: developer-hub-reader
+  namespace: rhdh
+automountServiceAccountToken: false
+---
+# Token controller populates token and ca.crt; no credential values in Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: developer-hub-kubernetes-token
+  namespace: rhdh
+  annotations:
+    kubernetes.io/service-account.name: developer-hub-reader
+type: kubernetes.io/service-account-token
+---
+# Cluster-wide reads are needed for entity-ID lookups across workload and CI namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: developer-hub-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, configmaps, limitranges, resourcequotas, persistentvolumeclaims, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get, list, watch]
+  - apiGroups: [tekton.dev]
+    resources: [pipelines, pipelineruns, tasks, taskruns]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: developer-hub-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: developer-hub-reader
+subjects:
+  - kind: ServiceAccount
+    name: developer-hub-reader
+    namespace: rhdh

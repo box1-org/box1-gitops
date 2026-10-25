@@ -15,8 +15,11 @@ spec:
         # Extensions installation is supported only with a development runtime.
         - name: NODE_ENV
           value: development
+        - name: NODE_EXTRA_CA_CERTS
+          value: /platform/trust/ca-bundle.crt
       secrets:
         - name: developer-hub-secrets
+        - name: developer-hub-platform-secrets
     extraFiles:
       mountPath: /opt/app-root/src
     route:
@@ -40,6 +43,27 @@ spec:
               - name: extensions-bootstrap
                 configMap:
                   name: developer-hub-extensions-seed
+              - name: platform-kubernetes
+                secret:
+                  secretName: developer-hub-kubernetes-token
+              - name: platform-trust
+                configMap:
+                  name: developer-hub-platform-trust
+            containers:
+              - name: backstage-backend
+                env:
+                  - name: K8S_SERVICE_ACCOUNT_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: developer-hub-kubernetes-token
+                        key: token
+                volumeMounts:
+                  - name: platform-kubernetes
+                    mountPath: /platform/kubernetes
+                    readOnly: true
+                  - name: platform-trust
+                    mountPath: /platform/trust
+                    readOnly: true
             initContainers:
               - name: install-dynamic-plugins
                 command:
