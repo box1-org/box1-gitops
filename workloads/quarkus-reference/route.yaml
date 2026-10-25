@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: quarkus-reference
+  namespace: quarkus-reference
+spec:
+  host: quarkus-reference.apps.ocp.box1.org
+  to:
+    kind: Service
+    name: quarkus-reference
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
