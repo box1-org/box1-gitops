@@ -15,4 +15,4 @@ configMapGenerator:
 images:
   - name: quarkus-reference
     newName: image-registry.openshift-image-registry.svc:5000/box1-ci/quarkus-reference
-    digest: sha256:4a820ec741b1f8c622f4cd0403bbf0e77b6ccf064dd6048347cafc2726e78aab
+    digest: sha256:624d4f832087a651ce03b99b9a07a4a1c3c1694dc176f8eecc3c6ae6ac44dbc5
