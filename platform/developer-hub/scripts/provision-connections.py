@@ -9,7 +9,6 @@ import json
 import ssl
 import subprocess
 import sys
-import tempfile
 import urllib.request
 from datetime import datetime, timezone
 
@@ -27,7 +26,12 @@ def get(kind, name, namespace):
 
 
 def apply(obj):
-    kubectl('apply', '-f', '-', payload=obj)
+    if obj['kind'] == 'Secret':
+        # Avoid putting stringData in a last-applied metadata annotation.
+        kubectl('apply', '--server-side', '--force-conflicts',
+                '--field-manager=developer-hub-credentials', '-f', '-', payload=obj)
+    else:
+        kubectl('apply', '-f', '-', payload=obj)
 
 
 def provision():
