@@ -84,10 +84,14 @@ The corrected check verifies the Contents write API directly and passed.
 
 ## Subsequent phases
 
-Registry RBAC was verified. Actual authenticated image push and digest output
-await the Quarkus build task; RBAC checks alone do not prove a working push.
-Application scaffolding, Quarkus build/test, GitOps image PR automation, runtime
-pull access, and Argo-managed application deployment remain subsequent work.
-Cross-repository token scope for application release pipelines is not enabled by
-this foundation and must be explicitly configured and tested in the trusted
-release namespace. See [README.md](README.md) for credential boundaries.
+[Phase 2 reference delivery](../../workloads/quarkus-reference/VERIFICATION.md)
+now verifies an authenticated Jib push, matching runtime digest, and an
+Argo-managed Quarkus deployment with a successful external HTTP smoke test.
+The build uses a manual Tekton PipelineRun and the GitOps image digest is
+updated by the platform operator for this reference proof.
+
+Application scaffolding, automatic source CI triggers and GitOps image PR
+updates remain subsequent work. Cross-repository token scope for automatic
+application release pipelines is not enabled by this foundation and must be
+explicitly configured and tested in the trusted release namespace. See
+[README.md](README.md) for credential boundaries.

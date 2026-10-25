@@ -7,6 +7,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   Operator and instance Applications.
 - [RH-SSO / Keycloak](platform/identity/keycloak/README.md): separate Operator
   Application and a single Application aggregating database, instance, and realm.
+- [Quarkus reference](workloads/quarkus-reference/README.md): tested Java 21 JVM
+  application, digest-pinned Jib image, and Argo-managed OpenShift runtime.
 - [Pipelines](platform/pipelines/README.md): Operator installation, trusted CI
   namespace, dedicated GitHub App setup, and event-to-check acceptance procedure.
 - [OpenShell](platform/openshell/README.md): validated Helm values and a staged
