@@ -1,5 +1,7 @@
 # Box1 CI/CD foundation
 
+See [rollout evidence and remaining dependencies](STATUS.md) for live verification.
+
 Developer Hub scaffolds applications, Tekton tests/builds/pushes images and proposes
 GitOps changes, and Argo CD alone reconciles application workloads. No application
 pipeline should run `oc apply`, `kubectl apply`, or `argocd app sync`.
@@ -46,10 +48,13 @@ kubectl get tektonconfig config
 kubectl -n openshift-pipelines get deployments,route
 kubectl wait --for=condition=Established crd/pipelineruns.tekton.dev --timeout=120s
 kubectl wait --for=condition=Established crd/repositories.pipelinesascode.tekton.dev --timeout=120s
-kubectl apply --dry-run=server -k platform/pipelines/ci
 kubectl -n openshift-gitops patch application pipelines-ci --type=merge \
   -p '{"operation":{"sync":{"revision":"main","prune":false}}}'
 ```
+
+After the first sync creates `box1-ci`, validate subsequent changes with
+`kubectl apply --dry-run=server -k platform/pipelines/ci`. A server dry run of
+a new Namespace does not create it for the other resources in the same request.
 
 Pipelines as Code is enabled by default by this Operator. Verify
 `spec.platforms.openshift.pipelinesAsCode.enable` in the generated TektonConfig
@@ -70,6 +75,7 @@ kubectl -n openshift-pipelines get route pipelines-as-code-controller \
   -o jsonpath='{.spec.host}{"\n"}'
 ```
 
+Verified endpoint: `https://pipelines-as-code-controller-openshift-pipelines.apps.ocp.box1.org`.
 Use that HTTPS endpoint as the active webhook URL. Following Red Hat's manual App
 setup, grant repository Checks, Contents, Issues, and Pull requests read/write,
 Metadata read, and organization Members read. Subscribe to Check run, Check suite,
@@ -151,7 +157,7 @@ After the App is installed and its Secret is provisioned:
    returns HTTP 2xx and record its delivery ID. Ping alone is insufficient.
 3. Verify `kubectl -n box1-ci get pipelineruns` shows the matching SHA, a successful
    `Succeeded` condition, and the `ci-test` account. Inspect its TaskRun logs.
-4. Verify GitHub shows the successful **Box1 Phase 1 smoke** check on the same PR
+4. Verify GitHub shows a successful check for **box1-phase1-smoke** on the same PR
    head commit. Push another commit and confirm a new check/run for that SHA.
 5. Verify the test SA cannot deploy or push images; verify the build SA can push
    only to `box1-ci`. Registry authentication and an actual build/push digest
