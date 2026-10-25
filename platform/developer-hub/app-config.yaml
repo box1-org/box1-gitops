@@ -16,6 +16,11 @@ data:
       cors:
         origin: https://developer-hub.apps.ocp.box1.org
         credentials: true
+      reading:
+        allow:
+          # Catalog API definitions may read only OpenAPI endpoints on service Routes.
+          - host: '*.apps.ocp.box1.org'
+            paths: ['/q/openapi']
       auth:
         externalAccess:
           - type: legacy
