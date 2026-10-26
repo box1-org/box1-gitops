@@ -33,6 +33,15 @@ written vendor confirmation. Do not attempt an in-place OpenShift downgrade.
 is `stable-3.4`, starting CSV `rhods-operator.3.4.2`. Review future plans before
 approval: startingCSV does not freeze the subscription permanently.
 
+The application controller needs the scoped permissions in
+`components/gitops-access.yaml` and `test/gitops-access.yaml`. Bootstrap those
+two files once as cluster administrator after creating the test namespace;
+subsequent synchronization maintains them through GitOps. Cluster mutations
+are limited to the two named AI singleton resources; namespace mutations are
+limited to test resource types in `box1-ai-test`. Kubernetes create permission
+cannot be constrained by resource name, so creation of the two cluster CR types
+is granted at the resource-type level. This access was explicitly approved.
+
 1. Sync `openshift-ai-operator`, review and approve the matching OLM InstallPlan,
    and wait for its CSV to reach Succeeded.
 2. Sync `openshift-ai`; wait for `default-dsci` and `default-dsc` to report Ready.

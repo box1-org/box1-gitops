@@ -1,0 +1,100 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRole",
+      "metadata": {
+        "name": "box1-gitops-openshift-ai",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "-1"
+        }
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "datasciencecluster.opendatahub.io"
+          ],
+          "resources": [
+            "datascienceclusters"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            "datasciencecluster.opendatahub.io"
+          ],
+          "resources": [
+            "datascienceclusters"
+          ],
+          "resourceNames": [
+            "default-dsc"
+          ],
+          "verbs": [
+            "update",
+            "patch",
+            "delete"
+          ]
+        },
+        {
+          "apiGroups": [
+            "dscinitialization.opendatahub.io"
+          ],
+          "resources": [
+            "dscinitializations"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            "dscinitialization.opendatahub.io"
+          ],
+          "resources": [
+            "dscinitializations"
+          ],
+          "resourceNames": [
+            "default-dsci"
+          ],
+          "verbs": [
+            "update",
+            "patch",
+            "delete"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "ClusterRoleBinding",
+      "metadata": {
+        "name": "box1-gitops-openshift-ai",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "-1"
+        }
+      },
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "box1-gitops-openshift-ai"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "openshift-gitops-argocd-application-controller",
+          "namespace": "openshift-gitops"
+        }
+      ]
+    }
+  ]
+}

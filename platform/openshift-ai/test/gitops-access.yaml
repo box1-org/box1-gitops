@@ -1,0 +1,113 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "box1-gitops-openshift-ai-test",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "-1"
+        },
+        "namespace": "box1-ai-test"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "resourcequotas",
+            "limitranges",
+            "serviceaccounts"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "update",
+            "patch",
+            "delete"
+          ]
+        },
+        {
+          "apiGroups": [
+            "objectbucket.io"
+          ],
+          "resources": [
+            "objectbucketclaims"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "update",
+            "patch",
+            "delete"
+          ]
+        },
+        {
+          "apiGroups": [
+            "kubeflow.org"
+          ],
+          "resources": [
+            "notebooks"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "update",
+            "patch",
+            "delete"
+          ]
+        },
+        {
+          "apiGroups": [
+            "serving.kserve.io"
+          ],
+          "resources": [
+            "inferenceservices",
+            "servingruntimes"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "update",
+            "patch",
+            "delete"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "box1-gitops-openshift-ai-test",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "-1"
+        },
+        "namespace": "box1-ai-test"
+      },
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "box1-gitops-openshift-ai-test"
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "openshift-gitops-argocd-application-controller",
+          "namespace": "openshift-gitops"
+        }
+      ]
+    }
+  ]
+}
