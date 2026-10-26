@@ -5,6 +5,9 @@ metadata:
   namespace: stackrox
 spec:
   central:
+    declarativeConfiguration:
+      secrets:
+        - name: acs-oidc-config
     exposure:
       route:
         enabled: true
