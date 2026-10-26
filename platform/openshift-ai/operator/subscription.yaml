@@ -1,0 +1,16 @@
+{
+  "apiVersion": "operators.coreos.com/v1alpha1",
+  "kind": "Subscription",
+  "metadata": {
+    "name": "rhods-operator",
+    "namespace": "redhat-ods-operator"
+  },
+  "spec": {
+    "channel": "stable-3.4",
+    "installPlanApproval": "Manual",
+    "name": "rhods-operator",
+    "source": "redhat-operators-v422",
+    "sourceNamespace": "openshift-marketplace",
+    "startingCSV": "rhods-operator.3.4.2"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "apiVersion": "v1",
+  "kind": "Namespace",
+  "metadata": {
+    "name": "box1-ai-test",
+    "labels": {
+      "opendatahub.io/dashboard": "true",
+      "modelmesh-enabled": "false"
+    },
+    "annotations": {
+      "openshift.io/display-name": "Box1 AI test",
+      "openshift.io/description": "CPU-only workbench, NooBaa storage and KServe validation for box1-docs#2"
+    }
+  }
+}

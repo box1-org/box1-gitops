@@ -1,0 +1,15 @@
+{
+  "apiVersion": "objectbucket.io/v1alpha1",
+  "kind": "ObjectBucketClaim",
+  "metadata": {
+    "name": "box1-ai-test",
+    "namespace": "box1-ai-test"
+  },
+  "spec": {
+    "generateBucketName": "box1-ai-test",
+    "storageClassName": "openshift-storage.noobaa.io",
+    "additionalConfig": {
+      "bucketclass": "noobaa-default-bucket-class"
+    }
+  }
+}

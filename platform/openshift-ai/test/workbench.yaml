@@ -1,0 +1,255 @@
+{
+  "apiVersion": "kubeflow.org/v1",
+  "kind": "Notebook",
+  "metadata": {
+    "annotations": {
+      "notebooks.opendatahub.io/inject-auth": "true",
+      "notebooks.opendatahub.io/last-image-version-git-commit-selection": "d3137ca",
+      "opendatahub.io/connections": "box1-ai-test/noobaa-connection",
+      "opendatahub.io/hardware-profile-name": "default-profile",
+      "opendatahub.io/hardware-profile-namespace": "redhat-ods-applications",
+      "opendatahub.io/image-display-name": "Jupyter | Data Science | CPU | Python 3.12",
+      "opendatahub.io/user": "mike",
+      "opendatahub.io/username": "mike",
+      "opendatahub.io/workbench-image-namespace": "",
+      "openshift.io/description": "",
+      "openshift.io/display-name": "box1-workbench",
+      "notebooks.opendatahub.io/last-image-selection": "s2i-generic-data-science-notebook:3.4"
+    },
+    "labels": {
+      "app": "box1-workbench",
+      "opendatahub.io/dashboard": "true",
+      "opendatahub.io/odh-managed": "true"
+    },
+    "name": "box1-workbench",
+    "namespace": "box1-ai-test"
+  },
+  "spec": {
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "NOTEBOOK_ARGS",
+                "value": "--ServerApp.port=8888\n                  --ServerApp.token=''\n                  --ServerApp.password=''\n                  --ServerApp.base_url=/notebook/box1-ai-test/box1-workbench\n                  --ServerApp.quit_button=False"
+              },
+              {
+                "name": "JUPYTER_IMAGE",
+                "value": "registry.redhat.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9@sha256:0805b2819850f4705a8cde156b7face098400b2d1196182587c2650433fa8625"
+              },
+              {
+                "name": "PIP_CERT",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              },
+              {
+                "name": "REQUESTS_CA_BUNDLE",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              },
+              {
+                "name": "SSL_CERT_FILE",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              },
+              {
+                "name": "PIPELINES_SSL_SA_CERTS",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              },
+              {
+                "name": "KF_PIPELINES_SSL_SA_CERTS",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              },
+              {
+                "name": "GIT_SSL_CAINFO",
+                "value": "/etc/pki/tls/custom-certs/ca-bundle.crt"
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "noobaa-connection"
+                }
+              }
+            ],
+            "image": "registry.redhat.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9@sha256:0805b2819850f4705a8cde156b7face098400b2d1196182587c2650433fa8625",
+            "imagePullPolicy": "IfNotPresent",
+            "livenessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/notebook/box1-ai-test/box1-workbench/api",
+                "port": "notebook-port",
+                "scheme": "HTTP"
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 1
+            },
+            "name": "box1-workbench",
+            "ports": [
+              {
+                "containerPort": 8888,
+                "name": "notebook-port",
+                "protocol": "TCP"
+              }
+            ],
+            "readinessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/notebook/box1-ai-test/box1-workbench/api",
+                "port": "notebook-port",
+                "scheme": "HTTP"
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 1
+            },
+            "resources": {
+              "limits": {
+                "cpu": "2",
+                "memory": "4Gi"
+              },
+              "requests": {
+                "cpu": "2",
+                "memory": "4Gi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/opt/app-root/src/",
+                "name": "workbench"
+              },
+              {
+                "mountPath": "/dev/shm",
+                "name": "shm"
+              },
+              {
+                "mountPath": "/etc/pki/tls/custom-certs",
+                "name": "trusted-ca",
+                "readOnly": true
+              },
+              {
+                "mountPath": "/opt/app-root/pipeline-runtimes/",
+                "name": "runtime-images"
+              }
+            ],
+            "workingDir": "/opt/app-root/src"
+          },
+          {
+            "args": [
+              "--secure-listen-address=0.0.0.0:8443",
+              "--upstream=http://127.0.0.1:8888/",
+              "--logtostderr=true",
+              "--v=10",
+              "--proxy-endpoints-port=8444",
+              "--config-file=/etc/kube-rbac-proxy/config-file.yaml",
+              "--tls-cert-file=/etc/tls/private/tls.crt",
+              "--tls-private-key-file=/etc/tls/private/tls.key",
+              "--auth-header-fields-enabled=true",
+              "--auth-header-user-field-name=X-Auth-Request-User",
+              "--auth-header-groups-field-name=X-Auth-Request-Groups"
+            ],
+            "image": "registry.redhat.io/rhoai/odh-kube-auth-proxy-rhel9@sha256:a059f453011028f7f18b3c7ec6406a958aa7a5b9bf6c67d084ea9d5d36d6c970",
+            "imagePullPolicy": "Always",
+            "livenessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/healthz",
+                "port": 8444,
+                "scheme": "HTTPS"
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 1
+            },
+            "name": "kube-rbac-proxy",
+            "ports": [
+              {
+                "containerPort": 8443,
+                "name": "kube-rbac-proxy",
+                "protocol": "TCP"
+              }
+            ],
+            "readinessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/healthz",
+                "port": 8444,
+                "scheme": "HTTPS"
+              },
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 1
+            },
+            "resources": {
+              "limits": {
+                "cpu": "100m",
+                "memory": "64Mi"
+              },
+              "requests": {
+                "cpu": "100m",
+                "memory": "64Mi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/etc/kube-rbac-proxy",
+                "name": "kube-rbac-proxy-config"
+              },
+              {
+                "mountPath": "/etc/tls/private",
+                "name": "kube-rbac-proxy-tls-certificates"
+              }
+            ]
+          }
+        ],
+        "enableServiceLinks": false,
+        "serviceAccountName": "box1-workbench",
+        "volumes": [
+          {
+            "name": "workbench",
+            "persistentVolumeClaim": {
+              "claimName": "workbench"
+            }
+          },
+          {
+            "emptyDir": {
+              "medium": "Memory"
+            },
+            "name": "shm"
+          },
+          {
+            "configMap": {
+              "name": "workbench-trusted-ca-bundle",
+              "optional": true
+            },
+            "name": "trusted-ca"
+          },
+          {
+            "configMap": {
+              "name": "pipeline-runtime-images",
+              "optional": true
+            },
+            "name": "runtime-images"
+          },
+          {
+            "configMap": {
+              "defaultMode": 420,
+              "name": "box1-workbench-kube-rbac-proxy-config"
+            },
+            "name": "kube-rbac-proxy-config"
+          },
+          {
+            "name": "kube-rbac-proxy-tls-certificates",
+            "secret": {
+              "defaultMode": 420,
+              "secretName": "box1-workbench-kube-rbac-proxy-tls"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

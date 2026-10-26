@@ -1,0 +1,42 @@
+{
+  "apiVersion": "serving.kserve.io/v1beta1",
+  "kind": "InferenceService",
+  "metadata": {
+    "name": "iris",
+    "namespace": "box1-ai-test",
+    "labels": {
+      "opendatahub.io/dashboard": "true",
+      "modelClass": "mlserver_sklearn.SKLearnModel"
+    },
+    "annotations": {
+      "openshift.io/display-name": "Iris CPU smoke test",
+      "serving.kserve.io/deploymentMode": "RawDeployment",
+      "opendatahub.io/enable-route": "false"
+    }
+  },
+  "spec": {
+    "predictor": {
+      "serviceAccountName": "iris-model",
+      "minReplicas": 1,
+      "maxReplicas": 1,
+      "model": {
+        "modelFormat": {
+          "name": "sklearn",
+          "version": "1"
+        },
+        "runtime": "mlserver-runtime",
+        "storageUri": "s3://box1-ai-test-aa3b0d4e-3855-439a-b494-0dbf2df9d252/models/iris",
+        "resources": {
+          "requests": {
+            "cpu": "250m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "cpu": "1",
+            "memory": "2Gi"
+          }
+        }
+      }
+    }
+  }
+}

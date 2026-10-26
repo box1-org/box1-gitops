@@ -1,0 +1,62 @@
+{
+  "apiVersion": "datasciencecluster.opendatahub.io/v2",
+  "kind": "DataScienceCluster",
+  "metadata": {
+    "labels": {
+      "app.kubernetes.io/name": "datasciencecluster"
+    },
+    "name": "default-dsc"
+  },
+  "spec": {
+    "components": {
+      "aipipelines": {
+        "managementState": "Removed"
+      },
+      "dashboard": {
+        "managementState": "Managed"
+      },
+      "feastoperator": {
+        "managementState": "Removed"
+      },
+      "kserve": {
+        "managementState": "Managed",
+        "nim": {
+          "managementState": "Removed"
+        },
+        "wva": {
+          "managementState": "Removed"
+        }
+      },
+      "kueue": {
+        "managementState": "Removed"
+      },
+      "llamastackoperator": {
+        "managementState": "Removed"
+      },
+      "mlflowoperator": {
+        "managementState": "Removed"
+      },
+      "modelregistry": {
+        "managementState": "Removed"
+      },
+      "ray": {
+        "managementState": "Removed"
+      },
+      "sparkoperator": {
+        "managementState": "Removed"
+      },
+      "trainer": {
+        "managementState": "Removed"
+      },
+      "trainingoperator": {
+        "managementState": "Removed"
+      },
+      "trustyai": {
+        "managementState": "Removed"
+      },
+      "workbenches": {
+        "managementState": "Managed"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "apiVersion": "dscinitialization.opendatahub.io/v2",
+  "kind": "DSCInitialization",
+  "spec": {
+    "applicationsNamespace": "redhat-ods-applications",
+    "monitoring": {
+      "managementState": "Managed",
+      "metrics": {},
+      "namespace": "redhat-ods-monitoring"
+    },
+    "trustedCABundle": {
+      "customCABundle": "",
+      "managementState": "Managed"
+    }
+  },
+  "metadata": {
+    "name": "default-dsci"
+  }
+}

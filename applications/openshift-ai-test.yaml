@@ -1,0 +1,25 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "openshift-ai-test",
+    "namespace": "openshift-gitops"
+  },
+  "spec": {
+    "project": "default",
+    "source": {
+      "repoURL": "https://github.com/box1-org/box1-gitops.git",
+      "targetRevision": "main",
+      "path": "platform/openshift-ai/test"
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "box1-ai-test"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "PruneLast=true"
+      ]
+    }
+  }
+}
