@@ -31,13 +31,14 @@
         "managementState": "Removed"
       },
       "llamastackoperator": {
-        "managementState": "Removed"
+        "managementState": "Managed"
       },
       "mlflowoperator": {
         "managementState": "Removed"
       },
       "modelregistry": {
-        "managementState": "Removed"
+        "managementState": "Managed",
+	"registriesNamespace": "rhoai-model-registries"
       },
       "ray": {
         "managementState": "Removed"
