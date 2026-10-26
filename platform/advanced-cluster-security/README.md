@@ -9,3 +9,9 @@ The cluster init bundle was generated with `roxctl` and applied directly as Kube
 Observed validation on 2026-10-26 (America/New_York): the Operator CSV `rhacs-operator.v4.11.6` is `Succeeded`; Central, Central DB, legacy Scanner, Scanner V4 DB/Indexer/Matcher, Sensor, Admission Control, and Collector are running; the Central route returns HTTP 200; and the SecuredCluster reports `AVAILABLE=True` for RHACS 4.11.6.
 
 Box1 currently reports OpenShift `5.0.0-rc.7`, Kubernetes `1.36.5`, and RHCOS 10.2. RHACS 4.11's published support matrix covers OCP 4.12, 4.14, 4.16, 4.18–4.22; vendor support for this Box1 combination is not established. This is a single-node lab deployment with deliberately reduced requests and one replica for constrained scheduling. Admission blocking, Keycloak OIDC, registry integration, representative image scan, policy tests, backup/recovery, and upgrade/rollback are follow-up validation; no production or HA claim follows.
+
+## Keycloak OIDC
+
+The declarative provider `Keycloak` uses issuer `https://keycloak.apps.ocp.box1.org/auth/realms/box1`, authorization-code callback mode, and client `rhacs-oidc`. The client secret is stored only in the `stackrox/acs-oidc-config` Secret. The initial mapping grants the existing `mike` account the RHACS `Admin` role through the `preferred_username` claim; the provider minimum role is `None` until broader group mappings are deliberately defined. The Central CR mounts this Secret through `spec.central.declarativeConfiguration.secrets`.
+
+Validation: Central logged successful OIDC discovery, the authenticated `/v1/authProviders` API lists `Keycloak` with type `oidc`, all 11 RHACS pods were Running, and the Central route returned HTTP 200. A full browser login and negative authorization test were not exercised in this turn.
