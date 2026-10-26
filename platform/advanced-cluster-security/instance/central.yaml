@@ -1,0 +1,30 @@
+apiVersion: platform.stackrox.io/v1alpha1
+kind: Central
+metadata:
+  name: stackrox-central-services
+  namespace: stackrox
+spec:
+  central:
+    exposure:
+      route:
+        enabled: true
+        host: acs.apps.ocp.box1.org
+    persistence:
+      persistentVolumeClaim:
+        claimName: central
+        size: 20Gi
+        storageClassName: lvms-vg1
+    db:
+      persistence:
+        persistentVolumeClaim:
+          claimName: central-db
+          size: 20Gi
+          storageClassName: lvms-vg1
+  scannerV4:
+    scannerComponent: Enabled
+    db:
+      persistence:
+        persistentVolumeClaim:
+          claimName: scanner-v4-db
+          size: 20Gi
+          storageClassName: lvms-vg1
