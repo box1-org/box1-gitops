@@ -19,3 +19,5 @@ Validation: Central logged successful OIDC discovery, the authenticated `/v1/aut
 The RHACS authorization request included `offline_access`, which Keycloak treated as invalid because it was not assigned to the `rhacs-oidc` client. The scope is now assigned as an optional client scope. The authorization URL returns the Keycloak login page (HTTP 200) instead of the invalid-scope error.
 
 OIDC authorization was tightened after initial testing: the provider now requires `preferred_username=mike` and grants the `Analyst` minimum role. This keeps the existing user scoped while avoiding an unbounded Admin mapping; a browser re-login is required after the provider Secret update.
+
+The Keycloak token did not expose the configured `preferred_username` required attribute to RHACS, so that gate was removed. The provider now grants the least-privileged built-in `Analyst` minimum role; group-based narrowing remains future work after adding an explicit Keycloak group claim.
