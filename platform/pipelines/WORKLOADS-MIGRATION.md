@@ -20,7 +20,8 @@ repository rather than rewriting source manifests.
 2. Populate the development repository with all five workload directories,
    their Applications, and validation PipelineRuns. Preserve workload paths,
    application names, namespaces, image digests, and runtime configuration.
-3. Configure repository access for Argo CD and verify it can read the new source.
+3. Verify anonymous HTTPS access to the public development repository, matching
+   the platform repository visibility. No Argo CD repository credential is needed.
 4. Publish the platform change registering the dev PAC repository, redirecting
    promotion and onboarding, and adding the development parent. Remove the five
    old child Application files and workload directories from the platform tree.

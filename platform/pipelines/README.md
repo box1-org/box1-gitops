@@ -81,7 +81,8 @@ Use that HTTPS endpoint as the active webhook URL. Following Red Hat's manual Ap
 setup, grant repository Checks, Contents, Issues, and Pull requests read/write,
 Metadata read, and organization Members read. Subscribe to Check run, Check suite,
 Commit comment, Issue comment, Pull request, and Push. Install the App initially
-on `box1-gitops` only; include new application repositories when onboarding them.
+on `box1-gitops` and `box1-workloads-dev`; include application source repositories
+when onboarding them.
 The CI namespace must be restricted to trusted platform maintainers.
 
 Keep the App ID, PEM private key, and generated webhook secret outside Git. Have

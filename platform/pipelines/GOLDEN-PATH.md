@@ -28,9 +28,10 @@ The authoritative desired state lives in GitOps after onboarding.
 The development namespace and Route use `<service>-dev`; the repository, image,
 Deployment, and Argo Application keep `<service>` as their identity.
 
-One automatically validated, development-only onboarding PR adds only a new `applications/<service>.yaml` and
-`workloads/<service>/` directory. The new app is discovered by the existing
-app-of-apps and reconciles automatically. Its resources include:
+One automatically validated, development-only onboarding PR in `box1-workloads-dev`
+adds only a new `applications/<service>.yaml` and `workloads/<service>/` directory.
+The `box1-workloads-dev` parent discovers the new Application and it reconciles
+automatically. Its resources include:
 
 - Namespace, restricted runtime ServiceAccount, zero-replica Deployment, startup,
   readiness/liveness probes, hashed ConfigMap, Service, and HTTPS Route.
