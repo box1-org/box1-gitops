@@ -9,18 +9,46 @@ spec:
       route:
         enabled: true
         host: acs.apps.ocp.box1.org
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1Gi
     persistence:
       persistentVolumeClaim:
         claimName: central
         size: 20Gi
         storageClassName: lvms-vg1
     db:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 2Gi
       persistence:
         persistentVolumeClaim:
           claimName: central-db
           size: 20Gi
           storageClassName: lvms-vg1
+  scanner:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
   scannerV4:
+    indexer:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+    matcher:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 768Mi
+    db:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 1Gi
     scannerComponent: Enabled
     db:
       persistence:
