@@ -9,7 +9,6 @@
     "access.yaml",
     "bucket.yaml",
     "workbench-pvc.yaml",
-    "workbench.yaml",
     "model-serviceaccount.yaml",
     "serving-runtime.yaml",
     "iris.yaml"
