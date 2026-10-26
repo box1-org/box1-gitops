@@ -55,11 +55,14 @@ assert.equal(commits[0].sha,state.sourceRevision,'An additional source commit wa
 assert.equal(commits.length,2,'Expected only marker initialization and initial generated source commits');
 const prs=[];
 for(const field of ['onboardingPR','promotionPR']){
- const pr=await w.github('/repos/box1-org/box1-gitops/pulls/'+state[field].number);
+ const match=/^https:\/\/github\.com\/box1-org\/(box1-gitops|box1-workloads-dev)\/pull\/(\d+)$/.exec(state[field].url);
+ assert(match && Number(match[2])===state[field].number,'Unexpected recorded PR repository');
+ const repo='/repos/box1-org/'+match[1];
+ const pr=await w.github(repo+'/pulls/'+state[field].number);
  assert(pr.merged);assert.equal(pr.merged_by.type,'Bot','PR was manually merged');
- const matches=await w.github('/repos/box1-org/box1-gitops/pulls?state=all&head='+encodeURIComponent('box1-org:'+pr.head.ref)+'&base=main');
+ const matches=await w.github(repo+'/pulls?state=all&head='+encodeURIComponent('box1-org:'+pr.head.ref)+'&base=main');
  assert.equal(matches.length,1,'Duplicate PRs created');
- const checks=(await w.github('/repos/box1-org/box1-gitops/commits/'+pr.head.sha+'/check-runs?per_page=100')).check_runs;
+ const checks=(await w.github(repo+'/commits/'+pr.head.sha+'/check-runs?per_page=100')).check_runs;
  const required=['Pipelines as Code CI / box1-phase1-smoke-','Pipelines as Code CI / box1-gitops-validate-'];
  const selected={};for(const check of checks.sort((a,b)=>a.id-b.id))if(required.includes(check.name)&&check.app.slug==='box1-pipelines')selected[check.name]=check;
  assert(required.every(n=>selected[n]?.conclusion==='success'),'Required GitOps checks did not pass');

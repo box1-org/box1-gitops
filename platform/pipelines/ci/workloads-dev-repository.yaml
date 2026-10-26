@@ -1,0 +1,12 @@
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: box1-workloads-dev
+  namespace: box1-ci
+spec:
+  url: https://github.com/box1-org/box1-workloads-dev
+  concurrency_limit: 1
+  settings:
+    pipelinerun_provenance: default_branch
+    github_app_token_scope_repos:
+      - box1-org/box1-workloads-dev

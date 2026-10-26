@@ -35,7 +35,7 @@ app-of-apps and reconciles automatically. Its resources include:
 - Namespace, restricted runtime ServiceAccount, zero-replica Deployment, startup,
   readiness/liveness probes, hashed ConfigMap, Service, and HTTPS Route.
 - PAC Repository in `box1-ci`, trusted default-branch provenance, serialized
-  releases, and short-lived token scope restricted to itself plus `box1-gitops`.
+  releases, and short-lived token scope restricted to itself plus `box1-workloads-dev`.
 - A registry image-puller RoleBinding for that runtime ServiceAccount.
 - Per-service read-only observation Roles/Bindings for `ci-observe`.
 
@@ -120,3 +120,7 @@ The Workstream 3 regression baseline is captured separately in
 `box1-templates/verification/shipping-service/orders-regression.json`. Its
 Deployment spec, UID, generation, image, Application spec and Pod UIDs remained
 unchanged throughout shipping-service onboarding.
+
+Development Applications and `workloads/<service>/` now live in
+`box1-org/box1-workloads-dev`. The platform root installs the workload parent
+Application. Generated source repositories keep their original `deploy/` files.

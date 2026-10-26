@@ -10,7 +10,8 @@ pipeline should run `oc apply`, `kubectl apply`, or `argocd app sync`.
 
 - `operator/`: OLM Subscription in the existing global `openshift-operators`
   OperatorGroup. Do not add another OperatorGroup there.
-- `ci/`: `box1-ci`, Pipelines as Code Repository for `box1-org/box1-gitops`,
+- `ci/`: `box1-ci`, Pipelines as Code registrations for `box1-org/box1-gitops`,
+  `box1-org/box1-workloads-dev`, and application source repositories,
   separate test/build/GitOps identities, and namespace-scoped registry push access.
 - `../../.tekton/phase1-smoke.yaml`: GitHub push/PR smoke check. It intentionally
   does not build an application or use write credentials.

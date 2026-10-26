@@ -70,7 +70,7 @@ spec:
       name=os.environ['APPLICATION_NAME']
       assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name), 'Invalid application name'
       application='/repos/box1-org/'+name
-      gitops='/repos/box1-org/box1-gitops'
+      gitops='/repos/box1-org/box1-workloads-dev'
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
       result('promoted','false'); result('gitops-revision','not-merged'); result('pr-url','not-created')

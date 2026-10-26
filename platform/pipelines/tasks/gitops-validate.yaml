@@ -45,7 +45,7 @@ spec:
 
       import hashlib, io, pathlib, subprocess, zipfile
       sha=os.environ['REVISION']; assert re.fullmatch('[a-f0-9]{40}',sha)
-      req=urllib.request.Request('https://api.github.com/repos/box1-org/box1-gitops/zipball/'+sha,
+      req=urllib.request.Request('https://api.github.com/repos/box1-org/box1-workloads-dev/zipball/'+sha,
           headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-gitops-validator'})
       with urllib.request.urlopen(req,timeout=60) as response: archive=zipfile.ZipFile(io.BytesIO(response.read()))
       root=pathlib.Path('/tmp/gitops-validation'); root.mkdir()

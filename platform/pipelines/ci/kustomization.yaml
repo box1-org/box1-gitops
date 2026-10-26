@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - serviceaccounts.yaml
   - registry-rbac.yaml
+  - workloads-dev-repository.yaml
   - repository.yaml
   - quarkus-reference-pull.yaml
   - quarkus-reference-repository.yaml

@@ -41,7 +41,7 @@ platform maintainers; namespace membership alone is not a Secret boundary.
 
 The same PAC namespace contains the registered source and GitOps repositories,
 as required by this PAC version's repository-level token scoping. Both explicitly
-scope issued tokens: the app to itself plus `box1-gitops`, and GitOps to itself.
+scope issued tokens: the app to itself plus `box1-workloads-dev`, and each GitOps repository to itself.
 `secret-github-app-token-scoped=false` enables those explicit Repository lists;
 `secret-github-app-scope-extra-repos` stays empty. No organization-wide token is
 intentionally issued. The GitHub App private key remains only in its controller
@@ -54,6 +54,10 @@ when upgrading the Operator; the controller receives patch/update rights only
 for the existing TektonConfig named `config`.
 
 ## Development promotion gate
+
+Development desired state lives in `box1-org/box1-workloads-dev`; platform Tasks
+remain in `box1-gitops`. Service repositories retain their original `deploy/`
+manifests. Onboarding and image promotion create PRs in `box1-workloads-dev`.
 
 The central promotion Task accepts a validated `application-name` (default
 `quarkus-reference`) and creates a GitOps PR changing only:
