@@ -36,7 +36,7 @@
               },
               {
                 "name": "JUPYTER_IMAGE",
-                "value": "registry.redhat.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9@sha256:0805b2819850f4705a8cde156b7face098400b2d1196182587c2650433fa8625"
+                "value": "s2i-generic-data-science-notebook:3.4"
               },
               {
                 "name": "PIP_CERT",

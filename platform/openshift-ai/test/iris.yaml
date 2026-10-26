@@ -10,7 +10,7 @@
     },
     "annotations": {
       "openshift.io/display-name": "Iris CPU smoke test",
-      "serving.kserve.io/deploymentMode": "RawDeployment",
+      "serving.kserve.io/deploymentMode": "Standard",
       "opendatahub.io/enable-route": "false"
     }
   },
