@@ -8,7 +8,6 @@
     "limits.yaml",
     "access.yaml",
     "bucket.yaml",
-    "workbench-pvc.yaml",
     "model-serviceaccount.yaml",
     "serving-runtime.yaml",
     "iris.yaml"
