@@ -1,0 +1,169 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-security-gates
+  namespace: box1-ci
+  labels:
+    box1.org/security-gate: image
+spec:
+  description: >-
+    Generate a digest-bound CycloneDX SBOM, upload it to RHTPA, and run the
+    matching RHACS image scan/check. The gate is deliberately opt-in until the
+    platform credentials and policy have been validated.
+  params:
+  - name: image-reference
+    type: string
+  - name: image-digest
+    type: string
+  - name: source-revision
+    type: string
+  - name: source-repository
+    type: string
+  - name: application-name
+    type: string
+  - name: pipeline-run
+    type: string
+  - name: enforcement
+    type: string
+    default: observe
+    description: observe records findings; gate fails on scanner or policy failure.
+  - name: rhtpa-url
+    type: string
+    default: https://tpa.apps.ocp.box1.org
+  - name: rhtpa-issuer
+    type: string
+    default: https://keycloak.apps.ocp.box1.org/auth/realms/box1
+  - name: rhtpa-secret
+    type: string
+  - name: rhacs-endpoint
+    type: string
+    default: central.stackrox:443
+  - name: rhacs-secret
+    type: string
+  results:
+  - name: sbom-id
+    type: string
+  - name: findings
+    type: string
+  - name: policy
+    type: string
+  volumes:
+  - name: reports
+    emptyDir: {}
+  steps:
+  - name: sbom-and-rhtpa
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: IMAGE_REFERENCE
+      value: $(params.image-reference)
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: SOURCE_REVISION
+      value: $(params.source-revision)
+    - name: SOURCE_REPOSITORY
+      value: $(params.source-repository)
+    - name: APPLICATION_NAME
+      value: $(params.application-name)
+    - name: PIPELINE_RUN
+      value: $(params.pipeline-run)
+    - name: RHTPA_URL
+      value: $(params.rhtpa-url)
+    - name: RHTPA_ISSUER
+      value: $(params.rhtpa-issuer)
+    - name: RHTPA_CLIENT_ID
+      value: rhtpa-ci
+    - name: RHTPA_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: $(params.rhtpa-secret)
+          key: client-secret
+    volumeMounts:
+    - name: reports
+      mountPath: /reports
+    script: |
+      #!/usr/bin/env python3
+      import hashlib, io, json, os, pathlib, re, shutil, tarfile, urllib.parse, urllib.request
+      digest=os.environ['IMAGE_DIGEST']
+      revision=os.environ['SOURCE_REVISION']
+      if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest): raise SystemExit('Exact image digest is required')
+      if not re.fullmatch(r'[a-f0-9]{40}', revision): raise SystemExit('Full source revision is required')
+      if not os.environ['IMAGE_REFERENCE'].endswith('@'+digest): raise SystemExit('Image reference is not digest-bound')
+      url='https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.0_linux_amd64.tar.gz'
+      expected='bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d'
+      with urllib.request.urlopen(url, timeout=120) as response: data=response.read()
+      if hashlib.sha256(data).hexdigest()!=expected: raise SystemExit('Syft checksum mismatch')
+      with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
+          member=archive.getmember('syft'); member.name='syft'; archive.extract(member, '/tmp')
+      pathlib.Path('/tmp/syft').chmod(0o755)
+      sbom=pathlib.Path('/reports/sbom.cdx.json')
+      import subprocess
+      registry_token=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text().strip()
+      subprocess.run(['/tmp/syft', os.environ['IMAGE_REFERENCE'], '--registry-credentials', 'serviceaccount:'+registry_token, '-o', 'cyclonedx-json@1.5='+str(sbom)], check=True, timeout=900)
+      document=json.loads(sbom.read_text())
+      if document.get('bomFormat')!='CycloneDX' or document.get('specVersion')!='1.5': raise SystemExit('Syft did not produce CycloneDX 1.5')
+      labels={'labels.image-digest':digest,'labels.source-revision':revision,'labels.service':os.environ['APPLICATION_NAME'],'labels.source-repository':os.environ['SOURCE_REPOSITORY'],'labels.pipeline-run':os.environ['PIPELINE_RUN']}
+      form=urllib.parse.urlencode({'grant_type':'client_credentials','client_id':os.environ['RHTPA_CLIENT_ID'],'client_secret':os.environ['RHTPA_CLIENT_SECRET']}).encode()
+      with urllib.request.urlopen(os.environ['RHTPA_ISSUER']+'/protocol/openid-connect/token', data=form, timeout=60) as response: token=json.load(response)['access_token']
+      endpoint=os.environ['RHTPA_URL']+'/api/v3/sbom?format=cyclonedx&cache=Wait&'+urllib.parse.urlencode(labels)
+      request=urllib.request.Request(endpoint, data=json.dumps(document).encode(), method='POST', headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+      with urllib.request.urlopen(request, timeout=300) as response:
+          if response.status!=201: raise SystemExit('RHTPA rejected the SBOM')
+          result=json.loads(response.read())
+      sbom_id=result.get('id') or result.get('sbomId') or 'accepted'
+      pathlib.Path('/tekton/results/sbom-id').write_text(sbom_id)
+      print('SBOM accepted by RHTPA: '+sbom_id+' digest='+digest+' revision='+revision)
+  - name: rhacs-scan-and-check
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: IMAGE_REFERENCE
+      value: $(params.image-reference)
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: ENFORCEMENT
+      value: $(params.enforcement)
+    - name: RHACS_ENDPOINT
+      value: $(params.rhacs-endpoint)
+    - name: ROX_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: $(params.rhacs-secret)
+          key: rox-api-token
+    volumeMounts:
+    - name: reports
+      mountPath: /reports
+    script: |
+      #!/usr/bin/env python3
+      import hashlib, os, pathlib, subprocess, urllib.request
+      url='https://mirror.openshift.com/pub/rhacs/assets/4.11.6/bin/Linux/roxctl'
+      expected='975fea98a30d2b4e55444366e9202297b4ff0b2a1f5c783994f5af5788b5f983'
+      binary=pathlib.Path('/tmp/roxctl'); binary.write_bytes(urllib.request.urlopen(url, timeout=120).read()); binary.chmod(0o755)
+      if hashlib.sha256(binary.read_bytes()).hexdigest()!=expected: raise SystemExit('roxctl checksum mismatch')
+      env=os.environ.copy(); env['ROX_API_TOKEN']=env['ROX_API_TOKEN']
+      scan=subprocess.run([str(binary),'image','scan','--endpoint',env['RHACS_ENDPOINT'],'--image',env['IMAGE_REFERENCE'],'--output','json'], env=env, text=True, capture_output=True, timeout=900)
+      pathlib.Path('/reports/rhacs-scan.json').write_text(scan.stdout)
+      check=subprocess.run([str(binary),'image','check','--endpoint',env['RHACS_ENDPOINT'],'--image',env['IMAGE_REFERENCE'],'--output','json'], env=env, text=True, capture_output=True, timeout=900)
+      pathlib.Path('/reports/rhacs-check.json').write_text(check.stdout)
+      pathlib.Path('/tekton/results/findings').write_text('scan-exit='+str(scan.returncode))
+      pathlib.Path('/tekton/results/policy').write_text('pass' if check.returncode==0 else 'fail')
+      print('RHACS scan/check completed for digest '+env['IMAGE_DIGEST'])
+      if env['ENFORCEMENT']=='gate' and (scan.returncode!=0 or check.returncode!=0): raise SystemExit('RHACS security gate rejected the image')
+      if env['ENFORCEMENT'] not in ['observe','gate']: raise SystemExit('enforcement must be observe or gate')
+      if check.returncode!=0: print('OBSERVE: RHACS policy would reject this image; promotion remains report-only')
+  - name: evidence
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: SOURCE_REVISION
+      value: $(params.source-revision)
+    script: |
+      #!/usr/bin/env python3
+      import json, os, pathlib
+      evidence={'imageDigest':os.environ['IMAGE_DIGEST'],'sourceRevision':os.environ['SOURCE_REVISION'],'sbom':pathlib.Path('/reports/sbom.cdx.json').exists(),'rhacsScan':pathlib.Path('/reports/rhacs-scan.json').exists(),'rhacsCheck':pathlib.Path('/reports/rhacs-check.json').exists()}
+      pathlib.Path('/reports/evidence.json').write_text(json.dumps(evidence, sort_keys=True)+'\n')
+      print(json.dumps(evidence, sort_keys=True))
