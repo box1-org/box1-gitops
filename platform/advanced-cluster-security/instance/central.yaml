@@ -50,7 +50,6 @@ spec:
           cpu: 200m
           memory: 1Gi
     scannerComponent: Enabled
-    db:
       persistence:
         persistentVolumeClaim:
           claimName: scanner-v4-db
