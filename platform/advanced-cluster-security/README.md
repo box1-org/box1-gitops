@@ -17,3 +17,5 @@ The declarative provider `Keycloak` uses issuer `https://keycloak.apps.ocp.box1.
 Validation: Central logged successful OIDC discovery, the authenticated `/v1/authProviders` API lists `Keycloak` with type `oidc`, all 11 RHACS pods were Running, and the Central route returned HTTP 200. The RHACS login endpoint now redirects to Keycloak and Keycloak returns HTTP 200 without `Invalid parameter: redirect_uri`; completing the interactive browser login and a negative authorization test remains untested.
 
 The RHACS authorization request included `offline_access`, which Keycloak treated as invalid because it was not assigned to the `rhacs-oidc` client. The scope is now assigned as an optional client scope. The authorization URL returns the Keycloak login page (HTTP 200) instead of the invalid-scope error.
+
+OIDC authorization was tightened after initial testing: the provider now requires `preferred_username=mike` and grants the `Analyst` minimum role. This keeps the existing user scoped while avoiding an unbounded Admin mapping; a browser re-login is required after the provider Secret update.
