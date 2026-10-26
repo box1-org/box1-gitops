@@ -7,8 +7,18 @@ spec:
   clusterName: box1
   centralEndpoint: central.stackrox:443
   admissionControl:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
     enforcement: Disabled
     failurePolicy: Ignore
+  sensor:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
   scannerV4:
     scannerComponent: AutoSense
   perNode:
