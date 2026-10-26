@@ -1,0 +1,19 @@
+apiVersion: platform.stackrox.io/v1alpha1
+kind: SecuredCluster
+metadata:
+  name: stackrox-secured-cluster-services
+  namespace: stackrox
+spec:
+  clusterName: box1
+  centralEndpoint: central.stackrox:443
+  admissionControl:
+    enforcement: Disabled
+    failurePolicy: Ignore
+  scannerV4:
+    scannerComponent: AutoSense
+  perNode:
+    collector:
+      collection: CORE_BPF
+  customize:
+    deploymentDefaults:
+      pinToNodes: None
