@@ -26,8 +26,8 @@ spec:
     type: string
   - name: enforcement
     type: string
-    default: observe
-    description: observe records findings; gate fails on scanner or policy failure.
+    default: disabled
+    description: disabled is an auditable no-op; observe reports; gate fails on scanner or policy failure.
   - name: rhtpa-url
     type: string
     default: https://tpa.apps.ocp.box1.org
@@ -80,12 +80,19 @@ spec:
         secretKeyRef:
           name: $(params.rhtpa-secret)
           key: client-secret
+          optional: true
+    - name: ENFORCEMENT
+      value: $(params.enforcement)
     volumeMounts:
     - name: reports
       mountPath: /reports
     script: |
       #!/usr/bin/env python3
       import hashlib, io, json, os, pathlib, re, shutil, tarfile, urllib.parse, urllib.request
+      if os.environ['ENFORCEMENT']=='disabled':
+          pathlib.Path('/tekton/results/sbom-id').write_text('disabled')
+          print('Security gate disabled by explicit pipeline parameter')
+          raise SystemExit(0)
       digest=os.environ['IMAGE_DIGEST']
       revision=os.environ['SOURCE_REVISION']
       if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest): raise SystemExit('Exact image digest is required')
@@ -133,12 +140,20 @@ spec:
         secretKeyRef:
           name: $(params.rhacs-secret)
           key: rox-api-token
+          optional: true
+    - name: ENFORCEMENT
+      value: $(params.enforcement)
     volumeMounts:
     - name: reports
       mountPath: /reports
     script: |
       #!/usr/bin/env python3
       import hashlib, os, pathlib, subprocess, urllib.request
+      if os.environ['ENFORCEMENT']=='disabled':
+          pathlib.Path('/tekton/results/findings').write_text('disabled')
+          pathlib.Path('/tekton/results/policy').write_text('disabled')
+          print('Security gate disabled by explicit pipeline parameter')
+          raise SystemExit(0)
       url='https://mirror.openshift.com/pub/rhacs/assets/4.11.6/bin/Linux/roxctl'
       expected='975fea98a30d2b4e55444366e9202297b4ff0b2a1f5c783994f5af5788b5f983'
       binary=pathlib.Path('/tmp/roxctl'); binary.write_bytes(urllib.request.urlopen(url, timeout=120).read()); binary.chmod(0o755)
@@ -152,7 +167,7 @@ spec:
       pathlib.Path('/tekton/results/policy').write_text('pass' if check.returncode==0 else 'fail')
       print('RHACS scan/check completed for digest '+env['IMAGE_DIGEST'])
       if env['ENFORCEMENT']=='gate' and (scan.returncode!=0 or check.returncode!=0): raise SystemExit('RHACS security gate rejected the image')
-      if env['ENFORCEMENT'] not in ['observe','gate']: raise SystemExit('enforcement must be observe or gate')
+      if env['ENFORCEMENT'] not in ['observe','gate']: raise SystemExit('enforcement must be disabled, observe, or gate')
       if check.returncode!=0: print('OBSERVE: RHACS policy would reject this image; promotion remains report-only')
   - name: evidence
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6

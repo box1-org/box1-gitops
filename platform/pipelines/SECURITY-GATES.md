@@ -23,12 +23,14 @@ scanner outage is treated as a pass. Reports are retained in the Task workspace
 for the rest of the PipelineRun and the three Tekton results expose the SBOM
 identifier, scan status, and policy status.
 
-The Task is installed by the `pipelines-ci` Kustomization, but application
-release definitions do not invoke it yet. Issue #9 still records RHACS registry
-integration, representative image scanning, policy baseline, and admission
-violation testing as unverified. Until those checks are completed, wiring this
-Task into promotion would either require unreviewed credentials or make every
-release fail before the existing GitOps flow. The enablement sequence is:
+The Task is installed by the `pipelines-ci` Kustomization. Application release
+definitions now invoke it between `build` and `promote` with an explicit
+`security-gates=disabled` default. Disabled mode records an auditable no-op and
+keeps the existing release flow intact; changing that parameter to `observe` or
+`gate` requires the scoped credentials below and runs before promotion. Issue #9
+still records RHACS registry integration, representative image scanning, policy
+baseline, and admission violation testing as unverified. The enablement sequence
+is:
 
 1. Create the scoped `rhtpa-ci` and RHACS image-read/check credentials outside
    Git and verify TLS, registry access, and the exact-digest reports.
@@ -38,9 +40,8 @@ release fail before the existing GitOps flow. The enablement sequence is:
 3. Define and test the application-namespace RHACS policy with a deliberately
    vulnerable image. Confirm the GitOps PR is not created or merged when
    `enforcement=gate` rejects it.
-4. Wire the Task between `build` and `promote` in the generated template and
-   existing application release Pipelines, then repeat the remediated release
-   through Argo and the existing runtime smoke checks.
+4. Repeat the remediated release through Argo and the existing runtime smoke
+   checks.
 
 Admission enforcement remains outside this Task. It must stay disabled for
 OpenShift system namespaces until the controlled application-namespace denial
