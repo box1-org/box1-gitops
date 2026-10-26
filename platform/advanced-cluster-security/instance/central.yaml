@@ -11,7 +11,7 @@ spec:
         host: acs.apps.ocp.box1.org
     resources:
       requests:
-        cpu: 100m
+        cpu: 50m
         memory: 1Gi
     persistence:
       persistentVolumeClaim:
@@ -21,7 +21,7 @@ spec:
     db:
       resources:
         requests:
-          cpu: 200m
+          cpu: 50m
           memory: 2Gi
       persistence:
         persistentVolumeClaim:
@@ -36,7 +36,7 @@ spec:
         replicas: 1
       resources:
         requests:
-          cpu: 200m
+          cpu: 100m
           memory: 768Mi
     db:
       resources:
@@ -51,7 +51,7 @@ spec:
         replicas: 1
       resources:
         requests:
-          cpu: 200m
+          cpu: 100m
           memory: 512Mi
     matcher:
       scaling:
@@ -59,12 +59,12 @@ spec:
         replicas: 1
       resources:
         requests:
-          cpu: 200m
+          cpu: 100m
           memory: 768Mi
     db:
       resources:
         requests:
-          cpu: 200m
+          cpu: 100m
           memory: 1Gi
       persistence:
         persistentVolumeClaim:
