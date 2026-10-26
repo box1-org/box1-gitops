@@ -84,7 +84,7 @@ The corrected check verifies the Contents write API directly and passed.
 
 ## Subsequent phases
 
-[Phase 2 reference delivery](../../workloads/quarkus-reference/VERIFICATION.md)
+[Phase 2 reference delivery](https://github.com/box1-org/box1-workloads-dev/blob/main/workloads/quarkus-reference/VERIFICATION.md)
 now verifies an authenticated Jib push, matching runtime digest, and an
 Argo-managed Quarkus deployment with a successful external HTTP smoke test.
 The build uses a manual Tekton PipelineRun and the GitOps image digest is
