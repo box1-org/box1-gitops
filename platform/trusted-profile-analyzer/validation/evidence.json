@@ -1,0 +1,79 @@
+{
+  "initial_publication": "f89141ad131e7cf4faac9db19945ec1bed10a51a",
+  "cluster": {
+    "openshift": "5.0.0-rc.7",
+    "kubernetes": "1.36.5",
+    "vendor_support": "not established"
+  },
+  "rhtpa_version": "3.1.1",
+  "endpoint": "https://tpa.apps.ocp.box1.org",
+  "gitops_applications": [
+    "rhtpa-operator",
+    "rhtpa-prerequisites",
+    "rhtpa"
+  ],
+  "authentication": {
+    "browser": "real Keycloak login completed by user; inventory and advisory upload verified",
+    "anonymous_api_v2": 401,
+    "anonymous_api_v3": 401,
+    "ci_sbom_read": 200,
+    "ci_sbom_upload": 201,
+    "ci_importer_read": 403,
+    "ci_advisory_upload": 403
+  },
+  "reference_sbom": {
+    "id": "urn:uuid:01a17648-2d52-769a-9996-e1303b7c0a63",
+    "image_digest": "sha256:75caa059d31734251fadc93afee730ba2e9d976de007aebfe33e6e9546e8ecf8",
+    "source_revision": "640b029c657eaacebacc46aa63894f2276d57f1d",
+    "build": "box1-ci/quarkus-release-5z59z",
+    "syft_version": "1.55.0",
+    "format": "CycloneDX JSON 1.5",
+    "serialized_components": 6554,
+    "library_components": 283,
+    "file_components": 6270,
+    "operating_system_components": 1,
+    "rhtpa_inventory_entries": 285,
+    "original_document_sha256": "9b9d0f23dcbb837d6b1c7b89afea216f34914ff2411c5d9c5c7b336f1eac2714",
+    "new_server_pod": "server-5697d87d7f-zrx8x",
+    "post_restart_download": {
+      "http_status": 200,
+      "sha256_unchanged": true
+    },
+    "production_finding_assessment": "pending completion of initial advisory import"
+  },
+  "s3": {
+    "dedicated_bucket_list": 200,
+    "full_object_downloads_verified_at_sample": 965,
+    "unrelated_first_bucket": 403,
+    "reference_sbom_hash_matched": true
+  },
+  "recovery": {
+    "logical_database_restore": "passed in separate disposable database",
+    "restored_sboms": 1,
+    "restored_advisories": 1900,
+    "restored_sbom_provenance_verified": true,
+    "test_database_removed": true,
+    "coordinated_database_and_s3_restore": "not tested"
+  },
+  "synthetic_vex": {
+    "fixture_sbom_id": "urn:uuid:01a17652-49d4-7239-b6b7-8dd8113aef3c",
+    "advisory": "https://github.com/box1-org/box1-gitops#BOX1-SYNTHETIC-VEX-TEST-001",
+    "affected_version": "1.1.0",
+    "current_version": "2.0.0",
+    "current_status": "not_affected",
+    "browser_affected_findings_before": 1,
+    "browser_affected_findings_after": 0,
+    "earlier_revisions_preserved_as_deprecated": true,
+    "scope": "synthetic generic component only; no deployed-software exploitability claim"
+  },
+  "advisory_importers": {
+    "osv-github": "initial full import running; not yet fresh",
+    "redhat-csaf-sample": "configured; pending corrected first run"
+  },
+  "limitations": [
+    "OpenShift RC vendor support not established",
+    "Per-build pipeline integration belongs to workstream 5C / issue 10",
+    "Red Hat CSAF source is a three-advisory sample, not comprehensive coverage",
+    "No HA/load or coordinated disaster-recovery test"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "document": {
+    "category": "csaf_vex",
+    "csaf_version": "2.0",
+    "title": "Box1 SYNTHETIC VEX and revision-history validation",
+    "publisher": {
+      "category": "other",
+      "name": "Box1 lab validation",
+      "namespace": "https://github.com/box1-org/box1-gitops"
+    },
+    "notes": [
+      {
+        "category": "legal_disclaimer",
+        "text": "SYNTHETIC TEST DATA ONLY. Do not use this advisory to assess real workloads."
+      }
+    ],
+    "tracking": {
+      "id": "BOX1-SYNTHETIC-VEX-TEST-001",
+      "status": "final",
+      "version": "1.1.0",
+      "initial_release_date": "2026-10-26T03:45:00Z",
+      "current_release_date": "2026-10-26T03:45:30Z",
+      "revision_history": [
+        {
+          "number": "1.0.0",
+          "date": "2026-10-26T03:45:00Z",
+          "summary": "Synthetic affected-state fixture"
+        },
+        {
+          "number": "1.1.0",
+          "date": "2026-10-26T03:45:30Z",
+          "summary": "Synthetic fixture product-tree correction"
+        }
+      ]
+    }
+  },
+  "product_tree": {
+    "branches": [
+      {
+        "category": "vendor",
+        "name": "Box1 lab validation",
+        "branches": [
+          {
+            "category": "product_name",
+            "name": "box1-rhtpa-validation-component",
+            "branches": [
+              {
+                "category": "product_version",
+                "name": "1.0.0",
+                "product": {
+                  "name": "Box1 synthetic validation component 1.0.0",
+                  "product_id": "box1-synthetic-component",
+                  "product_identification_helper": {
+                    "purl": "pkg:generic/box1-rhtpa-validation-component@1.0.0"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "cve": "CVE-2021-44228",
+      "title": "Synthetic fixture linkage only; not an assessment of any real software",
+      "product_status": {
+        "known_affected": [
+          "box1-synthetic-component"
+        ]
+      },
+      "notes": [
+        {
+          "category": "general",
+          "text": "Synthetic validation fixture. The generic test component is not Log4j. No claim is made that it contains this vulnerability."
+        }
+      ]
+    }
+  ]
+}

@@ -148,13 +148,29 @@ Observed 2026-10-25, America/New_York:
 `redhat-csaf-sample` deliberately selects three signed RHSA documents; it is not
 full Red Hat coverage. Filters match the filename basename, not a URL/path.
 Other chart-default importers remain disabled. A successful importer run with
-zero documents does not establish coverage. See the recorded evidence for final
-run counts, freshness, findings and any outstanding VEX/history checks. Zero
+zero documents does not establish coverage. See `validation/evidence.json` for
+run counts, freshness, findings and any outstanding checks. Zero
 findings before source import completes must not be treated as a clean assessment.
+
+The synthetic fixtures in `validation/fixtures/` exercise VEX and advisory history
+without describing a deployed application. In the signed-in browser, the generic
+fixture component showed one affected CVE linkage under advisory version 1.1.0.
+Uploading version 2.0.0 with `known_not_affected` removed that affected finding.
+The database retained the earlier affected assertions as deprecated and selected
+2.0.0 / `not_affected` as current. Initial product-tree/partial-version trial uploads
+also remain as deprecated test revisions. The fixture uses a real CVE identifier
+only to exercise linkage; it explicitly does not claim that its generic component
+is Log4j or vulnerable. Do not interpret synthetic records as security findings.
+Use versioned CSAF product-tree branches and full semantic versions; the initial
+standalone product-name fixture did not establish package linkage, and `1.1`
+did not normalize as a version. The committed fixtures use the working forms.
 
 ## Backup and recovery
 
-Full restore, credential rotation and uninstall are **not tested**. PVC/OBC retention
+A logical database archive was restored into a separate disposable database: the
+original SBOM provenance labels and 1,900 advisory records were readable. That test
+database was removed afterward. Coordinated database/S3 recovery, full service
+restore, credential rotation and uninstall are **not tested**. PVC/OBC retention
 annotations protect against Argo pruning; LVMS and NooBaa use Delete reclaim policy,
 so direct deletion can destroy data. A PVC is not a backup.
 
