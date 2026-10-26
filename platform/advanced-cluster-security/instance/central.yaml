@@ -28,14 +28,35 @@ spec:
           claimName: central-db
           size: 20Gi
           storageClassName: lvms-vg1
+  scanner:
+    scannerComponent: Enabled
+    analyzer:
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 768Mi
+    db:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
   scannerV4:
     scannerComponent: Enabled
     indexer:
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
       resources:
         requests:
           cpu: 200m
           memory: 512Mi
     matcher:
+      scaling:
+        autoScaling: Disabled
+        replicas: 1
       resources:
         requests:
           cpu: 200m
