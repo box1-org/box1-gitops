@@ -70,9 +70,21 @@ spec:
 
       def get(path,accept='application/json'):
           req=urllib.request.Request(base+path,headers={'Accept':accept})
-          with urllib.request.urlopen(req,timeout=20) as response:
-              assert response.status==200
-              return response.read().decode()
+          endpoint_deadline=time.monotonic()+120
+          while True:
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      assert response.status==200
+                      return response.read().decode()
+              except urllib.error.HTTPError as error:
+                  # Router endpoints can briefly lag a Ready rollout. Preserve all
+                  # permanent HTTP failures and the expected blank-name 400.
+                  if error.code not in [502,503,504] or time.monotonic()>=endpoint_deadline: raise
+                  print('Waiting for Route '+path+': HTTP '+str(error.code),flush=True)
+              except (urllib.error.URLError,TimeoutError) as error:
+                  if time.monotonic()>=endpoint_deadline: raise
+                  print('Waiting for Route '+path+': '+type(error).__name__,flush=True)
+              time.sleep(5)
       assert json.loads(get('/api/greetings?name=OpenShift'))['message']=='Hello from box1, OpenShift!'
       info=json.loads(get('/api/info'))
       assert info['javaVersion']==21 and info['name']==name and info['gitRef']==revision
