@@ -119,9 +119,11 @@ Observed 2026-10-25, America/New_York:
 | Storage initializer | 100m / 100 MiB | 1 CPU / 24 GiB | Short-lived; not sampled |
 
 The initializer's operator-provided 24 GiB ceiling initially exceeded the
-16 GiB project limit quota. Final quota is 32 GiB limits, 10 GiB requests,
+16 GiB project limit quota. Final quota is 56 GiB limits, 10 GiB requests,
 4 CPU requests, 8 CPU limits, zero GPU, 30 GiB storage and 12 pods. The memory
-ceiling is not a reservation; model requests remain small. Node samples changed
+ceiling is not a reservation; model requests remain small. A rolling update
+counts two 24 GiB initializer ceilings plus the workbench against quota; the
+56 GiB ceiling accommodates that overlap while retaining rolling updates. Node samples changed
 from 1136m CPU / 63810 MiB memory before installation to 3137m / 71566 MiB
 after testing; these are single samples, not a controlled performance comparison.
 
