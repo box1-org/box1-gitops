@@ -6,3 +6,4 @@ resources:
 - gitops-promote.yaml
 - gitops-validate.yaml
 - quarkus-smoke.yaml
+- security-gates.yaml
