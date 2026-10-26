@@ -36,6 +36,9 @@
             "memory": "2Gi"
           }
         }
+      },
+      "deploymentStrategy": {
+        "type": "Recreate"
       }
     }
   }

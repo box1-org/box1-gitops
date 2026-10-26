@@ -10,7 +10,7 @@
       "requests.cpu": "4",
       "requests.memory": "10Gi",
       "limits.cpu": "8",
-      "limits.memory": "56Gi",
+      "limits.memory": "32Gi",
       "requests.nvidia.com/gpu": "0",
       "persistentvolumeclaims": "3",
       "requests.storage": "30Gi",
