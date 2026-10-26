@@ -15,6 +15,8 @@ spec:
   pipelineSpec:
     tasks:
       - name: verify-gitops-access
+        # PAC can briefly create the run before its event credential Secret.
+        retries: 2
         taskSpec:
           steps:
             - name: verify
