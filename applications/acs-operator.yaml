@@ -1,0 +1,25 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "acs-operator",
+    "namespace": "openshift-gitops"
+  },
+  "spec": {
+    "project": "default",
+    "source": {
+      "repoURL": "https://github.com/box1-org/box1-gitops.git",
+      "targetRevision": "main",
+      "path": "platform/advanced-cluster-security/operator"
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "rhacs-operator"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "PruneLast=true"
+      ]
+    }
+  }
+}
