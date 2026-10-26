@@ -1,0 +1,79 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "rhtpa-configure-importers",
+    "namespace": "trusted-profile-analyzer",
+    "annotations": {
+      "argocd.argoproj.io/hook": "PostSync",
+      "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation"
+    }
+  },
+  "spec": {
+    "backoffLimit": 3,
+    "template": {
+      "spec": {
+        "restartPolicy": "OnFailure",
+        "containers": [
+          {
+            "name": "configure",
+            "image": "registry.redhat.io/rhel9/postgresql-15@sha256:95e94264e14133d80ddbc9980eeebf4806d6668a61cbc1917e57efa1941b516b",
+            "command": [
+              "psql",
+              "-v",
+              "ON_ERROR_STOP=1",
+              "-f",
+              "/config/importers.sql"
+            ],
+            "env": [
+              {
+                "name": "PGHOST",
+                "value": "postgres"
+              },
+              {
+                "name": "PGDATABASE",
+                "value": "trustify"
+              },
+              {
+                "name": "PGUSER",
+                "value": "trustify"
+              },
+              {
+                "name": "PGPASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "rhtpa-database",
+                    "key": "password"
+                  }
+                }
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "512Mi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "name": "config",
+                "mountPath": "/config"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "config",
+            "configMap": {
+              "name": "rhtpa-importers"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

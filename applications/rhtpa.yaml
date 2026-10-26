@@ -1,0 +1,25 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "rhtpa",
+    "namespace": "openshift-gitops"
+  },
+  "spec": {
+    "project": "default",
+    "source": {
+      "repoURL": "https://github.com/box1-org/box1-gitops.git",
+      "targetRevision": "main",
+      "path": "platform/trusted-profile-analyzer/instance"
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "trusted-profile-analyzer"
+    },
+    "syncPolicy": {
+      "syncOptions": [
+        "PruneLast=true"
+      ]
+    }
+  }
+}

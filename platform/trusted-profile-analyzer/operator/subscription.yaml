@@ -1,0 +1,16 @@
+{
+  "apiVersion": "operators.coreos.com/v1alpha1",
+  "kind": "Subscription",
+  "metadata": {
+    "name": "rhtpa-operator",
+    "namespace": "trusted-profile-analyzer"
+  },
+  "spec": {
+    "channel": "stable-v3",
+    "name": "rhtpa-operator",
+    "source": "rhtpa-redhat-current",
+    "sourceNamespace": "openshift-marketplace",
+    "startingCSV": "rhtpa-operator.v3.1.1",
+    "installPlanApproval": "Manual"
+  }
+}

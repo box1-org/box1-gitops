@@ -1,0 +1,65 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "rhtpa-database-grants",
+    "namespace": "trusted-profile-analyzer",
+    "annotations": {
+      "argocd.argoproj.io/hook": "PostSync",
+      "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation"
+    }
+  },
+  "spec": {
+    "backoffLimit": 3,
+    "template": {
+      "spec": {
+        "restartPolicy": "OnFailure",
+        "containers": [
+          {
+            "name": "grants",
+            "image": "registry.redhat.io/rhel9/postgresql-15@sha256:95e94264e14133d80ddbc9980eeebf4806d6668a61cbc1917e57efa1941b516b",
+            "command": [
+              "psql",
+              "-v",
+              "ON_ERROR_STOP=1",
+              "-c",
+              "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO trustify; ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO trustify; GRANT USAGE ON SCHEMA public TO trustify; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO trustify; GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO trustify;"
+            ],
+            "env": [
+              {
+                "name": "PGHOST",
+                "value": "postgres"
+              },
+              {
+                "name": "PGDATABASE",
+                "value": "trustify"
+              },
+              {
+                "name": "PGUSER",
+                "value": "postgres"
+              },
+              {
+                "name": "PGPASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "rhtpa-database",
+                    "key": "admin-password"
+                  }
+                }
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "memory": "512Mi"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

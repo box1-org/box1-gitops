@@ -1,0 +1,11 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "rhtpa-importers",
+    "namespace": "trusted-profile-analyzer"
+  },
+  "data": {
+    "importers.sql": "UPDATE importer SET configuration=jsonb_set(configuration,'{csaf,disabled}','true') WHERE name='redhat-csaf-2026';\nINSERT INTO importer (name,revision,state,last_change,configuration) VALUES ('redhat-csaf-sample',gen_random_uuid(),0,now(),'{\"csaf\": {\"description\": \"Daily signed Red Hat CSAF sample: RHSA-2026:82920, 82922, 82923; not full Red Hat coverage\", \"period\": \"1d\", \"source\": \"redhat.com\", \"onlyPatterns\": [\"^rhsa-2026_(82920|82922|82923)\\\\.json$\"], \"fetchRetries\": 3}}'::jsonb) ON CONFLICT (name) DO UPDATE SET revision=EXCLUDED.revision,configuration=EXCLUDED.configuration,last_run=NULL,last_success=NULL,last_change=now() WHERE importer.configuration IS DISTINCT FROM EXCLUDED.configuration;\nINSERT INTO importer (name,revision,state,last_change,configuration) VALUES ('osv-github',gen_random_uuid(),0,now(),'{\"osv\": {\"description\": \"GitHub reviewed advisory database, all years and ecosystems\", \"period\": \"1d\", \"source\": \"https://github.com/github/advisory-database\", \"path\": \"advisories/github-reviewed\", \"disabled\": false}}'::jsonb) ON CONFLICT (name) DO UPDATE SET revision=EXCLUDED.revision,configuration=EXCLUDED.configuration,last_run=NULL,last_success=NULL,last_change=now() WHERE importer.configuration IS DISTINCT FROM EXCLUDED.configuration;\n"
+  }
+}

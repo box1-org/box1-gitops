@@ -14,6 +14,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   scoped GitHub App credentials, and [automated CI/CD](platform/pipelines/AUTOMATION.md).
 - [OpenShift AI](platform/openshift-ai/README.md): lab-only AI 3.4.2 installation,
   CPU workbench, NooBaa connection and KServe inference validation.
+- [Trusted Profile Analyzer](platform/trusted-profile-analyzer/README.md): RHTPA 3.1.1,
+  dedicated PostgreSQL/NooBaa, Keycloak login and scoped SBOM ingestion.
 - [OpenShell](platform/openshell/README.md): validated Helm values and a staged
   Argo Application. The existing Helm release remains live owner; the staged
   Application is deliberately outside `applications/` and is not installed.

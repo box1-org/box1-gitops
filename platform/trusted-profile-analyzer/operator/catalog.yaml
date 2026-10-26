@@ -1,0 +1,17 @@
+{
+  "apiVersion": "operators.coreos.com/v1alpha1",
+  "kind": "CatalogSource",
+  "metadata": {
+    "name": "rhtpa-redhat-current",
+    "namespace": "openshift-marketplace"
+  },
+  "spec": {
+    "sourceType": "grpc",
+    "image": "registry.redhat.io/redhat/redhat-operator-index@sha256:54879c82375be114ffb189525b600f106e6efc6ae11a1399a6c89dd3f0503680",
+    "displayName": "Red Hat current catalog for RHTPA",
+    "publisher": "Red Hat",
+    "grpcPodConfig": {
+      "securityContextConfig": "restricted"
+    }
+  }
+}

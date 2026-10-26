@@ -1,0 +1,15 @@
+{
+  "apiVersion": "objectbucket.io/v1alpha1",
+  "kind": "ObjectBucketClaim",
+  "metadata": {
+    "name": "rhtpa-documents",
+    "namespace": "trusted-profile-analyzer",
+    "annotations": {
+      "argocd.argoproj.io/sync-options": "Prune=false,Delete=false"
+    }
+  },
+  "spec": {
+    "generateBucketName": "box1-rhtpa",
+    "storageClassName": "openshift-storage.noobaa.io"
+  }
+}

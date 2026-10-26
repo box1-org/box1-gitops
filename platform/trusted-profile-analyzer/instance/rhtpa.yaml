@@ -1,0 +1,153 @@
+{
+  "apiVersion": "rhtpa.io/v1",
+  "kind": "TrustedProfileAnalyzer",
+  "metadata": {
+    "name": "rhtpa",
+    "namespace": "trusted-profile-analyzer"
+  },
+  "spec": {
+    "appDomain": ".apps.ocp.box1.org",
+    "image": {
+      "fullName": "registry.redhat.io/rhtpa/rhtpa-rhel10@sha256:0f696e6f7ceadc6f4a2891eb4d65d375f241275da52127e0dcb302806b2a0292"
+    },
+    "database": {
+      "host": "postgres",
+      "port": "5432",
+      "name": "trustify",
+      "username": "trustify",
+      "password": {
+        "valueFrom": {
+          "secretKeyRef": {
+            "name": "rhtpa-database",
+            "key": "password"
+          }
+        }
+      },
+      "sslMode": "disable",
+      "minimumConnections": 1,
+      "maximumConnections": 10
+    },
+    "migrateDatabase": {
+      "username": "postgres",
+      "password": {
+        "valueFrom": {
+          "secretKeyRef": {
+            "name": "rhtpa-database",
+            "key": "admin-password"
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "s3",
+      "bucket": "box1-rhtpa-89c9420e-f33d-4305-be1a-4e1e5e894acf",
+      "region": "https://s3-openshift-storage.apps.ocp.box1.org",
+      "pathStyle": true,
+      "accessKey": {
+        "valueFrom": {
+          "secretKeyRef": {
+            "name": "rhtpa-documents",
+            "key": "AWS_ACCESS_KEY_ID"
+          }
+        }
+      },
+      "secretKey": {
+        "valueFrom": {
+          "secretKeyRef": {
+            "name": "rhtpa-documents",
+            "key": "AWS_SECRET_ACCESS_KEY"
+          }
+        }
+      }
+    },
+    "oidc": {
+      "issuerUrl": "https://keycloak.apps.ocp.box1.org/auth/realms/box1",
+      "clients": {
+        "frontend": {
+          "clientId": "rhtpa-frontend"
+        },
+        "cli": {
+          "clientId": "rhtpa-ci",
+          "clientSecret": {
+            "valueFrom": {
+              "secretKeyRef": {
+                "name": "rhtpa-ci",
+                "key": "client-secret"
+              }
+            }
+          }
+        }
+      }
+    },
+    "authenticator": {
+      "configMapRef": {
+        "name": "rhtpa-auth",
+        "key": "auth.yaml"
+      }
+    },
+    "openshift": {
+      "useServiceCa": true
+    },
+    "ingress": {
+      "className": "openshift-default",
+      "tls": [
+        {
+          "hosts": [
+            "tpa.apps.ocp.box1.org"
+          ],
+          "secretName": "rhtpa-tls"
+        }
+      ]
+    },
+    "modules": {
+      "server": {
+        "ingress": {
+          "hosts": [
+            "tpa.apps.ocp.box1.org"
+          ]
+        },
+        "resources": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "8Gi"
+          },
+          "limits": {
+            "memory": "12Gi"
+          }
+        }
+      },
+      "importer": {
+        "concurrency": 1,
+        "workingDirectory": {
+          "size": "8Gi"
+        },
+        "resources": {
+          "requests": {
+            "cpu": "1",
+            "memory": "8Gi"
+          },
+          "limits": {
+            "memory": "12Gi"
+          }
+        }
+      },
+      "migrateDatabase": {
+        "enabled": true
+      },
+      "createDatabase": {
+        "enabled": false
+      },
+      "createImporters": {
+        "enabled": false,
+        "importers": {
+          "osv-github": {
+            "osv": {
+              "transport": "git",
+              "disabled": true
+            }
+          }
+        }
+      }
+    }
+  }
+}
