@@ -61,7 +61,7 @@ class PromotionSyncContract(unittest.TestCase):
 
     def test_active_and_terminal_operation_states_are_handled(self):
         self.assertIn("['Running','Terminating']", self.script)
-        self.assertIn("['Error','Failed','Terminating']", self.script)
+        self.assertIn("['Error','Failed']", self.script)
         self.assertIn("raise TimeoutError(diagnostics(app,expected,'Running'))", self.script)
 
     def test_multi_source_and_expected_revision_are_handled(self):

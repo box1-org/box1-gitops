@@ -143,7 +143,7 @@ spec:
           request_started=time.time()
           while time.time()<deadline:
               time.sleep(5); app=kube(path); status=app.get('status',{}); operation= status.get('operationState') or {}; phase=operation.get('phase')
-              if phase in ['Error','Failed','Terminating']: raise RuntimeError(diagnostics(app,expected))
+              if phase in ['Error','Failed']: raise RuntimeError(diagnostics(app,expected))
               sync=status.get('sync') or {}; health=status.get('health') or {}; observed=sync.get('revision') or sync.get('revisions')
               operation_started=when(operation.get('startedAt'))
               fresh=operation_started >= request_started-5
