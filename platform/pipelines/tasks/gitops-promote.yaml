@@ -24,6 +24,9 @@ spec:
   - name: application-name
     type: string
     default: quarkus-reference
+  - name: argo-sync-timeout
+    type: string
+    default: '300'
   steps:
   - name: promote
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -45,9 +48,11 @@ spec:
           key: git-provider-token
     - name: APPLICATION_NAME
       value: "$(params.application-name)"
+    - name: ARGO_SYNC_TIMEOUT
+      value: "$(params.argo-sync-timeout)"
     script: |
       #!/usr/bin/env python3
-      import base64, json, os, re, time, urllib.request, urllib.error
+      import base64, datetime, json, os, re, ssl, time, urllib.request, urllib.error
 
       def github(path, method='GET', body=None):
           request=urllib.request.Request('https://api.github.com'+path, method=method,
@@ -73,6 +78,80 @@ spec:
       gitops='/repos/box1-org/box1-workloads-dev'
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
+
+      def kube(path, method='GET', body=None):
+          account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
+          token=(account/'token').read_text().strip()
+          context=ssl.create_default_context(cafile=str(account/'ca.crt'))
+          request=urllib.request.Request('https://kubernetes.default.svc'+path, method=method,
+              data=None if body is None else json.dumps(body).encode(),
+              headers={'Authorization':'Bearer '+token,'Content-Type':'application/merge-patch+json'})
+          try:
+              with urllib.request.urlopen(request, context=context, timeout=30) as response:
+                  text=response.read(); return json.loads(text) if text else None
+          except urllib.error.HTTPError as error:
+              detail=error.read().decode(errors='replace')
+              raise RuntimeError('Kubernetes %s %s failed: HTTP %s %s' % (method,path,error.code,detail[:500])) from None
+
+      def when(value):
+          if not value: return 0
+          return datetime.datetime.fromisoformat(value.replace('Z','+00:00')).timestamp()
+
+      def diagnostics(app, expected, phase=''):
+          status=app.get('status',{}); operation=status.get('operationState') or {}
+          sync=status.get('sync') or {}; health=status.get('health') or {}
+          messages=[]
+          for condition in status.get('conditions') or []:
+              if condition.get('message'): messages.append(condition['message'])
+          if operation.get('message'): messages.append(operation['message'])
+          return ('Argo Application %s did not reach the requested state: expected GitOps revision=%s, '
+              'observed revision=%s, sync=%s, health=%s, operation phase=%s, %s' %
+              (name,expected,sync.get('revision') or sync.get('revisions'),sync.get('status'),
+               health.get('status'),operation.get('phase') or phase,'; '.join(messages) or 'no condition message'))
+
+      def sync_application(expected, timeout):
+          path='/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/'+name
+          started=time.time(); deadline=started+timeout; app=kube(path)
+          spec=app.get('spec',{}); sources=spec.get('sources')
+          if sources is None: sources=[spec.get('source',{})]
+          direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-gitops']
+          active=(app.get('status',{}).get('operationState') or {}).get('phase') in ['Running','Terminating']
+          current=app.get('status',{}).get('sync',{}) or {}
+          observed=current.get('revision') or current.get('revisions')
+          if not active and current.get('status')=='Synced' and app.get('status',{}).get('health',{}).get('status')=='Healthy' and (not direct or expected in ([observed] if isinstance(observed,str) else observed or [])):
+              print('Argo Application already Synced/Healthy at '+str(observed))
+              return
+          if active:
+              print('Waiting for existing Argo operation before requesting '+expected)
+          while active and time.time()<deadline:
+              time.sleep(5); app=kube(path); operation=app.get('status',{}).get('operationState') or {}; active=operation.get('phase') in ['Running','Terminating']
+              if not active and operation.get('phase') not in [None,'Succeeded']:
+                  raise RuntimeError(diagnostics(app,expected))
+          if active: raise TimeoutError(diagnostics(app,expected,'Running'))
+          current=app.get('status',{}).get('sync',{}) or {}
+          observed=current.get('revision') or current.get('revisions')
+          if current.get('status')=='Synced' and app.get('status',{}).get('health',{}).get('status')=='Healthy' and (not direct or expected in ([observed] if isinstance(observed,str) else observed or [])):
+              print('Argo Application reached expected state while waiting: '+str(observed))
+              return
+          sync={}
+          if len(direct)==1 and len(sources)==1: sync['revision']=expected
+          elif direct:
+              sync['revisions']=[expected if source in direct else source.get('targetRevision','HEAD') for source in sources]
+          operation={'initiatedBy':{'username':'box1-release'},'sync':{'syncStrategy':{'hook':{}},**sync}}
+          kube(path,'PATCH',{'operation':operation})
+          print('Requested Argo sync for '+name+' at GitOps revision '+expected)
+          request_started=time.time()
+          while time.time()<deadline:
+              time.sleep(5); app=kube(path); status=app.get('status',{}); operation= status.get('operationState') or {}; phase=operation.get('phase')
+              if phase in ['Error','Failed','Terminating']: raise RuntimeError(diagnostics(app,expected))
+              sync=status.get('sync') or {}; health=status.get('health') or {}; observed=sync.get('revision') or sync.get('revisions')
+              operation_started=when(operation.get('startedAt'))
+              fresh=operation_started >= request_started-5
+              revision_ok=not direct or expected in ([observed] if isinstance(observed,str) else observed or [])
+              if phase=='Succeeded' and fresh and sync.get('status')=='Synced' and health.get('status')=='Healthy' and revision_ok:
+                  print('Argo sync completed for '+name+' at '+str(observed))
+                  return
+          raise TimeoutError(diagnostics(app,expected,'Running'))
       result('promoted','false'); result('gitops-revision','not-merged'); result('pr-url','not-created')
       if github(application+'/commits/main')['sha'] != source:
           print('Source revision was superseded; no promotion is performed.')
@@ -134,8 +213,9 @@ spec:
           raise SystemExit(0)
       merged=github(gitops+'/pulls/'+str(pr['number'])+'/merge','PUT',{'sha':expected_head,'merge_method':'squash'})
       assert merged.get('merged'), 'GitOps merge rejected'
-      result('promoted','true'); result('gitops-revision',merged['sha'])
       print('Merged development GitOps PR after exact-head required checks: '+merged['sha'])
+      sync_application(merged['sha'],int(os.environ['ARGO_SYNC_TIMEOUT']))
+      result('promoted','true'); result('gitops-revision',merged['sha'])
   results:
   - name: pr-url
     type: string

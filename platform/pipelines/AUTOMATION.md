@@ -15,8 +15,9 @@ PR to `main` → immutable source checkout → Maven compile/tests → Checkstyl
 SpotBugs + FindSecBugs → GitHub validation check.
 
 Merge/push to `main` → repeat verification → Jib build → SHA-tagged registry push
-→ image digest → GitOps PR → required checks → development merge → Argo CD
-reconcile → expected-runtime-digest observation → HTTPS smoke test → GitHub result.
+→ image digest → GitOps PR → required checks → development merge → Kubernetes API
+Argo sync request → requested sync/revision and health verification →
+expected-runtime-digest observation → HTTPS smoke test → GitHub result.
 
 Normal operation needs no manual PipelineRun, temporary source Secret, or cluster
 mutation command. The Phase 2 manual build manifest remains a reproduction tool.
@@ -27,7 +28,7 @@ mutation command. The Phase 2 manual build manifest remains a reproduction tool.
 | --- | --- | --- |
 | PR source fetch + verification | ci-test | GitHub token only in platform fetch container; no API token or push right in Maven container |
 | Trusted main verification + Jib | ci-build | Namespace-scoped registry push using projected API token |
-| GitOps promotion | ci-gitops | PAC App token in the promotion container; no mounted Kubernetes API token |
+| GitOps promotion + Argo sync | ci-gitops | PAC App token plus namespace-scoped `get`/`patch` on Argo Applications |
 | Rollout observation + smoke | ci-observe | Read-only access to the one Argo Application, one Deployment, and runtime Pods |
 
 The PAC Repository uses default-branch provenance. A PR cannot substitute its own
@@ -89,11 +90,19 @@ the release and leaves evidence in GitHub/Tekton instead of forcing an update.
 
 ## Rollout and failures
 
-Argo CD is the only application deployer. Tekton only observes Kubernetes APIs.
-The observer waits up to 15 minutes for Synced/Healthy, the desired source SHA,
-matching Deployment image digest, Available replicas, and a Ready Pod actually
-running that digest. This prevents a healthy previous version from satisfying
-the release check. Argo's normal Git polling can add a few minutes.
+Argo CD is the only application deployer. After the exact-head GitOps PR is
+merged, `box1-gitops-promote` patches the matching Argo Application through the
+Kubernetes API with the merge commit as its source revision when the Application
+directly tracks `box1-workloads-dev`. Multi-source Applications preserve their
+other source revisions. An active sync is observed to completion rather than
+overwritten; terminal failures and timeouts include the Application, expected
+and observed revisions, sync/health state, operation phase, and condition text.
+The promotion Task waits up to five minutes by default for the requested sync to
+complete successfully. The observer then waits up to 15 minutes for Synced/Healthy,
+the desired source SHA, the matching Deployment image digest, Available replicas,
+and a Ready Pod actually running that digest. This prevents a healthy previous
+version from satisfying the release check and removes dependence on Argo's normal
+Git polling interval for the release path.
 
 Then the observer tests the public TLS Route: greeting/configuration, Java 21,
 health/startup/readiness, OpenAPI, Prometheus metrics, and input validation.

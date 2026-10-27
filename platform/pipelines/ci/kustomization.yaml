@@ -9,4 +9,5 @@ resources:
   - quarkus-reference-pull.yaml
   - quarkus-reference-repository.yaml
   - observe-rbac.yaml
+  - argo-sync-rbac.yaml
   - ../tasks
