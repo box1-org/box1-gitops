@@ -141,8 +141,6 @@ spec:
           name: $(params.rhacs-secret)
           key: rox-api-token
           optional: true
-    - name: ENFORCEMENT
-      value: $(params.enforcement)
     volumeMounts:
     - name: reports
       mountPath: /reports
@@ -176,6 +174,9 @@ spec:
       value: $(params.image-digest)
     - name: SOURCE_REVISION
       value: $(params.source-revision)
+    volumeMounts:
+    - name: reports
+      mountPath: /reports
     script: |
       #!/usr/bin/env python3
       import json, os, pathlib
