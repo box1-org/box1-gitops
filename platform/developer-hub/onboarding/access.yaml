@@ -92,3 +92,27 @@ subjects:
   - kind: ServiceAccount
     name: developer-hub-onboarding
     namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-hub-onboarding-argo-sync
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-hub-onboarding-argo-sync
+  namespace: openshift-gitops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-hub-onboarding-argo-sync
+subjects:
+  - kind: ServiceAccount
+    name: developer-hub-onboarding
+    namespace: rhdh
