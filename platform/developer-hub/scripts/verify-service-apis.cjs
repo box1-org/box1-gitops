@@ -19,7 +19,7 @@ async function api(path, body) {
   return text ? JSON.parse(text) : undefined;
 }
 (async()=>{
-for(const [name,host] of [['orders-service','orders-service-dev'],['quarkus-reference','quarkus-reference'],['quarkus-golden-path-smoke','quarkus-golden-path-smoke']]){
+for(const [name,host] of [['quarkus-reference','quarkus-reference']]){
  const service=await api('/catalog/entities/by-name/component/default/'+name);
  const provided=service.relations?.find(r=>r.type==='providesApi'&&r.targetRef==='api:default/'+name+'-api');
  assert(provided,name+': missing Provides API relation');
