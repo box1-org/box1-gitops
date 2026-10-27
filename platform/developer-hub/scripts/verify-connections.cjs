@@ -26,7 +26,7 @@ async function api(path, body) {
     assert(response.ok, 'Argo CD permission check failed');
     assert.equal((await response.json()).value, action === 'get' ? 'yes' : 'no');
   }
-  for (const name of ['quarkus-reference', 'orders-service']) {
+  for (const name of ['quarkus-reference']) {
     const entity = await api(`/catalog/entities/by-name/component/default/${name}`);
     assert.equal(entity.metadata.annotations['backstage.io/kubernetes-id'], name);
     assert(!entity.metadata.annotations['backstage.io/kubernetes-namespace'], 'Namespace restriction hides shared CI');

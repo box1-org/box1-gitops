@@ -101,7 +101,8 @@ data:
             catalogPath: /catalog-info.yaml
             filters:
               branch: main
-              repository: '.*'
+              # Retired repositories are excluded from live catalog discovery.
+              repository: '^(?!football-service$|orders-service$|shipping-service$|quarkus-golden-path-smoke$).*'
             schedule:
               frequency: { minutes: 30 }
               timeout: { minutes: 10 }
