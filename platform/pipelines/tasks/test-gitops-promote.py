@@ -68,6 +68,8 @@ class PromotionSyncContract(unittest.TestCase):
         self.assertIn("spec.get('sources')", self.script)
         self.assertIn("sync['revisions']", self.script)
         self.assertIn("expected if source in direct", self.script)
+        self.assertIn("https://github.com/box1-org/box1-workloads-dev", self.script)
+        self.assertNotIn("directly tracks `box1-gitops`", self.script)
         self.assertIn("ARGO_SYNC_TIMEOUT", self.script)
         self.assertIn("default: '300'", TASK.read_text())
 

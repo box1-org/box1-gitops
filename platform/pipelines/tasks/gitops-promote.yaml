@@ -114,7 +114,9 @@ spec:
           started=time.time(); deadline=started+timeout; app=kube(path)
           spec=app.get('spec',{}); sources=spec.get('sources')
           if sources is None: sources=[spec.get('source',{})]
-          direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-gitops']
+          # Workload Applications track the promotion repository. The platform
+          # repository owns the Task and RBAC, but is not the desired-state source.
+          direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-workloads-dev']
           active=(app.get('status',{}).get('operationState') or {}).get('phase') in ['Running','Terminating']
           current=app.get('status',{}).get('sync',{}) or {}
           observed=current.get('revision') or current.get('revisions')
