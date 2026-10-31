@@ -108,7 +108,8 @@ spec:
       sbom=pathlib.Path('/reports/sbom.cdx.json')
       import subprocess
       registry_token=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text().strip()
-      subprocess.run(['/tmp/syft', os.environ['IMAGE_REFERENCE'], '--registry-credentials', 'serviceaccount:'+registry_token, '-o', 'cyclonedx-json@1.5='+str(sbom)], check=True, timeout=900)
+      subprocess.run(['/tmp/syft', 'login', 'image-registry.openshift-image-registry.svc:5000', '-u', 'serviceaccount', '-p', registry_token], check=True, timeout=60)
+      subprocess.run(['/tmp/syft', 'scan', 'registry:'+os.environ['IMAGE_REFERENCE'], '-o', 'cyclonedx-json@1.5='+str(sbom)], check=True, timeout=900)
       document=json.loads(sbom.read_text())
       if document.get('bomFormat')!='CycloneDX' or document.get('specVersion')!='1.5': raise SystemExit('Syft did not produce CycloneDX 1.5')
       labels={'labels.image-digest':digest,'labels.source-revision':revision,'labels.service':os.environ['APPLICATION_NAME'],'labels.source-repository':os.environ['SOURCE_REPOSITORY'],'labels.pipeline-run':os.environ['PIPELINE_RUN']}
