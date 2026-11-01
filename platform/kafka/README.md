@@ -3,6 +3,10 @@
 This directory declares the shared single-node Kafka event stream used by
 services that opt into Kafka in the Create Quarkus Service template.
 
+The Kafka, KafkaNodePool, and service-created KafkaTopic manifests use the
+served `kafka.strimzi.io/v1` API. The installed operator may retain `v1beta2`
+as its storage version, but new manifests should use `v1`.
+
 The `kafka-operator` Application installs the Red Hat AMQ Streams Operator in
 the existing `openshift-operators` namespace with manual InstallPlan approval.
 The `box1-kafka` Application then creates a one-node KRaft broker in the
