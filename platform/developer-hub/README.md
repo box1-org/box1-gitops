@@ -376,7 +376,7 @@ both data connections.
 
 ## Zero-touch development onboarding
 
-The Quarkus 1.1.0 template uses the `box1-scaffolder-onboarding-dynamic` module.
+The Quarkus 1.2.0 template uses the `box1-scaffolder-onboarding-dynamic` module.
 Canonical source and tests are in `box1-templates/plugins/box1-onboarding`;
 `onboarding/plugin/` is generated transport for the runtime ConfigMap. The init
 adapter copies ConfigMap data into a writable emptyDir before npm packaging,

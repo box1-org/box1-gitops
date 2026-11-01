@@ -52,6 +52,16 @@ function validateBundle(files, name) {
       const puller = m.name === name + '-image-puller';
       check(puller ? m.namespace === 'box1-ci' && obj.roleRef.name === 'system:image-puller' && obj.roleRef.kind === 'ClusterRole' : m.name === name + '-release-observer' && [ns,'openshift-gitops'].includes(m.namespace) && obj.roleRef.name === name + '-release-observer' && obj.roleRef.kind === 'Role', 'Invalid binding');
       check(same(obj.subjects, [{ kind:'ServiceAccount', name:puller ? name : 'ci-observe', namespace:puller ? ns : 'box1-ci' }]), 'Invalid binding subject');
+    } else if (obj.kind === 'Deployment' && m.name === name + '-postgres') {
+      check(m.namespace === ns && obj.spec.replicas === 1 && obj.spec.selector.matchLabels['app.kubernetes.io/name'] === name + '-postgres', 'Invalid PostgreSQL Deployment');
+    } else if (obj.kind === 'Service' && m.name === name + '-postgres') {
+      check(m.namespace === ns && obj.spec.selector['app.kubernetes.io/name'] === name + '-postgres', 'Invalid PostgreSQL Service');
+    } else if (obj.kind === 'PersistentVolumeClaim' && m.name === name + '-postgres-data') {
+      check(m.namespace === ns && obj.spec.resources.requests.storage === '5Gi' && same(obj.spec.accessModes,['ReadWriteOnce']), 'Invalid PostgreSQL PVC');
+    } else if (obj.kind === 'Secret' && m.name === name + '-postgres') {
+      check(m.namespace === ns && obj.type === 'Opaque' && obj.stringData?.POSTGRESQL_PASSWORD === 'replace-before-sync', 'Invalid PostgreSQL Secret placeholder');
+    } else if (obj.kind === 'KafkaTopic' && m.name === name + '-events') {
+      check(m.namespace === ns && ['kafka.strimzi.io/v1','kafka.strimzi.io/v1beta2'].includes(obj.apiVersion) && obj.metadata.labels?.['strimzi.io/cluster'] === 'box1-kafka' && obj.spec.partitions === 3 && obj.spec.replicas === 1, 'Invalid Kafka topic');
     } else {
       check(['ServiceAccount','Deployment','Service','Route'].includes(obj.kind) && m.name === name && m.namespace === ns, 'Unexpected generated resource');
       if (obj.kind === 'Deployment') check(obj.spec.replicas === 0 && obj.spec.template.spec.serviceAccountName === name && obj.spec.template.spec.containers.length === 1 && obj.spec.template.spec.containers[0].image === name, 'Unbuilt Deployment must remain inactive');
@@ -189,7 +199,7 @@ class Workflow {
     let repo=await this.github(`/repos/${ORG}/${this.name}`,'GET',undefined,{missing:true});
     if(!this.data) {
       check(!repo,'Repository already exists and has no matching onboarding record; refusing to modify it');
-      await this.save('REQUESTED',{id:crypto.randomUUID(),name:this.name,namespace:this.ns,owner:this.ctx.input.owner,visibility:this.ctx.input.visibility,description:this.ctx.input.description,templateVersion:'1.1.0',createdAt:new Date().toISOString()});
+      await this.save('REQUESTED',{id:crypto.randomUUID(),name:this.name,namespace:this.ns,owner:this.ctx.input.owner,visibility:this.ctx.input.visibility,description:this.ctx.input.description,templateVersion:'1.2.0',createdAt:new Date().toISOString()});
     }
     check(this.data.owner===this.ctx.input.owner && this.data.visibility===this.ctx.input.visibility && this.data.description===this.ctx.input.description,'Retry parameters must match the original request');
     const marker={id:this.data.id,name:this.name,namespace:this.ns,owner:this.data.owner,templateVersion:this.data.templateVersion};
