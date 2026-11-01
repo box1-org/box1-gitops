@@ -1,0 +1,13 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: box1.fulfillment.events.v1
+  namespace: box1-kafka
+  labels:
+    strimzi.io/cluster: box1-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 1209600000
+    cleanup.policy: delete
