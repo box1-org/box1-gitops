@@ -23,6 +23,12 @@ data:
     if onboarding_source.exists():
         onboarding_target = app_root / "box1-scaffolder-onboarding-dynamic"
         onboarding_target.mkdir(exist_ok=True)
+        # The dynamic-plugin PVC survives Backstage rollouts. Remove prior
+        # versions of this local package before repacking the current source;
+        # otherwise both versions register the same scaffolder moduleId.
+        for stale_plugin in cache_root.glob("box1-scaffolder-onboarding-dynamic-*"):
+            if stale_plugin.is_dir():
+                shutil.rmtree(stale_plugin, ignore_errors=True)
         digest = hashlib.sha256()
         for name in ("package.json", "index.cjs", "workflow.cjs"):
             content = (onboarding_source / name).read_bytes()
