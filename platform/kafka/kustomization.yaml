@@ -5,3 +5,9 @@ resources:
   - kafka.yaml
   - kafka-node-pool.yaml
   - rbac.yaml
+
+  - topics/order.yaml
+  - topics/inventory.yaml
+  - topics/fulfillment.yaml
+  - topics/telemetry.yaml
+  - topics/notification.yaml
