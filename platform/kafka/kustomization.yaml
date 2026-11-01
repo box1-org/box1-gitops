@@ -4,3 +4,4 @@ resources:
   - namespace.yaml
   - kafka.yaml
   - kafka-node-pool.yaml
+  - rbac.yaml
