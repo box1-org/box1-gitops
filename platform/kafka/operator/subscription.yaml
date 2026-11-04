@@ -4,6 +4,10 @@ metadata:
   name: amq-streams
   namespace: openshift-operators
 spec:
+  config:
+    env:
+      - name: STRIMZI_ENTITY_OPERATOR_WATCHED_NAMESPACE_ENABLED
+        value: "true"
   channel: stable
   installPlanApproval: Manual
   name: amq-streams
