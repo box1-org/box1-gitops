@@ -72,5 +72,5 @@ spec:
       persistence:
         persistentVolumeClaim:
           claimName: scanner-v4-db
-          size: 20Gi
+          size: 40Gi
           storageClassName: lvms-vg1
