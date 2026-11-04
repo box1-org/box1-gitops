@@ -1,6 +1,6 @@
 # Red Hat Advanced Cluster Security
 
-RHACS 4.11.6 is deployed in `stackrox` on the Box1 cluster. Central and Scanner V4 use LVMS PVCs (`central-db` 20 GiB, `central-db-backup` 40 GiB, and `scanner-v4-db` 20 GiB) through the `lvms-vg1` StorageClass. Central is exposed at `https://acs.apps.ocp.box1.org`.
+RHACS 4.11.6 is deployed in `stackrox` on the Box1 cluster. Central and Scanner V4 use LVMS PVCs (`central-db` 20 GiB, `central-db-backup` 40 GiB, and `scanner-v4-db` 40 GiB) through the `lvms-vg1` StorageClass. Central is exposed at `https://acs.apps.ocp.box1.org`.
 
 The Operator is GitOps-managed by `applications/acs-operator.yaml` from the `rhacs-4.11` channel with manual InstallPlan approval. Central and the Box1 SecuredCluster are managed by `applications/acs.yaml`. Admission enforcement is disabled and failure policy is fail-open for the initial monitoring rollout.
 
