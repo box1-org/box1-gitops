@@ -23,6 +23,6 @@ spec:
       min.insync.replicas: 1
   entityOperator:
     topicOperator:
-      watchAnyNamespace: true
+      watchedNamespace: "*"
     userOperator:
       watchedNamespace: box1-kafka
