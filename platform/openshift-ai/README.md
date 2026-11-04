@@ -27,9 +27,15 @@ written vendor confirmation. Do not attempt an in-place OpenShift downgrade.
 
 ## GitOps ownership and installation order
 
-`applications/openshift-ai-operator.yaml`, `openshift-ai.yaml` and
-`openshift-ai-test.yaml` are manual-sync Argo CD Applications discovered by
-`box1-root`. OLM upgrades also require manual InstallPlan approval; the channel
+`applications/openshift-ai-operator.yaml` is a manual-sync Argo CD Application
+discovered by `box1-root`. The `openshift-ai` and `openshift-ai-test` Applications
+have been removed from GitOps management. Their component and test manifests
+remain here as reference configuration; `box1-root` does not deploy them. Removing
+the Applications does not uninstall their workloads or delete their storage.
+The installation steps below describe the original setup and require restoring
+those Application manifests before their sync steps can be used.
+
+OLM upgrades also require manual InstallPlan approval; the channel
 is `stable-3.4`, starting CSV `rhods-operator.3.4.2`. Review future plans before
 approval: startingCSV does not freeze the subscription permanently.
 
