@@ -377,11 +377,22 @@ both data connections.
 ## Zero-touch development onboarding
 
 The Quarkus 1.2.0 template uses the `box1-scaffolder-onboarding-dynamic` module.
-Canonical source and tests are in `box1-templates/plugins/box1-onboarding`;
-`onboarding/plugin/` is generated transport for the runtime ConfigMap. The init
-adapter copies ConfigMap data into a writable emptyDir before npm packaging,
-and invalidates this local module's cache hash on every boot to avoid the 1.9
-installer deleting its reinstalled directory during stale-hash cleanup.
+Canonical source and tests are in `box1-templates/plugins/box1-onboarding`. RHDH
+installs it from a digest-pinned OCI image, referenced in `dynamic-plugins.yaml`:
+
+```text
+oci://registry.apps.ocp.box1.org/box1-plugins/box1-onboarding-plugin@sha256:<digest>!box1-scaffolder-onboarding
+```
+
+The installer pulls the image with the read-only `dynamic-plugins-registry-auth`
+Secret and unpacks it onto the `dynamic-plugins-root` PVC. The Secret is created
+outside Git. The `box1.org/onboarding-plugin-digest` annotation in `backstage.yaml`
+restarts the Pod when the digest changes. Release, verification, rollback, and
+credential rotation are in `box1-docs/runbooks/rhdh-onboarding-plugin-oci.md`.
+
+`onboarding/plugin/`, its ConfigMap generator, and the staging block in
+`extensions-seed.yaml` are unused and kept temporarily for rollback.
+`scripts/check-onboarding-runtime.py` fails if the old path returns to the workload.
 
 The Pod uses an automatically rotated projected token for the dedicated
 `developer-hub-onboarding` ServiceAccount, with permissions for durable
