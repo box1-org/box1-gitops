@@ -36,7 +36,7 @@ spec:
         template:
           metadata:
             annotations:
-              box1.org/onboarding-plugin-sha: 60fa130809d96b0ab5a1cbff95529b57825ced0ab8931998429ec1fd08056f8f
+              box1.org/onboarding-plugin-sha: 7594da864b962f5ac555301213060eff8cd5811d5ba2917d8ebb16db42c24725
           spec:
             serviceAccountName: developer-hub-onboarding
             automountServiceAccountToken: true
