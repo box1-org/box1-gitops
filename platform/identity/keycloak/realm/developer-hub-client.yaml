@@ -30,3 +30,7 @@ spec:
       - web-origins
     optionalClientScopes:
       - offline_access
+  serviceAccountClientRoles:
+    realm-management:
+      - view-users
+      - view-groups
