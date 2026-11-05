@@ -12,4 +12,5 @@ resources:
   - topics/inventory-dlq.yaml
   - topics/fulfillment.yaml
   - topics/telemetry.yaml
+  - topics/telemetry-dlq.yaml
   - topics/notification.yaml
