@@ -11,6 +11,9 @@ metadata:
     - url: https://devspaces.apps.ocp.box1.org/#https://github.com/box1-org/box1-gitops
       title: Open in Dev Spaces
       icon: code
+    - url: https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org/
+      title: ArgoCD
+      icon: star
 spec:
   type: repository
   lifecycle: experimental
