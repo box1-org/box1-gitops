@@ -47,7 +47,7 @@ data:
             additionalScopes: 'profile email'
             signIn:
               resolvers:
-                - resolver: emailMatchingUserEntityProfileEmail
+                - resolver: usernameMatchingUserEntityName
     signInPage: oidc
     integrations:
       github:
@@ -103,6 +103,17 @@ data:
           rules:
             - allow: [Location, Template]
       providers:
+        keycloakOrg:
+          default:
+            baseUrl: https://keycloak.apps.ocp.box1.org/auth
+            loginRealm: box1
+            realm: box1
+            clientId: ${KEYCLOAK_CLIENT_ID}
+            clientSecret: ${KEYCLOAK_CLIENT_SECRET}
+            schedule:
+              frequency: { minutes: 30 }
+              timeout: { minutes: 10 }
+              initialDelay: { seconds: 15 }
         github:
           # Match the bundled plugin default to override its GITHUB_ORG placeholder.
           providerId:

@@ -17,7 +17,7 @@ spec:
     standardFlowEnabled: true
     implicitFlowEnabled: false
     directAccessGrantsEnabled: false
-    serviceAccountsEnabled: false
+    serviceAccountsEnabled: true
     fullScopeAllowed: true
     redirectUris:
       - https://developer-hub.apps.ocp.box1.org/api/auth/oidc/handler/frame
