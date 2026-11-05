@@ -6,9 +6,6 @@
   check-onboarding-runtime.py <checkout> --live       also checks the cluster, after an Argo sync
   check-onboarding-runtime.py --self-test             proves each static check can fail
 
---transition allows the retained source files, generator, and dormant staging code. Only
-the unused rollback copy may use it. It does not allow them to reach the RHDH workload.
-
 --registry reads REGISTRY_TOKEN, or the pod's service account token. --live uses `oc get --raw`
 with the current login.
 """
@@ -41,7 +38,7 @@ TARBALL = re.compile(r'\.(tgz|tar|tar\.gz)$')
 TEXT_SUFFIXES = {'.yaml', '.yml', '.json', '.py', '.cjs', '.js', '.ts', '.sh'}
 SKIP_DIRECTORIES = {'.git', 'node_modules'}
 THIS_FILE = HUB + '/scripts/check-onboarding-runtime.py'
-TRANSITION_PATHS = (HUB + '/onboarding/plugin/',)
+RETIRED_COPY = HUB + '/onboarding/plugin/'
 
 
 def read_tree(root):
@@ -61,7 +58,7 @@ def workload_section(backstage):
     return backstage.split('database:')[0]
 
 
-def static_errors(files, transition=False):
+def static_errors(files):
     errors = []
     dynamic = files.get(HUB + '/dynamic-plugins.yaml', '')
     backstage = files.get(HUB + '/backstage.yaml', '')
@@ -100,26 +97,22 @@ def static_errors(files, transition=False):
     for path, content in files.items():
         if path == THIS_FILE:
             continue
-        is_transition = transition and path.startswith(TRANSITION_PATHS)
         if TARBALL.search(path):
             errors.append('plugin tarball in box1-gitops: ' + path)
         if 'dist-dynamic' in path.split('/'):
             errors.append('dist-dynamic output in box1-gitops: ' + path)
-        if is_transition:
-            continue
         if path.endswith(('.cjs', '.js', '.ts')) and all(marker in content for marker in SOURCE_MARKERS):
             errors.append('onboarding plugin source in box1-gitops: ' + path)
         if path.endswith('package.json') and '"name": "%s"' % PACKAGE in content:
             errors.append('onboarding plugin package in box1-gitops: ' + path)
 
-    if not transition:
-        for path in files:
-            if path.startswith(TRANSITION_PATHS):
-                errors.append('retired plugin copy still present: ' + path)
-        if 'onboarding/plugin/' in kustomization or 'developer-hub-onboarding-plugin' in kustomization:
-            errors.append('the source ConfigMap generator is still present')
-        if '/onboarding-plugin-source' in seed:
-            errors.append('the source staging code is still present in the Extensions adapter')
+    for path in files:
+        if path.startswith(RETIRED_COPY):
+            errors.append('retired plugin copy still present: ' + path)
+    if 'onboarding/plugin/' in kustomization or 'developer-hub-onboarding-plugin' in kustomization:
+        errors.append('the source ConfigMap generator is still present')
+    if '/onboarding-plugin-source' in seed:
+        errors.append('the source staging code is still present in the Extensions adapter')
     return errors, digest
 
 
@@ -278,11 +271,6 @@ def self_test():
         errors, _ = static_errors(files)
         if not any(expected in error for error in errors):
             failed.append('%s: expected %r, got %s' % (name, expected, errors))
-    transition = valid()
-    add(HUB + '/onboarding/plugin/index.cjs', source)(transition)
-    errors, _ = static_errors(transition, transition=True)
-    if errors:
-        failed.append('transition mode rejected the retained copy: %s' % errors)
     if failed:
         sys.exit('Self-test failed:\n' + '\n'.join(failed))
     print('Self-test passed: %d violations were each rejected.' % len(cases))
@@ -291,7 +279,6 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('checkout', nargs='?')
-    parser.add_argument('--transition', action='store_true')
     parser.add_argument('--registry', action='store_true')
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--self-test', action='store_true')
@@ -301,7 +288,7 @@ def main():
     if not args.checkout:
         parser.error('checkout is required')
     files = read_tree(args.checkout)
-    errors, digest = static_errors(files, args.transition)
+    errors, digest = static_errors(files)
     if not errors and (args.registry or args.live):
         token = os.environ.get('REGISTRY_TOKEN') or pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text()
         revision = re.search(r'box1\.org/onboarding-plugin-revision:\s*(\S+)', files[HUB + '/backstage.yaml']).group(1)
