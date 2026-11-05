@@ -10,7 +10,7 @@ data:
       - dynamic-plugins.default.yaml
       - /dynamic-plugins-root/dynamic-plugins.extensions.yaml
     plugins:
-      - package: ./box1-scaffolder-onboarding-dynamic
+      - package: oci://registry.apps.ocp.box1.org/box1-plugins/box1-onboarding-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000!box1-scaffolder-onboarding
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-github-dynamic
         disabled: false

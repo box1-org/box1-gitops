@@ -36,7 +36,8 @@ spec:
         template:
           metadata:
             annotations:
-              box1.org/onboarding-plugin-sha: 24a8dd89fd73ead9895596b20a4f9585f9761b7bfcafa106261f21a5dc0c56ab
+              box1.org/onboarding-plugin-digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+              box1.org/onboarding-plugin-revision: 0000000000000000000000000000000000000000
           spec:
             serviceAccountName: developer-hub-onboarding
             automountServiceAccountToken: true
@@ -54,11 +55,6 @@ spec:
               - name: platform-trust
                 configMap:
                   name: developer-hub-platform-trust
-              - name: onboarding-staged
-                emptyDir: {}
-              - name: onboarding-plugin
-                configMap:
-                  name: developer-hub-onboarding-plugin
             containers:
               - name: backstage-backend
                 env:
@@ -76,15 +72,12 @@ spec:
                     readOnly: true
             initContainers:
               - name: install-dynamic-plugins
+                # Runs the Extensions adapter around the image's installer. Registry auth
+                # comes from the Operator's dynamic-plugins-registry-auth Secret mount.
                 command:
                   - python3
                   - /extensions-bootstrap/install-extensions.py
                 volumeMounts:
-                  - name: onboarding-staged
-                    mountPath: /opt/app-root/src/box1-scaffolder-onboarding-dynamic
-                  - name: onboarding-plugin
-                    mountPath: /onboarding-plugin-source
-                    readOnly: true
                   - name: extensions-bootstrap
                     mountPath: /extensions-bootstrap
                     readOnly: true

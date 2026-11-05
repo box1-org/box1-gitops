@@ -1,0 +1,59 @@
+# Runs the guard from main against the changed tree, so a PR cannot weaken its own check.
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: box1-onboarding-plugin-guard-
+  annotations:
+    pipelinesascode.tekton.dev/on-event: "[pull_request, push]"
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/max-keep-runs: "5"
+spec:
+  taskRunTemplate:
+    serviceAccountName: ci-plugin-verify
+  timeouts:
+    pipeline: 10m
+  pipelineSpec:
+    tasks:
+      - name: guard
+        # PAC can briefly create the run before its event credential Secret.
+        retries: 1
+        taskSpec:
+          steps:
+            - name: check
+              image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+              env:
+                - name: HOME
+                  value: /tekton/home
+                - name: REVISION
+                  value: "{{revision}}"
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "{{git_auth_secret}}"
+                      key: git-provider-token
+              script: |
+                #!/usr/bin/env python3
+                import io, os, pathlib, re, subprocess, sys, tarfile, urllib.request
+
+                def github(path, accept='application/vnd.github+json'):
+                    request = urllib.request.Request('https://api.github.com/repos/box1-org/box1-gitops' + path, headers={
+                        'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+                        'Accept': accept,
+                        'User-Agent': 'box1-onboarding-plugin-guard',
+                    })
+                    with urllib.request.urlopen(request, timeout=60) as response:
+                        return response.read()
+
+                revision = os.environ['REVISION']
+                assert re.fullmatch('[a-f0-9]{40}', revision)
+                root = pathlib.Path('/tmp/guard')
+                tree = root / 'tree'
+                tree.mkdir(parents=True)
+                with tarfile.open(fileobj=io.BytesIO(github('/tarball/' + revision)), mode='r:gz') as archive:
+                    archive.extractall(tree, filter='data')
+                checkout = next(tree.iterdir())
+                guard = root / 'guard.py'
+                guard.write_bytes(github('/contents/platform/developer-hub/scripts/check-onboarding-runtime.py?ref=main', 'application/vnd.github.raw+json'))
+                subprocess.run([sys.executable, str(guard), '--self-test'], check=True)
+                # Remove --transition in the cleanup change.
+                subprocess.run([sys.executable, str(guard), str(checkout), '--transition', '--registry'], check=True)

@@ -20,7 +20,7 @@ async function api(path, body) {
 }
 (async()=>{
 const name=process.env.SERVICE_NAME;
-const {Kube,Workflow}=require('/opt/app-root/src/dynamic-plugins-root/box1-scaffolder-onboarding-dynamic-1.1.0/workflow.cjs');
+const {Kube,Workflow}=require('/opt/app-root/src/dynamic-plugins-root/box1-scaffolder-onboarding/workflow.cjs');
 const kube=new Kube();
 const cm=await kube.get('/api/v1/namespaces/rhdh/configmaps/box1-onboard-'+name);
 assert(cm,'Missing onboarding state');const state=JSON.parse(cm.data['status.json']);
