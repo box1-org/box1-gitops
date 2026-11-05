@@ -3,8 +3,9 @@
 Developer Hub **Create → Create Quarkus Service** loads
 [`box1-org/box1-templates`](https://github.com/box1-org/box1-templates).
 The platform-owned `quarkus-rest-service` template uses the installed
-`fetch:template`, `box1:repository:ensure`, `box1:development:onboard`, and
-`box1:catalog:ensure` actions (template 1.1.0). Authentication uses the Developer Hub GitHub App;
+`fetch:template`, `box1:repository:ensure`, `box1:catalog:submit`,
+`box1:development:provision`, `platform`, `build`, `promote` and `verify`, and
+`box1:catalog:verify` actions (template 1.2.0). Authentication uses the Developer Hub GitHub App;
 no personal token is requested from developers.
 
 The form takes a unique DNS-safe service/repository name, description, catalog
@@ -47,15 +48,17 @@ PAC and observation RBAC retain `box1-ci` / `openshift-gitops` namespaces.
 The initial Deployment has zero replicas and a non-runnable zero image digest.
 No reference-app image or unbuilt application image runs under the new identity.
 The workflow merges the allowlisted onboarding PR only after its exact-head
-required checks pass. It then observes the active Namespace, required
-ServiceAccounts, registry and observer bindings, PAC Repository, synced Argo
-Application and initial Deployment. Only then does it create the first
-PipelineRun, reusing `box1-quarkus-maven`. A source-only, one-hour GitHub App
+required checks pass. It requests the Argo sync, then waits only for the active
+Namespace, the `ci-build` ServiceAccount and its registry push binding before
+creating the first PipelineRun, reusing `box1-quarkus-maven`. While the build runs,
+it waits for the sync and observes the required ServiceAccounts, registry and
+observer bindings, PAC Repository, synced Argo Application and initial Deployment.
+Promotion does not start until those checks have passed. A source-only, one-hour GitHub App
 Contents-read token is persisted in a Secret before PipelineRun creation and
 removed after the build. No extra source commit or manual sequencing is needed.
 
 The first immutable image is proposed in a second checked development PR,
-merged automatically by the Hub App, and reconciled by Argo. Completion requires
+merged automatically by the Hub App, and deployed by an explicit Argo sync request. Completion requires
 the expected image, an available current Deployment generation, Argo health,
 public readiness, the original source SHA in `/api/info`, and catalog
 registration. The durable `rhdh/box1-onboard-<service>` status record and renewable
