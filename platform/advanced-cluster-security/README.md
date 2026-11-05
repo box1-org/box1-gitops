@@ -21,3 +21,7 @@ The RHACS authorization request included `offline_access`, which Keycloak treate
 OIDC authorization was tightened after initial testing: the provider now requires `preferred_username=mike` and grants the `Analyst` minimum role. This keeps the existing user scoped while avoiding an unbounded Admin mapping; a browser re-login is required after the provider Secret update.
 
 The Keycloak token did not expose the configured `preferred_username` required attribute to RHACS, so that gate was removed. The provider now grants the least-privileged built-in `Analyst` minimum role; group-based narrowing remains future work after adding an explicit Keycloak group claim.
+
+## Scanner V4 matcher resources
+
+The matcher's requests stay above the reduced lab values: 1 CPU and 3 GiB, with limits of 2 CPU and 6 GiB. With the earlier 3 GiB limit, it was OOM-killed repeatedly while importing `rhel-vex`, and one completed import peaked within 1 MiB of the limit (box1-docs#43).

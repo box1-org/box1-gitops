@@ -60,10 +60,14 @@ spec:
       scaling:
         autoScaling: Disabled
         replicas: 1
+      # The rhel-vex import peaks at about 3 GiB. See box1-docs#43.
       resources:
         requests:
-          cpu: 100m
-          memory: 768Mi
+          cpu: "1"
+          memory: 3Gi
+        limits:
+          cpu: "2"
+          memory: 6Gi
     db:
       resources:
         requests:
