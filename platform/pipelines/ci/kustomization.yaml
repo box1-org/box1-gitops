@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - serviceaccounts.yaml
   - registry-rbac.yaml
+  - acs-registry-reader.yaml
   - workloads-dev-repository.yaml
   - repository.yaml
   - quarkus-reference-pull.yaml

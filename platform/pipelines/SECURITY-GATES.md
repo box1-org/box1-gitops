@@ -46,3 +46,17 @@ is:
 Admission enforcement remains outside this Task. It must stay disabled for
 OpenShift system namespaces until the controlled application-namespace denial
 and rollback evidence required by issue #9 are published.
+
+## RHACS registry access
+
+`roxctl image scan` and `image check` ask Central to read the image, so Central
+needs an image integration for
+`image-registry.openshift-image-registry.svc:5000`. Without one, both return
+`no matching image registries found`.
+
+`ci/acs-registry-reader.yaml` declares the identity for that integration: the
+`acs-registry-reader` ServiceAccount, `system:image-puller` in `box1-ci` only,
+and the controller-populated `acs-registry-reader-token` Secret. The integration
+itself is configured in Central, outside Git, because RHACS stores the token in
+its own database. Rotate by deleting the Secret, syncing `pipelines-ci`, and
+updating the integration's password.

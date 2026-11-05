@@ -1,0 +1,32 @@
+# Read-only registry identity for the RHACS image integration. Pull access is
+# limited to images in box1-ci, and pods cannot mount the token automatically.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-registry-reader
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: acs-registry-reader-image-puller
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: acs-registry-reader
+    namespace: box1-ci
+---
+# Token controller populates this Secret; no credential values in Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: acs-registry-reader-token
+  namespace: box1-ci
+  annotations:
+    kubernetes.io/service-account.name: acs-registry-reader
+type: kubernetes.io/service-account-token
