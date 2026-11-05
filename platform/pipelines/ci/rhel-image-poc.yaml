@@ -1,0 +1,84 @@
+# RHEL 10 image mode (bootc) POC: box1-org/rhel-image-poc, box1-org/box1-docs#46.
+#
+# Both bootc identities can run PRIVILEGED pods:
+#   - buildah needs overlay storage: the RHEL bootc base has 66 layers, so vfs
+#     storage would copy the full filesystem once per layer (~100 GB per build).
+#   - bootc-image-builder (osbuild) needs privileged mode to make VM disks.
+# Any PipelineRun in box1-ci could name these SAs; moving them to a dedicated
+# namespace is tracked in box1-docs#46.
+#
+# Created outside Git (no credentials in Git):
+#   - Secret box1-ci/redhat-registry-pull: dockerconfigjson with only the
+#     registry.redhat.io entry from the cluster pull secret.
+#   - ConfigMap box1-ci/rhel-image-poc-admin-key (optional): ssh.pub baked into the VM disk.
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: rhel-image-poc
+  namespace: box1-ci
+spec:
+  url: https://github.com/box1-org/rhel-image-poc
+  concurrency_limit: 1
+  settings:
+    pipelinerun_provenance: default_branch
+---
+# PR builds: privileged build and lint only; no API token, no registry rights.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-bootc-check
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+# Push to main: builds and pushes the OS image and the VM disk to box1-ci.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-bootc-release
+  namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-bootc-privileged-scc
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: ci-bootc-check
+    namespace: box1-ci
+  - kind: ServiceAccount
+    name: ci-bootc-release
+    namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-bootc-release-image-builder
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: ci-bootc-release
+    namespace: box1-ci
+---
+# The VM namespace imports its disk (DataVolume, pullMethod: node) from box1-ci.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rhel-image-poc-image-puller
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:rhel-image-poc
