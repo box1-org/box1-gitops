@@ -41,6 +41,10 @@ spec:
     default: central.stackrox:443
   - name: rhacs-secret
     type: string
+  - name: rhacs-console-url
+    type: string
+    default: https://acs.apps.ocp.box1.org
+    description: ACS Central console base URL, used to build a link to the scanned image.
   results:
   - name: sbom-id
     type: string
@@ -48,6 +52,9 @@ spec:
     type: string
   - name: policy
     type: string
+  - name: rhacs-url
+    type: string
+    description: ACS console page for the scanned image digest (CVEs and policy violations).
   volumes:
   - name: reports
     emptyDir: {}
@@ -148,6 +155,8 @@ spec:
           optional: true
     - name: ROX_CA_CERT_FILE
       value: /etc/rhacs-ca/ca.pem
+    - name: RHACS_CONSOLE_URL
+      value: $(params.rhacs-console-url)
     volumeMounts:
     - name: reports
       mountPath: /reports
@@ -160,6 +169,7 @@ spec:
       if os.environ['ENFORCEMENT']=='disabled':
           pathlib.Path('/tekton/results/findings').write_text('disabled')
           pathlib.Path('/tekton/results/policy').write_text('disabled')
+          pathlib.Path('/tekton/results/rhacs-url').write_text('disabled')
           print('Security gate disabled by explicit pipeline parameter')
           raise SystemExit(0)
       url='https://mirror.openshift.com/pub/rhacs/assets/4.11.6/bin/Linux/roxctl'
@@ -174,6 +184,9 @@ spec:
       pathlib.Path('/tekton/results/findings').write_text('scan-exit='+str(scan.returncode))
       pathlib.Path('/tekton/results/policy').write_text('pass' if check.returncode==0 else 'fail')
       print('RHACS scan exit='+str(scan.returncode)+' check exit='+str(check.returncode)+' digest='+env['IMAGE_DIGEST'])
+      rhacs_url=env['RHACS_CONSOLE_URL'].rstrip('/')+'/main/vulnerabilities/all-images/images/'+env['IMAGE_DIGEST']
+      pathlib.Path('/tekton/results/rhacs-url').write_text(rhacs_url)
+      print('RHACS image report: '+rhacs_url)
       if scan.returncode!=0: print('roxctl image scan stderr:\n'+scan.stderr[-2000:])
       if check.returncode!=0: print('roxctl image check stderr:\n'+check.stderr[-2000:])
       if env['ENFORCEMENT']=='gate' and scan.returncode!=0: raise SystemExit('RHACS scan failed; the image was not evaluated')
