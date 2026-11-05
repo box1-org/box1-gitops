@@ -44,7 +44,7 @@ data:
             metadataUrl: https://keycloak.apps.ocp.box1.org/auth/realms/box1/.well-known/openid-configuration
             clientId: ${KEYCLOAK_CLIENT_ID}
             clientSecret: ${KEYCLOAK_CLIENT_SECRET}
-            scope: 'openid profile email'
+            additionalScopes: 'profile email'
             signIn:
               resolvers:
                 - resolver: emailMatchingUserEntityProfileEmail
