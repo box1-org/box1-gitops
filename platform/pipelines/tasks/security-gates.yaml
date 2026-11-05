@@ -54,7 +54,10 @@ spec:
     type: string
   - name: rhacs-url
     type: string
-    description: ACS console page for the scanned image digest (CVEs and policy violations).
+    description: ACS console page for the scanned image (CVEs and policy violations).
+  - name: rhtpa-sbom-url
+    type: string
+    description: RHTPA console page for the uploaded SBOM.
   volumes:
   - name: reports
     emptyDir: {}
@@ -102,6 +105,7 @@ spec:
       import hashlib, io, json, os, pathlib, re, shutil, tarfile, urllib.parse, urllib.request
       if os.environ['ENFORCEMENT']=='disabled':
           pathlib.Path('/tekton/results/sbom-id').write_text('disabled')
+          pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text('disabled')
           print('Security gate disabled by explicit pipeline parameter')
           raise SystemExit(0)
       digest=os.environ['IMAGE_DIGEST']
@@ -133,6 +137,9 @@ spec:
           result=json.loads(response.read())
       sbom_id=result.get('id') or result.get('sbomId') or 'accepted'
       pathlib.Path('/tekton/results/sbom-id').write_text(sbom_id)
+      sbom_url=os.environ['RHTPA_URL'].rstrip('/')+'/sboms'+('' if sbom_id=='accepted' else '/'+urllib.parse.quote(sbom_id, safe=':'))
+      pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text(sbom_url)
+      print('RHTPA SBOM: '+sbom_url)
       print('SBOM accepted by RHTPA: '+sbom_id+' digest='+digest+' revision='+revision)
   - name: rhacs-scan-and-check
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -184,7 +191,29 @@ spec:
       pathlib.Path('/tekton/results/findings').write_text('scan-exit='+str(scan.returncode))
       pathlib.Path('/tekton/results/policy').write_text('pass' if check.returncode==0 else 'fail')
       print('RHACS scan exit='+str(scan.returncode)+' check exit='+str(check.returncode)+' digest='+env['IMAGE_DIGEST'])
-      rhacs_url=env['RHACS_CONSOLE_URL'].rstrip('/')+'/main/vulnerabilities/all-images/images/'+env['IMAGE_DIGEST']
+      # The ACS console addresses images by a UUIDv5 of (image full name, digest),
+      # not by digest (stackrox pkg/images/utils NewImageV2ID). Ask Central for the
+      # scanned image; use its id if it is already a UUID, otherwise derive it.
+      console=env['RHACS_CONSOLE_URL'].rstrip('/')
+      rhacs_url=console+'/main/vulnerabilities/all-images'
+      try:
+          import json, re, ssl, urllib.parse, uuid
+          cafile=env['ROX_CA_CERT_FILE']
+          ctx=ssl.create_default_context(cafile=cafile) if os.path.exists(cafile) else ssl.create_default_context()
+          query=urllib.parse.urlencode({'query':'Image Sha:'+env['IMAGE_DIGEST']})
+          request=urllib.request.Request('https://'+env['RHACS_ENDPOINT']+'/v1/images?'+query, headers={'Authorization':'Bearer '+env['ROX_API_TOKEN']})
+          with urllib.request.urlopen(request, timeout=60, context=ctx) as response: images=json.load(response).get('images') or []
+          match=[i for i in images if i.get('name')==env['IMAGE_REFERENCE']] or images
+          if match:
+              image_id=match[0].get('id','')
+              if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', image_id):
+                  namespace=uuid.UUID(bytes=hashlib.sha256(match[0]['name'].encode()).digest()[:16])
+                  image_id=str(uuid.uuid5(namespace, env['IMAGE_DIGEST']))
+              rhacs_url=console+'/main/vulnerabilities/all-images/images/'+image_id+'?vulnerabilityState=OBSERVED&detailsTab=Vulnerabilities'
+          else:
+              print('RHACS: image not found in Central; linking to the image list')
+      except Exception as error:
+          print('RHACS: could not resolve the console image id ('+type(error).__name__+'); linking to the image list')
       pathlib.Path('/tekton/results/rhacs-url').write_text(rhacs_url)
       print('RHACS image report: '+rhacs_url)
       if scan.returncode!=0: print('roxctl image scan stderr:\n'+scan.stderr[-2000:])
