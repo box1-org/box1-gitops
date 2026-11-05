@@ -1,0 +1,43 @@
+apiVersion: console.openshift.io/v1
+kind: ConsoleLink
+metadata:
+  name: box1-developer-hub
+spec:
+  href: https://developer-hub.apps.ocp.box1.org
+  location: ApplicationMenu
+  text: Red Hat Developer Hub
+  applicationMenu:
+    section: box1 Platform
+---
+apiVersion: console.openshift.io/v1
+kind: ConsoleLink
+metadata:
+  name: box1-acs
+spec:
+  href: https://acs.apps.ocp.box1.org
+  location: ApplicationMenu
+  text: Advanced Cluster Security
+  applicationMenu:
+    section: box1 Platform
+---
+apiVersion: console.openshift.io/v1
+kind: ConsoleLink
+metadata:
+  name: box1-tpa
+spec:
+  href: https://tpa.apps.ocp.box1.org
+  location: ApplicationMenu
+  text: Trusted Profile Analyzer
+  applicationMenu:
+    section: box1 Platform
+---
+apiVersion: console.openshift.io/v1
+kind: ConsoleLink
+metadata:
+  name: box1-keycloak
+spec:
+  href: https://keycloak.apps.ocp.box1.org/auth/
+  location: ApplicationMenu
+  text: Keycloak
+  applicationMenu:
+    section: box1 Platform
