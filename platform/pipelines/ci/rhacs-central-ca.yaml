@@ -1,0 +1,21 @@
+# Public CA certificate for RHACS Central, from stackrox/central-tls key ca.pem.
+# roxctl needs it to verify central.stackrox. It holds no private key.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rhacs-central-ca
+  namespace: box1-ci
+data:
+  ca.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIB1DCCAXqgAwIBAgIUMWolcdik1d9yya9rZwnF8UF3vcEwCgYIKoZIzj0EAwIw
+    SDEnMCUGA1UEAxMeU3RhY2tSb3ggQ2VydGlmaWNhdGUgQXV0aG9yaXR5MR0wGwYD
+    VQQFExQxMjkxMTQ0Mjc1MjQxMTMzMDgzOTAeFw0yNjEwMjYyMTI2MDBaFw0zMTEw
+    MjUyMTI2MDBaMEgxJzAlBgNVBAMTHlN0YWNrUm94IENlcnRpZmljYXRlIEF1dGhv
+    cml0eTEdMBsGA1UEBRMUMTI5MTE0NDI3NTI0MTEzMzA4MzkwWTATBgcqhkjOPQIB
+    BggqhkjOPQMBBwNCAAS+1oxVwTxLvzaVm/YIdpiXLpOiIsuXyhN7XvrQKv88XMJz
+    O9H0MnoGmseV4dzlnonx0hQzpHqTrfUJ+oVvvKIro0IwQDAOBgNVHQ8BAf8EBAMC
+    AQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJzJUS4EfGxRUIQyvNk1UzvTq
+    NzEwCgYIKoZIzj0EAwIDSAAwRQIgRxcvgBzbrbWKBad8BzRX9N25x2eYyKecjhy+
+    lkiJvJ8CIQDPwujF68aclLW/P8d8CTDM0EUi0hlp/4VgrkJsb+nB2g==
+    -----END CERTIFICATE-----

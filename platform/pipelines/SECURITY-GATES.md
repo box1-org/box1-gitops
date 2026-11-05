@@ -60,3 +60,17 @@ and the controller-populated `acs-registry-reader-token` Secret. The integration
 itself is configured in Central, outside Git, because RHACS stores the token in
 its own database. Rotate by deleting the Secret, syncing `pipelines-ci`, and
 updating the integration's password.
+
+## Trusting Central
+
+`roxctl` verifies Central's certificate, which an internal RHACS CA signs. The
+Task mounts `ci/rhacs-central-ca.yaml` and sets `ROX_CA_CERT_FILE`. If Central's
+CA is rotated, update that ConfigMap from `stackrox/central-tls` key `ca.pem`.
+
+## Known deviation: registry TLS
+
+The RHACS integration for the internal registry has TLS verification disabled,
+because Central does not trust the OpenShift service CA that signs the registry
+certificate. The pull-only token therefore goes to an unverified endpoint inside
+the cluster. Adding that CA to Central's trust would allow verification to be
+turned back on. That change has not been made or tested.
