@@ -112,9 +112,9 @@ data:
             clientId: ${KEYCLOAK_CLIENT_ID}
             clientSecret: ${KEYCLOAK_CLIENT_SECRET}
             schedule:
-              frequency: { seconds: 30 }
-              timeout: { minutes: 3 }
-              initialDelay: { seconds: 5 }
+              frequency: { minutes: 30 }
+              timeout: { minutes: 10 }
+              initialDelay: { seconds: 15 }
         github:
           # Match the bundled plugin default to override its GITHUB_ORG placeholder.
           providerId:
