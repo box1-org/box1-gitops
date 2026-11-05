@@ -1,0 +1,107 @@
+# Dedicated image project for Developer Hub dynamic plugins, in the existing registry.
+# Registry roles are per-project, so a pull credential here cannot read service images.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-plugins
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+---
+# PR builds: can run buildah, and has no registry or API permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-plugin-check
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+# Tagged releases only: can run buildah and push to box1-plugins.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-plugin-release
+  namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-plugin-buildah-scc
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pipelines-scc-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: ci-plugin-check
+    namespace: box1-ci
+  - kind: ServiceAccount
+    name: ci-plugin-release
+    namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-plugin-release-image-builder
+  namespace: box1-plugins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: ci-plugin-release
+    namespace: box1-ci
+---
+# box1-gitops guard: reads plugin images, with no other permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-plugin-verify
+  namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-plugin-verify-image-puller
+  namespace: box1-plugins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: ci-plugin-verify
+    namespace: box1-ci
+---
+# Read-only identity behind rhdh/dynamic-plugins-registry-auth.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rhdh-plugin-puller
+  namespace: box1-plugins
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rhdh-plugin-puller-image-puller
+  namespace: box1-plugins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: rhdh-plugin-puller
+    namespace: box1-plugins
+---
+# Token controller populates this Secret; no credential values in Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rhdh-plugin-puller-token
+  namespace: box1-plugins
+  annotations:
+    kubernetes.io/service-account.name: rhdh-plugin-puller
+type: kubernetes.io/service-account-token

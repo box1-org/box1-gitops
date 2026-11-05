@@ -8,6 +8,8 @@ resources:
   - repository.yaml
   - quarkus-reference-pull.yaml
   - quarkus-reference-repository.yaml
+  - plugin-registry.yaml
+  - box1-templates-repository.yaml
   - observe-rbac.yaml
   - argo-sync-rbac.yaml
   - ../tasks
