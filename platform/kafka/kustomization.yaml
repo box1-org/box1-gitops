@@ -9,6 +9,7 @@ resources:
   - topics/order.yaml
   - topics/order-dlq.yaml
   - topics/inventory.yaml
+  - topics/inventory-dlq.yaml
   - topics/fulfillment.yaml
   - topics/telemetry.yaml
   - topics/notification.yaml
