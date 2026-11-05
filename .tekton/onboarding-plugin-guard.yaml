@@ -55,5 +55,4 @@ spec:
                 guard = root / 'guard.py'
                 guard.write_bytes(github('/contents/platform/developer-hub/scripts/check-onboarding-runtime.py?ref=main', 'application/vnd.github.raw+json'))
                 subprocess.run([sys.executable, str(guard), '--self-test'], check=True)
-                # Remove --transition in the cleanup change.
-                subprocess.run([sys.executable, str(guard), str(checkout), '--transition', '--registry'], check=True)
+                subprocess.run([sys.executable, str(guard), str(checkout), '--registry'], check=True)

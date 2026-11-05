@@ -390,9 +390,8 @@ outside Git. The `box1.org/onboarding-plugin-digest` annotation in `backstage.ya
 restarts the Pod when the digest changes. Release, verification, rollback, and
 credential rotation are in `box1-docs/runbooks/rhdh-onboarding-plugin-oci.md`.
 
-`onboarding/plugin/`, its ConfigMap generator, and the staging block in
-`extensions-seed.yaml` are unused and kept temporarily for rollback.
-`scripts/check-onboarding-runtime.py` fails if the old path returns to the workload.
+`scripts/check-onboarding-runtime.py` fails if plugin source, a mutable reference,
+or the old source-copy path appears in this repository.
 
 The Pod uses an automatically rotated projected token for the dedicated
 `developer-hub-onboarding` ServiceAccount, with permissions for durable
