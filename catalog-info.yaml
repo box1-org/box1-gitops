@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: box1-gitops
+  description: GitOps for the box1 cluster and platform components
+  annotations:
+    github.com/project-slug: box1-org/box1-gitops
+    backstage.io/techdocs-ref: dir:.
+  tags: [repository, gitops]
+  links:
+    - url: https://devspaces.apps.ocp.box1.org/#https://github.com/box1-org/box1-gitops
+      title: Open in Dev Spaces
+      icon: code
+spec:
+  type: repository
+  lifecycle: experimental
+  owner: user:default/mike4263
