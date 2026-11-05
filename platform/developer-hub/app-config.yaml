@@ -45,6 +45,7 @@ data:
             clientId: ${KEYCLOAK_CLIENT_ID}
             clientSecret: ${KEYCLOAK_CLIENT_SECRET}
             additionalScopes: 'profile email'
+            prompt: login
             signIn:
               resolvers:
                 - resolver: emailMatchingUserEntityProfileEmail
