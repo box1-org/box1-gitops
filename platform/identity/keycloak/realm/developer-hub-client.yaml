@@ -1,0 +1,32 @@
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: developer-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: developer-hub
+    name: Red Hat Developer Hub
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: true
+    redirectUris:
+      - https://developer-hub.apps.ocp.box1.org/api/auth/oidc/handler/frame
+    webOrigins:
+      - https://developer-hub.apps.ocp.box1.org
+    defaultClientScopes:
+      - profile
+      - email
+      - roles
+      - web-origins
+    optionalClientScopes:
+      - offline_access

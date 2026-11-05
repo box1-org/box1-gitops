@@ -4,3 +4,4 @@ namespace: keycloak
 resources:
   - realm.yaml
   - openshell-client.yaml
+  - developer-hub-client.yaml
