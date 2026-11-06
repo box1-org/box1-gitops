@@ -1,0 +1,105 @@
+# Turn a pushed bootc OS image into a KubeVirt containerDisk (box1-ci/<name>-disk)
+# with bootc-image-builder. Installed systems track
+# image-registry.openshift-image-registry.svc:5000/box1-ci/<name>:<channel>, so
+# `bootc upgrade` follows promotions (box1-bootc-channel moves that tag).
+# Privileged (osbuild). Run as ci-bootc-release.
+# Admin SSH keys are not baked in: the VM gets them at runtime through KubeVirt
+# accessCredentials (qemu-guest-agent). The disk only creates the cloud-user account.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bootc-disk
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: image-name
+    type: string
+  - name: image-digest
+    type: string
+  - name: channel
+    type: string
+    default: development
+  results:
+  - name: disk-digest
+    description: Digest of the pushed containerDisk image.
+  volumes:
+  - name: workspace
+    emptyDir: {}
+  - name: containers
+    emptyDir: {}
+  - name: osbuild-store
+    emptyDir: {}
+  stepTemplate:
+    securityContext:
+      privileged: true
+    computeResources:
+      requests: {cpu: "1", memory: 2Gi}
+      limits: {cpu: "4", memory: 6Gi}
+    env:
+    - name: REVISION
+      value: $(params.revision)
+    - name: IMAGE_NAME
+      value: $(params.image-name)
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: CHANNEL
+      value: $(params.channel)
+    - name: STORAGE_DRIVER
+      value: overlay
+    volumeMounts:
+    - name: workspace
+      mountPath: /workspace
+    - name: containers
+      mountPath: /var/lib/containers
+    - name: osbuild-store
+      mountPath: /store
+  steps:
+  - name: prepare
+    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+    script: |
+      #!/bin/sh
+      set -eu
+      echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
+      echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}$'
+      echo "$IMAGE_DIGEST" | grep -Eq '^sha256:[a-f0-9]{64}$'
+      echo "$CHANNEL" | grep -Eq '^(development|approval|production)$'
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      source="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME@$IMAGE_DIGEST"
+      tracked="image-registry.openshift-image-registry.svc:5000/box1-ci/$IMAGE_NAME:$CHANNEL"
+      buildah pull --creds "serviceaccount:$token" "$source"
+      # bootc-image-builder records this reference as the installed system's update source.
+      buildah tag "$source" "$tracked"
+      printf '%s' "$tracked" > /workspace/tracked
+      mkdir -p /workspace/output
+      printf '[[customizations.user]]\nname = "cloud-user"\ngroups = ["wheel"]\n' > /workspace/config.toml
+  - name: bootc-image-builder
+    image: registry.redhat.io/rhel10/bootc-image-builder:10.2@sha256:14adeb06f5fca459c8ac534b59f1dec6d08576dfdf4605b0b27f177ad19f1de8
+    script: |
+      #!/bin/sh
+      set -eu
+      exec /usr/bin/bootc-image-builder --type qcow2 --rootfs xfs \
+        --config /workspace/config.toml --output /workspace/output "$(cat /workspace/tracked)"
+  - name: package-push
+    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+    workingDir: /workspace
+    script: |
+      #!/bin/sh
+      set -eu
+      disk="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME-disk:$REVISION"
+      ls -lsh output/qcow2/
+      # KubeVirt containerDisk layout: the disk under /disk, owned by qemu (107).
+      ctr=$(buildah from scratch)
+      buildah copy --chown 107:107 "$ctr" output/qcow2/disk.qcow2 /disk/disk.qcow2
+      buildah config --label org.opencontainers.image.revision="$REVISION" \
+        --label box1.org/bootc-image="box1-ci/$IMAGE_NAME@$IMAGE_DIGEST" \
+        --label box1.org/bootc-tracks="$(cat tracked)" "$ctr"
+      buildah commit --format oci "$ctr" "$disk"
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      buildah push --creds "serviceaccount:$token" --digestfile /workspace/disk-digest "$disk"
+      digest=$(cat /workspace/disk-digest)
+      echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+      printf '%s' "$digest" > "$(results.disk-digest.path)"
+      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s-disk@%s\n' "$IMAGE_NAME" "$digest"

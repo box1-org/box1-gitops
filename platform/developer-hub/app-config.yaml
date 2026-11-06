@@ -88,6 +88,15 @@ data:
         - group: tekton.dev
           apiVersion: v1
           plural: tasks
+        - group: kubevirt.io
+          apiVersion: v1
+          plural: virtualmachines
+        - group: kubevirt.io
+          apiVersion: v1
+          plural: virtualmachineinstances
+        - group: cdi.kubevirt.io
+          apiVersion: v1beta1
+          plural: datavolumes
     argocd:
       appLocatorMethods:
         - type: config

@@ -1,0 +1,76 @@
+# Confirm a promoted RHEL image mode VM: Argo synced and healthy, the VirtualMachine
+# records the promoted OS digest and source revision, and the guest is running with
+# qemu-guest-agent connected. Applying the OS update in the guest stays deliberate
+# (`sudo bootc upgrade --apply`), so this checks what was approved, not what is booted.
+# Run as ci-observe (read-only Roles come from the workload's onboarding.yaml).
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-vm-smoke
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: image-digest
+    type: string
+  - name: application-name
+    type: string
+  - name: application-namespace
+    type: string
+  steps:
+  - name: observe
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: REVISION
+      value: $(params.revision)
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: APPLICATION_NAME
+      value: $(params.application-name)
+    - name: APPLICATION_NAMESPACE
+      value: $(params.application-namespace)
+    script: |
+      #!/usr/bin/env python3
+      import json, os, pathlib, re, ssl, time, urllib.request
+      revision=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']
+      assert re.fullmatch('[a-f0-9]{40}',revision) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
+      name=os.environ['APPLICATION_NAME']; namespace=os.environ['APPLICATION_NAMESPACE']
+      assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name) and re.fullmatch('[a-z][a-z0-9-]{2,62}',namespace)
+      account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
+      context=ssl.create_default_context(cafile=str(account/'ca.crt'))
+      token=(account/'token').read_text()
+
+      def kube(path):
+          req=urllib.request.Request('https://kubernetes.default.svc'+path,headers={'Authorization':'Bearer '+token})
+          with urllib.request.urlopen(req,context=context,timeout=20) as response: return json.load(response)
+
+      def condition(obj,kind):
+          return next((c.get('status') for c in obj.get('status',{}).get('conditions',[]) if c.get('type')==kind),None)
+
+      state={}
+      deadline=time.monotonic()+900
+      while time.monotonic()<deadline:
+          app=kube('/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/'+name)
+          vm=kube('/apis/kubevirt.io/v1/namespaces/'+namespace+'/virtualmachines/'+name)
+          annotations=vm['metadata'].get('annotations',{})
+          state={
+              'argo_synced': app.get('status',{}).get('sync',{}).get('status')=='Synced',
+              'argo_healthy': app.get('status',{}).get('health',{}).get('status')=='Healthy',
+              'os_digest_recorded': annotations.get('box1.org/os-image-digest')==digest,
+              'source_recorded': annotations.get('box1.org/source-revision')==revision,
+              'vm_ready': condition(vm,'Ready')=='True',
+          }
+          if state['vm_ready']:
+              vmi=kube('/apis/kubevirt.io/v1/namespaces/'+namespace+'/virtualmachineinstances/'+name)
+              state['agent_connected']=condition(vmi,'AgentConnected')=='True'
+              state['guest_os']=vmi.get('status',{}).get('guestOSInfo',{}).get('prettyName','')
+          if all(v for k,v in state.items() if k!='guest_os') and state.get('agent_connected'): break
+          time.sleep(10)
+      else:
+          raise TimeoutError('VM did not reach the promoted state: '+json.dumps(state,sort_keys=True))
+      print('PASS: '+json.dumps(state,sort_keys=True))
+      print('Approved OS image '+digest+' is recorded; apply it in the guest with `sudo bootc upgrade --apply`.')

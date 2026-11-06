@@ -83,5 +83,81 @@ class PromotionSyncContract(unittest.TestCase):
         self.assertNotIn("- delete", text)
 
 
+def promotion_functions():
+    """Load only the pure helper definitions from the Task script (no network code runs)."""
+    import re
+    tree = ast.parse(script_text())
+    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in ("candidate_paths", "plan_updates"))
+            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "ZERO" for t in n.targets))]
+    namespace = {"re": re}
+    exec(compile(ast.Module(body=keep, type_ignores=[]), str(TASK), "exec"), namespace)
+    return namespace
+
+
+class PromotionPlan(unittest.TestCase):
+    SOURCE = "d" * 40
+    DIGEST = "sha256:" + "e" * 64
+    DISK = "sha256:" + "f" * 64
+
+    @classmethod
+    def setUpClass(cls):
+        cls.f = promotion_functions()
+
+    def test_service_profile_edits_are_unchanged(self):
+        old = {
+            "workloads/svc/kustomization.yaml": "images:\n  - name: svc\n    newName: x\n    digest: sha256:" + "0" * 64 + "\n",
+            "workloads/svc/deployment.yaml": "metadata:\n  annotations:\n    box1.org/source-revision: " + "a" * 40
+                + "\n    box1.org/build-pipelinerun: awaiting-first-release\nspec:\n  replicas: 0\n",
+        }
+        self.assertEqual(self.f["candidate_paths"]("service", "svc"), sorted(old, reverse=True))
+        new = self.f["plan_updates"]("service", "svc", old, self.SOURCE, self.DIGEST, "", "svc-release-abcde")
+        self.assertEqual(sorted(new), sorted(old))
+        self.assertIn("    digest: " + self.DIGEST, new["workloads/svc/kustomization.yaml"])
+        deployment = new["workloads/svc/deployment.yaml"]
+        self.assertIn("box1.org/source-revision: " + self.SOURCE, deployment)
+        self.assertIn("box1.org/build-pipelinerun: box1-ci/svc-release-abcde", deployment)
+        self.assertIn("  replicas: 1", deployment)
+
+    def vm_old(self, promoted=False):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("vt", ROOT / "test-gitops-validate.py")
+        vt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(vt)
+        import textwrap
+        name, files = vt.vm_bundle(promoted=promoted)
+        base = "workloads/" + name + "/"
+        old = {base + p: textwrap.dedent(c).lstrip() for p, c in files.items() if p in ("virtualmachine.yaml", "datavolume.yaml", "kustomization.yaml")}
+        return vt, name, files, base, old
+
+    def test_vm_first_promotion_starts_the_vm_and_adds_its_disk(self):
+        vt, name, files, base, old = self.vm_old()
+        new = self.f["plan_updates"]("virtual-machine", name, old, self.SOURCE, self.DIGEST, self.DISK, "vm-release-abcde")
+        self.assertEqual(sorted(new), sorted(old))
+        self.assertIn("runStrategy: Always", new[base + "virtualmachine.yaml"])
+        self.assertIn("box1.org/os-image-digest: " + self.DIGEST, new[base + "virtualmachine.yaml"])
+        self.assertIn(name + "-disk@" + self.DISK, new[base + "datavolume.yaml"])
+        self.assertIn("  - datavolume.yaml", new[base + "kustomization.yaml"])
+        # The promoted bundle must satisfy the VM profile of box1-gitops-validate.
+        if vt.KUSTOMIZE:
+            promoted = dict(files)
+            promoted.update({p[len(base):]: c for p, c in new.items()})
+            self.assertEqual(vt.load_validator()["validate"](name, vt.render(promoted)), "virtual-machine")
+
+    def test_vm_day2_promotion_only_changes_the_vm_annotations(self):
+        _, name, _, base, old = self.vm_old(promoted=True)
+        new = self.f["plan_updates"]("virtual-machine", name, old, self.SOURCE, self.DIGEST, "", "vm-release-fghij")
+        self.assertEqual(sorted(new), [base + "virtualmachine.yaml"])
+        vm = new[base + "virtualmachine.yaml"]
+        self.assertIn("box1.org/os-image-digest: " + self.DIGEST, vm)
+        self.assertIn("runStrategy: Always", vm)
+        self.assertEqual(vm.replace(self.DIGEST, "X").count("X"), 1)
+
+    def test_vm_first_promotion_requires_a_disk_digest(self):
+        _, name, _, _, old = self.vm_old()
+        for disk in ["", "sha256:" + "0" * 64, "latest"]:
+            with self.assertRaisesRegex(AssertionError, "disk digest"):
+                self.f["plan_updates"]("virtual-machine", name, old, self.SOURCE, self.DIGEST, disk, "run")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,53 @@
+# Point box1-ci/<name>:<channel> at the exact OS image manifest that was promoted.
+# Copying the manifest bytes keeps the digest identical, so `bootc status` in the
+# guest matches the promoted box1.org/os-image-digest. Run as ci-bootc-release,
+# only after the GitOps promotion merged and Argo synced (promoted == 'true').
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bootc-channel
+  namespace: box1-ci
+spec:
+  params:
+  - name: image-name
+    type: string
+  - name: image-digest
+    type: string
+  - name: channel
+    type: string
+    default: development
+  results:
+  - name: channel-reference
+  steps:
+  - name: move-channel-tag
+    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+    env:
+    - name: IMAGE_NAME
+      value: $(params.image-name)
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: CHANNEL
+      value: $(params.channel)
+    script: |
+      #!/bin/sh
+      set -eu
+      echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}$'
+      echo "$IMAGE_DIGEST" | grep -Eq '^sha256:[a-f0-9]{64}$'
+      echo "$CHANNEL" | grep -Eq '^(development|approval|production)$'
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      registry="https://image-registry.openshift-image-registry.svc:5000/v2/box1-ci/$IMAGE_NAME"
+      ca=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+      accept='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+      curl -fsS --cacert "$ca" -u "serviceaccount:$token" -H "Accept: $accept" \
+        -D /tmp/manifest.headers -o /tmp/manifest.json "$registry/manifests/$IMAGE_DIGEST"
+      test "sha256:$(sha256sum /tmp/manifest.json | cut -d' ' -f1)" = "$IMAGE_DIGEST"
+      type=$(grep -i '^content-type:' /tmp/manifest.headers | cut -d' ' -f2 | tr -d '\r')
+      curl -fsS --cacert "$ca" -u "serviceaccount:$token" -X PUT -H "Content-Type: $type" \
+        --data-binary @/tmp/manifest.json "$registry/manifests/$CHANNEL"
+      # Read the tag back: it must now resolve to exactly the promoted digest.
+      curl -fsS --cacert "$ca" -u "serviceaccount:$token" -H "Accept: $accept" \
+        -o /tmp/channel.json "$registry/manifests/$CHANNEL"
+      test "sha256:$(sha256sum /tmp/channel.json | cut -d' ' -f1)" = "$IMAGE_DIGEST"
+      printf 'image-registry.openshift-image-registry.svc:5000/box1-ci/%s:%s' "$IMAGE_NAME" "$CHANNEL" > "$(results.channel-reference.path)"
+      printf 'Moved box1-ci/%s:%s to %s\n' "$IMAGE_NAME" "$CHANNEL" "$IMAGE_DIGEST"
