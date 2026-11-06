@@ -10,9 +10,10 @@ uses object storage. Centralized logging is deferred to
 | `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator, `stable` channel, manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
 | `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1`, per-tenant trace ClusterRoles, NetworkPolicies |
+| `observability-dashboards` (2) | `dashboards/` | Perses datasource `box1-thanos-querier` (default) and dashboard `box1-order-flow`, shown under Observe → Dashboards |
 | `observability-console` (2) | `console/` | `UIPlugin` `distributed-tracing` (console Observe → Traces) and Argo CD access to UIPlugins |
 
-All four Applications are manual-sync, like the other platform Applications.
+All five Applications are manual-sync, like the other platform Applications.
 
 ## Data path and access
 
@@ -47,6 +48,31 @@ Switching to multitenancy hid traces written earlier in single-tenant mode;
 they expire with the 72 h retention. Rolling back means reverting the Tempo,
 collector and NetworkPolicy changes together, which hides traces written as
 `dev` until they expire.
+
+## Metrics, alerts and dashboards
+
+- **Scraping:** user-workload monitoring scrapes the seven services through
+  ServiceMonitors in `box1-workloads-dev` (`workloads/<service>/servicemonitor.yaml`).
+  The adapter is scraped every 15 s; the others every 30 s.
+- **Alerts:** PrometheusRules live next to the service that owns the metrics,
+  because user-workload rules only see their own namespace.
+
+  | Rule | Namespace | Alerts |
+  |---|---|---|
+  | `fulfillment-adapter-erp` | `fulfillment-adapter-dev` | `Box1ErpAcknowledgementDelayed`, `Box1ErpAwaitingOperator`, `Box1FulfillmentNeedsAttention`, `Box1FulfillmentFilesQuarantined`, `Box1FulfillmentMetricsStale`, `Box1ServiceDown` |
+  | `order-service-flow` | `order-service-dev` | `Box1OrdersStuck`, `Box1OrderOutboxDelayed`, `Box1ServiceDown` |
+  | `inventory-service-flow` | `inventory-service-dev` | `Box1InventoryDeadLetters`, `Box1ServiceDown` |
+
+  Alerts appear under Observe → Alerting and go to the platform Alertmanager.
+  Thresholds are lab starting points; measure and revise them.
+- **Dashboard:** `box1-order-flow` (Perses, in `box1-observability`) shows:
+  - order age and stuck orders, and order state transitions;
+  - ERP acknowledgement age, backlog and operator queue;
+  - adapter errors (ERP result outcomes, uploads, dead-lettered events, quarantined files);
+  - pipeline health.
+
+  Its default datasource is the cluster Thanos querier, so viewers need
+  permission to query cluster metrics (for example `cluster-monitoring-view`).
 
 ## Resources managed outside this repository
 
