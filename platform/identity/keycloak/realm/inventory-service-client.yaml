@@ -1,0 +1,28 @@
+# inventory-service (box1-docs#12, #19). Holds the inventory-admin client role that inventory-service requires on its
+# /internal/v1 operator routes (audience inventory-service, roles from resource_access.inventory-service). No flow is
+# enabled: nobody logs in to this client; the role is granted to people or service accounts of other clients.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: inventory-service
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: inventory-service
+    name: box1 inventory service
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+  roles:
+    - name: inventory-admin
+      description: Restock, release reservations, and create sites and stock records (create once)
+      clientRole: true

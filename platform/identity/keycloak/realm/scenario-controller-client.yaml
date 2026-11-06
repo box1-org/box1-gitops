@@ -1,0 +1,55 @@
+# Scenario controller (box1-docs#19, D-009). Confidential client used only for the controller's own service account,
+# which seeds and restores the Starfleet Feline Supply fixtures through inventory-service's admin routes. Its tokens
+# carry audience inventory-service and the inventory-admin role, nothing else (fullScopeAllowed false).
+# The operator generates the client secret into Secret keycloak-client-secret-scenario-controller (namespace keycloak).
+# Copying it into scenario-controller-dev as Secret scenario-controller-inventory-token is a separate, approval-gated
+# step for the user; the value is never committed.
+# Client roles scenario-viewer (catalog, runs, audit) and scenario-operator (also start, stop, reset, seed) are what the
+# controller checks on callers; people get them by assignment, and their tokens come from scenario-controller-cli.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: scenario-controller
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: scenario-controller
+    name: box1 scenario controller
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+    fullScopeAllowed: false
+    protocolMappers:
+      - name: inventory-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: inventory-service
+          access.token.claim: "true"
+          id.token.claim: "false"
+  scopeMappings:
+    clientMappings:
+      inventory-service:
+        client: inventory-service
+        mappings:
+          - name: inventory-admin
+            clientRole: true
+  serviceAccountClientRoles:
+    inventory-service:
+      - inventory-admin
+  roles:
+    - name: scenario-viewer
+      description: Read the scenario catalog, runs and audit trail
+      clientRole: true
+    - name: scenario-operator
+      description: Scenario viewer, plus start, stop and reset scenarios and seed the demo fixtures
+      clientRole: true
