@@ -128,3 +128,36 @@ unchanged throughout shipping-service onboarding.
 Development Applications and `workloads/<service>/` now live in
 `box1-org/box1-workloads-dev`. The platform root installs the workload parent
 Application. Generated source repositories keep their original `deploy/` files.
+
+## Virtual machine workload profile (RHEL 10 image mode)
+
+Tracked in box1-docs#55, based on the box1-docs#46 prototype. A workload opts in with the Namespace label `box1.org/workload-profile: virtual-machine`. Without the label, a workload uses the `service` rules above, unchanged.
+
+`box1-gitops-validate` checks VM workloads with these rules:
+
+- **Required kinds:** Namespace, ServiceAccount (the updater), a `kubernetes.io/service-account-token` Secret with no data in Git, and exactly one VirtualMachine named after the workload.
+- **Forbidden:** Deployments, StatefulSets, DaemonSets, Pods, container `image:` fields, and `dataVolumeTemplates`. A DataVolume spec is immutable, so a placeholder source would never be replaced.
+- **VirtualMachine annotations:** it records `box1.org/os-image-digest` and `box1.org/source-revision`.
+- **Update disks:** the VM attaches the `serviceca` and `regtoken` disks used for `bootc upgrade`.
+- **Unbuilt** (zero OS digest): `runStrategy: Halted`, and the kustomization does not list `datavolume.yaml`.
+- **Promoted:** exactly one root DataVolume `<name>-root`, pulling `box1-ci/<name>-disk@sha256:…` with `pullMethod: node`.
+- **Secrets other than the token** may hold only SSH public keys. Admin keys reach the guest at runtime through KubeVirt `accessCredentials` (qemu-guest-agent).
+
+Delivery uses central Tasks:
+
+| Task | Purpose | Service account |
+| --- | --- | --- |
+| `box1-bootc-build` | Privileged buildah. Uses the build secrets `redhat-registry-pull` and `etc-pki-entitlement`. | `ci-bootc-check` for PRs, `ci-bootc-release` for releases |
+| `box1-bootc-disk` | bootc-image-builder to a containerDisk `box1-ci/<name>-disk`. The installed system tracks `box1-ci/<name>:<channel>`. | `ci-bootc-release` |
+| `box1-gitops-promote` with `workload-profile: virtual-machine` | Day 2: edits only the VM annotations, which does not restart the VM. First promotion: also sets the disk digest, adds `datavolume.yaml` and sets `runStrategy: Always`. | `ci-gitops` |
+| `box1-bootc-channel` | After the merge and sync, moves `:<channel>` to exactly the promoted manifest, then reads it back to confirm. | `ci-bootc-release` |
+| `box1-vm-smoke` | Checks that Argo is Synced and Healthy, the digest and source are recorded, the VM is Ready, and the agent is connected. | `ci-observe` |
+
+The guest applies an approved OS image deliberately with `sudo bootc upgrade --apply`.
+
+Contract tests:
+
+```sh
+BOX1_WORKLOADS_DEV=/path/to/box1-workloads-dev python3 platform/pipelines/tasks/test-gitops-validate.py
+python3 platform/pipelines/tasks/test-gitops-promote.py
+```

@@ -1,0 +1,119 @@
+# Build (and optionally push) a RHEL image mode (bootc) OS image from a box1-org
+# repository's Containerfile. Lifted from box1-org/rhel-image-poc (box1-docs#46, #55).
+#
+# Privileged: the RHEL bootc base has ~66 layers and needs overlay storage; vfs
+# would copy the full filesystem per layer. Run as ci-bootc-check (PR, no push)
+# or ci-bootc-release (push to box1-ci).
+# Secrets created outside Git: redhat-registry-pull (registry.redhat.io entry
+# only) and etc-pki-entitlement (copy of the cluster SCA entitlement). Both are
+# used only as build inputs and never reach an image layer.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bootc-build
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: git-auth-secret
+    type: string
+  - name: source-repo
+    type: string
+    description: box1-org/<name>
+  - name: image-name
+    type: string
+  - name: push-image
+    type: string
+    default: 'false'
+  results:
+  - name: image-digest
+    description: Digest of the pushed OS image, or not-pushed.
+  volumes:
+  - name: workspace
+    emptyDir: {}
+  - name: containers
+    emptyDir: {}
+  - name: redhat-registry
+    secret:
+      secretName: redhat-registry-pull
+  - name: entitlement
+    secret:
+      secretName: etc-pki-entitlement
+  stepTemplate:
+    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+    workingDir: /workspace/source
+    securityContext:
+      privileged: true
+    computeResources:
+      requests: {cpu: 500m, memory: 1Gi}
+      limits: {cpu: "2", memory: 4Gi}
+    env:
+    - name: REVISION
+      value: $(params.revision)
+    - name: SOURCE_REPO
+      value: $(params.source-repo)
+    - name: IMAGE_NAME
+      value: $(params.image-name)
+    - name: PUSH_IMAGE
+      value: $(params.push-image)
+    - name: STORAGE_DRIVER
+      value: overlay
+    - name: BUILDAH_FORMAT
+      value: oci
+    - name: REGISTRY_AUTH_FILE
+      value: /etc/redhat-registry/.dockerconfigjson
+    volumeMounts:
+    - name: workspace
+      mountPath: /workspace
+    - name: containers
+      mountPath: /var/lib/containers
+    - name: redhat-registry
+      mountPath: /etc/redhat-registry
+      readOnly: true
+    - name: entitlement
+      mountPath: /etc/entitlement
+      readOnly: true
+  steps:
+  - name: fetch
+    workingDir: /workspace
+    env:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: $(params.git-auth-secret)
+          key: git-provider-token
+    script: |
+      #!/bin/sh
+      set -eu
+      echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
+      echo "$SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
+      echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}$'
+      case "$PUSH_IMAGE" in true|false) ;; *) echo "push-image must be true or false"; exit 1 ;; esac
+      mkdir -p source
+      curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+        "https://api.github.com/repos/$SOURCE_REPO/tarball/$REVISION" \
+        | tar -xz --strip-components=1 -C source
+      printf 'Fetched %s at %s\n' "$SOURCE_REPO" "$REVISION"
+  - name: build
+    script: |
+      #!/bin/sh
+      set -eu
+      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME:$REVISION"
+      # bootc container lint runs inside the Containerfile.
+      buildah build --layers=false --build-arg SOURCE_REVISION="$REVISION" \
+        --secret id=entitlement-cert,src=/etc/entitlement/entitlement.pem \
+        --secret id=entitlement-key,src=/etc/entitlement/entitlement-key.pem \
+        -t "$image" .
+      if [ "$PUSH_IMAGE" != true ]; then
+        printf 'not-pushed' > "$(results.image-digest.path)"
+        printf 'Built and linted %s (not pushed)\n' "$image"
+        exit 0
+      fi
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      buildah push --creds "serviceaccount:$token" --digestfile /workspace/digest "$image"
+      digest=$(cat /workspace/digest)
+      echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+      printf '%s' "$digest" > "$(results.image-digest.path)"
+      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s@%s\n' "$IMAGE_NAME" "$digest"

@@ -27,6 +27,14 @@ spec:
   - name: argo-sync-timeout
     type: string
     default: '300'
+  - name: workload-profile
+    type: string
+    default: service
+    description: service (Deployment + kustomize image digest) or virtual-machine (VirtualMachine OS digest annotation; first promotion also starts the VM and adds its root DataVolume).
+  - name: disk-digest
+    type: string
+    default: ''
+    description: virtual-machine only. Digest of box1-ci/<name>-disk, used for the first promotion's root DataVolume.
   steps:
   - name: promote
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -50,6 +58,10 @@ spec:
       value: "$(params.application-name)"
     - name: ARGO_SYNC_TIMEOUT
       value: "$(params.argo-sync-timeout)"
+    - name: WORKLOAD_PROFILE
+      value: "$(params.workload-profile)"
+    - name: DISK_DIGEST
+      value: "$(params.disk-digest)"
     script: |
       #!/usr/bin/env python3
       import base64, datetime, json, os, re, ssl, time, urllib.request, urllib.error
@@ -78,6 +90,52 @@ spec:
       gitops='/repos/box1-org/box1-workloads-dev'
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
+
+      ZERO='sha256:'+'0'*64
+
+      def candidate_paths(profile, name):
+          base='workloads/'+name+'/'
+          if profile=='service':
+              return [base+'kustomization.yaml',base+'deployment.yaml']
+          return [base+'virtualmachine.yaml',base+'datavolume.yaml',base+'kustomization.yaml']
+
+      def plan_updates(profile, name, old, source, digest, disk_digest, pipeline_run):
+          """Return {path: new content} for exactly the files this promotion changes."""
+          base='workloads/'+name+'/'
+          new={}
+          if profile=='service':
+              k,d=base+'kustomization.yaml',base+'deployment.yaml'
+              new[k],count=re.subn(r'(?m)^    digest: sha256:[a-f0-9]{64}$','    digest: '+digest,old[k])
+              assert count==1, 'Exactly one digest entry required'
+              new[d],count=re.subn(r'(?m)^    box1\.org/source-revision: [a-f0-9]{40}$','    box1.org/source-revision: '+source,old[d])
+              assert count==1, 'Source revision annotation missing'
+              new[d],count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+pipeline_run,new[d])
+              assert count==1
+              # Activate only the unbuilt onboarding deployment; preserve later operator scaling choices.
+              if 'digest: sha256:'+'0'*64 in old[k]:
+                  new[d],count=re.subn(r'(?m)^  replicas: 0$', '  replicas: 1', new[d])
+                  assert count == 1, 'Unbuilt onboarding deployment must have zero replicas'
+              return new
+          v,dv,k=base+'virtualmachine.yaml',base+'datavolume.yaml',base+'kustomization.yaml'
+          vm,count=re.subn(r'(?m)^    box1\.org/os-image-digest: sha256:[a-f0-9]{64}$','    box1.org/os-image-digest: '+digest,old[v])
+          assert count==1, 'Exactly one box1.org/os-image-digest annotation required'
+          vm,count=re.subn(r'(?m)^    box1\.org/source-revision: [a-f0-9]{40}$','    box1.org/source-revision: '+source,vm)
+          assert count==1, 'Source revision annotation missing'
+          vm,count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+pipeline_run,vm)
+          assert count==1
+          if '    box1.org/os-image-digest: '+ZERO in old[v]:
+              # First promotion: create the root disk from the built image and start the VM.
+              # The DataVolume spec is immutable, so it is only ever written here.
+              assert re.fullmatch('sha256:[a-f0-9]{64}',disk_digest) and disk_digest!=ZERO, 'First VM promotion requires the disk digest'
+              vm,count=re.subn(r'(?m)^  runStrategy: Halted$','  runStrategy: Always',vm)
+              assert count==1, 'Unbuilt virtual machine must be Halted'
+              new[dv],count=re.subn(r'(?m)^(      url: docker://image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+re.escape(name)+r'-disk@)'+ZERO+'$',lambda m:m.group(1)+disk_digest,old[dv])
+              assert count==1, 'Unbuilt root DataVolume must reference the zero disk digest'
+              assert not re.search(r'(?m)^  - datavolume\.yaml$',old[k]), 'Unbuilt virtual machine must not list its DataVolume'
+              new[k],count=re.subn(r'(?m)^  - virtualmachine\.yaml$','  - virtualmachine.yaml\n  - datavolume.yaml',old[k])
+              assert count==1, 'Kustomization must list virtualmachine.yaml once'
+          new[v]=vm
+          return new
 
       def kube(path, method='GET', body=None):
           account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
@@ -160,20 +218,12 @@ spec:
           raise SystemExit(0)
       base=github(gitops+'/git/ref/heads/main')['object']['sha']
       base_commit=github(gitops+'/git/commits/'+base)
-      paths=['workloads/'+name+'/kustomization.yaml','workloads/'+name+'/deployment.yaml']
-      old={}; new={}
-      for path in paths:
-          old[path]=base64.b64decode(github(gitops+'/contents/'+path+'?ref='+base)['content']).decode()
-      new[paths[0]],count=re.subn(r'(?m)^    digest: sha256:[a-f0-9]{64}$','    digest: '+digest,old[paths[0]])
-      assert count==1, 'Exactly one digest entry required'
-      new[paths[1]],count=re.subn(r'(?m)^    box1\.org/source-revision: [a-f0-9]{40}$','    box1.org/source-revision: '+source,old[paths[1]])
-      assert count==1, 'Source revision annotation missing'
-      new[paths[1]],count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+os.environ['PIPELINE_RUN'],new[paths[1]])
-      assert count==1
-      # Activate only the unbuilt onboarding deployment; preserve later operator scaling choices.
-      if 'digest: sha256:'+'0'*64 in old[paths[0]]:
-          new[paths[1]],count=re.subn(r'(?m)^  replicas: 0$', '  replicas: 1', new[paths[1]])
-          assert count == 1, 'Unbuilt onboarding deployment must have zero replicas'
+      profile=os.environ['WORKLOAD_PROFILE']
+      assert profile in ['service','virtual-machine'], 'Unsupported workload profile'
+      candidates=candidate_paths(profile,name)
+      old={path:base64.b64decode(github(gitops+'/contents/'+path+'?ref='+base)['content']).decode() for path in candidates}
+      new=plan_updates(profile,name,old,source,digest,os.environ['DISK_DIGEST'],os.environ['PIPELINE_RUN'])
+      paths=sorted(new)
       entries=[]
       for path in paths:
           blob=github(gitops+'/git/blobs','POST',{'content':new[path],'encoding':'utf-8'})
@@ -183,7 +233,7 @@ spec:
       branch='promote/'+name+'/' +source[:12]+'-'+os.environ['PIPELINE_RUN'][-5:]
       github(gitops+'/git/refs','POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
       pr=github(gitops+'/pulls','POST',{'title':'Promote '+name+' '+source[:12]+' to '+environment,'head':branch,'base':'main',
-          'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\nBuild: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
+          'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\n'+('Profile: virtual-machine (apply in the guest with `sudo bootc upgrade --apply`)\n' if profile=='virtual-machine' else '')+'Build: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
       result('pr-url',pr['html_url']); print('Created GitOps PR: '+pr['html_url'])
       if environment != 'development':
           print('Approval policy selected; PR left open for a reviewer.')
