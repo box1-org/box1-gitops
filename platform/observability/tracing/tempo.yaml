@@ -1,0 +1,46 @@
+# Single-pod Tempo with traces on a PersistentVolume (lvms-vg1, the default
+# class). No object storage. Services: tempo-box1 (OTLP gRPC 4317, query 3200).
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoMonolithic
+metadata:
+  name: box1
+  namespace: box1-observability
+spec:
+  storage:
+    traces:
+      backend: pv
+      size: 10Gi
+  ingestion:
+    otlp:
+      grpc:
+        enabled: true
+      http:
+        enabled: false
+  jaegerui:
+    enabled: true
+    route:
+      enabled: true
+      termination: edge
+    # OpenShift OAuth proxy in front of the UI. Default access check: the
+    # user can get pods in box1-observability.
+    authentication:
+      enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  extraConfig:
+    tempo:
+      compactor:
+        compaction:
+          block_retention: 72h
