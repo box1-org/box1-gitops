@@ -13,7 +13,6 @@ resources:
   - plugin-registry.yaml
   - box1-templates-repository.yaml
   - bootc-build.yaml
-  - rhel-image-poc.yaml
   - box1-ops-erp-simulator.yaml
   - observe-rbac.yaml
   - argo-sync-rbac.yaml
