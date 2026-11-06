@@ -7,3 +7,4 @@ resources:
   - developer-hub-client.yaml
   - asset-service-client.yaml
   - fulfillment-adapter-client.yaml
+  - operations-console-client.yaml

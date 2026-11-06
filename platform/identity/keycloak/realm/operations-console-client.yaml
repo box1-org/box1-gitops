@@ -1,0 +1,76 @@
+# box1 Operations console (box1-docs#18, decision D-002). Public client: authorization code + PKCE only, so no client
+# secret exists anywhere. The console backend holds the session; tokens never reach the browser.
+# Client roles: console-viewer (read every page), console-operator (viewer + place orders),
+# console-developer (viewer + deployed revisions). Assigning roles to people is done in the Keycloak admin console;
+# this file assigns none.
+# Audiences: the console's own, plus inventory-service and fulfillment-adapter, whose APIs accept any box1 token
+# carrying their audience. This changes only the console's client, not those services. asset-service is not listed:
+# it also requires azp=asset-service and refuses tokens from other clients (box1-docs#18 gap G-2).
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: operations-console
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: operations-console
+    name: box1 Operations console
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    redirectUris:
+      - https://operations-console-dev.apps.ocp.box1.org/*
+    webOrigins:
+      - https://operations-console-dev.apps.ocp.box1.org
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://operations-console-dev.apps.ocp.box1.org/signed-out.html
+    defaultClientScopes:
+      - profile
+      - roles
+      - web-origins
+    optionalClientScopes: []
+    protocolMappers:
+      - name: operations-console-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: operations-console
+          access.token.claim: "true"
+          id.token.claim: "false"
+      - name: inventory-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.custom.audience: inventory-service
+          access.token.claim: "true"
+          id.token.claim: "false"
+      - name: fulfillment-adapter-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.custom.audience: fulfillment-adapter
+          access.token.claim: "true"
+          id.token.claim: "false"
+  roles:
+    - name: console-viewer
+      description: Read every box1 Operations console page
+      clientRole: true
+    - name: console-operator
+      description: Console viewer, plus place orders through the console
+      clientRole: true
+    - name: console-developer
+      description: Console viewer, plus deployed source revisions
+      clientRole: true
