@@ -30,6 +30,11 @@ spec:
     directAccessGrantsEnabled: false
     serviceAccountsEnabled: true
     fullScopeAllowed: false
+    # The roles scope carries client roles into resource_access; without it the service-account token has no
+    # inventory-service roles even though the role and scope mapping exist (inventory answered 403, box1-docs#19).
+    defaultClientScopes:
+      - roles
+    optionalClientScopes: []
     protocolMappers:
       - name: inventory-service-audience
         protocol: openid-connect
