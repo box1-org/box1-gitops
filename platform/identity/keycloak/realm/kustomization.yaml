@@ -6,3 +6,4 @@ resources:
   - openshell-client.yaml
   - developer-hub-client.yaml
   - asset-service-client.yaml
+  - fulfillment-adapter-client.yaml
