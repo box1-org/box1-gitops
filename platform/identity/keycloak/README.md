@@ -64,6 +64,18 @@ requires changing that password. User credentials and password changes remain
 in the persistent Keycloak database; no password is declared in these manifests.
 
 
+## Operations console client
+
+`realm/operations-console-client.yaml` configures the public `operations-console` client for the box1 Operations
+console (box1-docs#18). It uses authorization code with PKCE only, so there is no client secret. The console backend
+holds the session, and tokens never reach the browser.
+
+- **Client roles:** `console-viewer`, `console-operator` and `console-developer`.
+  - After a sync, check that they exist on the client's Roles tab.
+  - Assign them to people in the admin console. This file assigns none.
+- **Audience:** `operations-console` only. Because the client is public, it carries no other service's audience.
+- **Redirect URI:** exactly `/callback`.
+
 ## Repository layout and ownership
 
 - `operator/`: namespace, OperatorGroup and Subscription; owned by the existing
