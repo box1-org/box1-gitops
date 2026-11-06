@@ -7,30 +7,47 @@ uses object storage. Centralized logging is deferred to
 
 | Application (sync wave) | Path | Creates |
 |---|---|---|
-| `observability-operators` (0) | `operators/` | Red Hat build of Tempo and Red Hat build of OpenTelemetry operators, `stable` channel, manual InstallPlan approval |
+| `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator, `stable` channel, manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
-| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, Jaeger UI behind OpenShift OAuth, reencrypt Route), `OpenTelemetryCollector` `box1`, NetworkPolicies |
+| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1`, per-tenant trace ClusterRoles, NetworkPolicies |
+| `observability-console` (2) | `console/` | `UIPlugin` `distributed-tracing` (console Observe → Traces) and Argo CD access to UIPlugins |
 
-All three Applications are manual-sync, like the other platform Applications.
+All four Applications are manual-sync, like the other platform Applications.
 
-## Data path
+## Data path and access
 
 Services export OTLP to `box1-collector.box1-observability.svc:4317` (gRPC)
-or `:4318` (HTTP). The collector batches, limits memory and forwards to
-`tempo-box1:4317`. Tempo accepts spans only from the collector. Its query
-API is reachable only inside the namespace and through the Jaeger UI Route,
-which requires an OpenShift login with permission to get pods in
-`box1-observability`.
+or `:4318` (HTTP), unauthenticated. The collector batches, limits memory and
+forwards to the Tempo gateway `tempo-box1-gateway:4317`. It uses TLS with the
+service CA, its service-account token and the tenant header `X-Scope-OrgID: dev`.
+
+The gateway runs in the Tempo pod. It authorizes each request with OpenShift
+RBAC on resource `dev`, resourceName `traces`, in group `tempo.grafana.com`:
+
+| Who | Access | Granted by |
+|---|---|---|
+| Collector (`box1-collector`) | write (`create`) | ClusterRole `box1-traces-write-dev`, bound |
+| Cluster admins | read (`get`) | built-in |
+| Other users or groups | read (`get`) | bind ClusterRole `box1-traces-read-dev`; the user must also be able to view at least one namespace |
+
+Two UIs share that access check:
+- **Console:** Observe → Traces, from the COO `distributed-tracing` UIPlugin.
+- **Jaeger UI:** its Route now targets the gateway. It is deprecated upstream and kept alongside the console view for now.
+
+Tempo's own query API (3200) is reachable only from the Tempo pod and
+user-workload monitoring.
 
 ## Install order
 
-1. Sync `observability-operators`. Approve the two InstallPlans after checking
-   their CSV versions, then wait for both CSVs to report `Succeeded`.
+1. Sync `observability-operators`. Approve the InstallPlans after checking
+   their CSV versions, then wait for the CSVs to report `Succeeded`.
 2. Sync `user-workload-monitoring`. Wait for the Prometheus and Thanos Ruler
    pods in `openshift-user-workload-monitoring` to be ready.
 3. Sync `observability-tracing`. Wait for the TempoMonolithic `Ready`
    condition, the `tempo-box1` PVC to bind, and the collector Deployment.
-4. Turn on trace export in each service in `box1-workloads-dev`.
+4. Sync `observability-console`, then check that Observe → Traces lists
+   `box1-observability/box1` with tenant `dev`.
+5. Turn on trace export in each service in `box1-workloads-dev`.
 
 ## Outage behaviour
 

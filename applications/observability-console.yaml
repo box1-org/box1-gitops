@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-console
+  namespace: openshift-gitops
+  labels:
+    box1.org/profile: operate
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/observability/console
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-cluster-observability-operator
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true

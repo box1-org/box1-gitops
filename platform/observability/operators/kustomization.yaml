@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - tempo.yaml
   - opentelemetry.yaml
+  - cluster-observability.yaml

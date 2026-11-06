@@ -1,7 +1,7 @@
-# Tempo accepts spans only from the collector. The router reaches only the
-# OAuth proxy (8443) in front of the Jaeger UI. User-workload monitoring
-# reaches only the HTTP server (3200), which serves /metrics; no other
-# namespace can reach the query API.
+# Tempo (with its gateway in the same pod) accepts spans only from the
+# collector, through the gateway. Queries reach only the gateway, which checks
+# the caller's OpenShift identity and tenant RBAC. Tempo's own query API (3200)
+# is reachable only from the pod itself and user-workload monitoring.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -14,20 +14,33 @@ spec:
       app.kubernetes.io/instance: box1
   policyTypes: [Ingress]
   ingress:
+    # The gateway container reaches Tempo through Tempo's own Services.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tempo-monolithic
+              app.kubernetes.io/instance: box1
+    # Span ingest: collector -> gateway OTLP gRPC (Service 4317 -> pod 8090).
     - from:
         - podSelector:
             matchLabels:
               app.kubernetes.io/component: opentelemetry-collector
       ports:
         - protocol: TCP
-          port: 4317
+          port: 8090
+    # Queries: Jaeger UI Route (router) and the console Traces plugin backend
+    # -> gateway HTTP (8080). The gateway authenticates and authorizes users.
     - from:
         - namespaceSelector:
             matchLabels:
               policy-group.network.openshift.io/ingress: ""
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-cluster-observability-operator
       ports:
         - protocol: TCP
-          port: 8443
+          port: 8080
+    # Metrics.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -35,6 +48,8 @@ spec:
       ports:
         - protocol: TCP
           port: 3200
+        - protocol: TCP
+          port: 8081
 ---
 # The collector accepts unauthenticated OTLP from any namespace (services do
 # not restrict egress). Any pod could inject or flood spans; memory_limiter
