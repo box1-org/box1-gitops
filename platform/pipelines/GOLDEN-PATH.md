@@ -69,7 +69,10 @@ Subsequent main pushes use the existing shared promotion Task. It accepts `appli
 reference service), verifies its source main SHA, and changes exactly that
 service's digest/provenance files. Its first successful promotion activates the
 Deployment at one replica. The normal exact-head check gate then merges the
-development GitOps PR. The parameterized observer verifies that service's Argo
+development GitOps PR. If a required check reports the Pipelines as Code
+"pipelinerun start failure" (a transient GitHub 404 in PaC 0.50.x, box1-docs#64),
+the gate rerequests that check-run up to twice instead of failing the release;
+any other failed check still fails it. The parameterized observer verifies that service's Argo
 state, runtime digest, source annotation, public endpoints, and `/api/info.gitRef`.
 The validator renders every workload target and accepts a zero digest only for
 a zero-replica onboarding Deployment.
