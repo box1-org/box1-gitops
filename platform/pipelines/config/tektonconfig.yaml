@@ -83,11 +83,13 @@ spec:
           auto-configure-repo-repository-template: ''
           bitbucket-cloud-additional-source-ip: ''
           bitbucket-cloud-check-source-ip: 'true'
-          custom-console-name: ''
-          custom-console-url: ''
-          custom-console-url-namespace: ''
-          custom-console-url-pr-details: ''
-          custom-console-url-pr-tasklog: ''
+          # GitHub check "Details" links. Without these, PaC links every check to
+          # https://dashboard.is.not.configured (auto-detection does not fill them here).
+          custom-console-name: OpenShift Console
+          custom-console-url: https://console-openshift-console.apps.ocp.box1.org
+          custom-console-url-namespace: https://console-openshift-console.apps.ocp.box1.org/pipelines/ns/{{ namespace }}
+          custom-console-url-pr-details: https://console-openshift-console.apps.ocp.box1.org/k8s/ns/{{ namespace }}/tekton.dev~v1~PipelineRun/{{ pr }}
+          custom-console-url-pr-tasklog: https://console-openshift-console.apps.ocp.box1.org/k8s/ns/{{ namespace }}/tekton.dev~v1~PipelineRun/{{ pr }}/logs/{{ task }}
           default-max-keep-runs: '0'
           enable-cancel-in-progress-on-pull-requests: 'false'
           enable-cancel-in-progress-on-push: 'false'
