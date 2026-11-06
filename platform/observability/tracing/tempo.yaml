@@ -20,7 +20,7 @@ spec:
     enabled: true
     route:
       enabled: true
-      termination: edge
+      termination: reencrypt   # the operator uses reencrypt for the OAuth proxy
     # OpenShift OAuth proxy in front of the UI. Default access check: the
     # user can get pods in box1-observability.
     authentication:

@@ -2,7 +2,7 @@
 #   gRPC http://box1-collector.box1-observability.svc:4317
 #   HTTP http://box1-collector.box1-observability.svc:4318
 # A Tempo outage fills a bounded queue and then drops spans (counted in the
-# collector's otelcol_exporter_send_failed_spans_total metric, scraped by
+# collector's otelcol_exporter_send_failed_spans metric, scraped by
 # user-workload monitoring through the operator-created ServiceMonitor); it never blocks the
 # services, which export asynchronously in batches.
 apiVersion: opentelemetry.io/v1beta1
@@ -38,7 +38,7 @@ spec:
         spike_limit_percentage: 15
       batch: {}
     exporters:
-      otlp/tempo:
+      otlp_grpc/tempo:
         endpoint: tempo-box1.box1-observability.svc:4317
         tls:
           insecure: true
@@ -53,4 +53,4 @@ spec:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [otlp/tempo]
+          exporters: [otlp_grpc/tempo]
