@@ -1,5 +1,6 @@
 # Records the notification consumer group could not process, unchanged (box1-docs#16, decision D-006).
 # Operator replay only; see box1-org/notification-service docs/runbook.md.
+# 7 days, matching box1.order.events.v1: a dead-lettered order.placed.v1 is not kept longer than its source (user, 2026-11-06).
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
@@ -11,5 +12,5 @@ spec:
   partitions: 3
   replicas: 1
   config:
-    retention.ms: 1209600000
+    retention.ms: 604800000
     cleanup.policy: delete
