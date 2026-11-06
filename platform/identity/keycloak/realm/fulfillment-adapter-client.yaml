@@ -1,0 +1,47 @@
+# Fulfillment adapter API (box1-docs#13, decision D-002). Public PKCE client; no client secret exists.
+# Client role: fulfillment-writer (POST /api/fulfillments and /internal operator reconcile).
+# Assigning the role to a person is done in the Keycloak admin console; this file assigns none.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: fulfillment-adapter
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: fulfillment-adapter
+    name: Fulfillment adapter
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    # Native loopback redirect for a command-line PKCE login, as openshell-cli uses.
+    redirectUris:
+      - http://127.0.0.1/callback
+    webOrigins: []
+    attributes:
+      pkce.code.challenge.method: S256
+    defaultClientScopes:
+      - profile
+      - roles
+    optionalClientScopes: []
+    protocolMappers:
+      - name: fulfillment-adapter-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: fulfillment-adapter
+          access.token.claim: "true"
+          id.token.claim: "false"
+  roles:
+    - name: fulfillment-writer
+      description: Create fulfillment requests and run operator reconcile on the fulfillment adapter
+      clientRole: true
