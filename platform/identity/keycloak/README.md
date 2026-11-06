@@ -73,7 +73,12 @@ holds the session, and tokens never reach the browser.
 - **Client roles:** `console-viewer`, `console-operator` and `console-developer`.
   - After a sync, check that they exist on the client's Roles tab.
   - Assign them to people in the admin console. This file assigns none.
-- **Audience:** `operations-console` only. Because the client is public, it carries no other service's audience.
+- **Audience:** `operations-console`, plus `scenario-controller` (box1-docs#19) and `asset-service` (box1-docs#80).
+  The client is public, so any realm user can obtain its tokens. Each extra audience therefore comes with a scope
+  mapping limited to that service's read or scenario roles. For asset-service, only `telemetry-reader` is mapped,
+  and asset-service keeps only that role for tokens issued to this client. This is interim until the client is
+  confidential (box1-docs#79). To reverse it, remove the `asset-service-audience` mapper and the `asset-service`
+  scope mapping, and set the console's `CONSOLE_ASSET_FORWARD_TOKEN` to `false`.
 - **Redirect URI:** exactly `/callback`.
 
 ## Repository layout and ownership
