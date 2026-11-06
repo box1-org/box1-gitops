@@ -36,8 +36,9 @@ which requires an OpenShift login with permission to get pods in
 
 Services export asynchronously, so a collector or Tempo outage drops spans
 and does not affect requests. The collector keeps a bounded queue of 2000
-batches and retries for up to 120 s, then drops spans. Its
-`otelcol_exporter_send_failed_spans` metric counts the drops.
+export requests and retries for up to 120 s, then drops spans. Its
+`otelcol_exporter_send_failed_spans_total` metric counts the drops. User-workload
+monitoring scrapes it through the ServiceMonitor that the operator creates.
 
 ## Disable and rollback
 
@@ -49,6 +50,14 @@ batches and retries for up to 120 s, then drops spans. Its
   Application, or set `enableUserWorkload: false`.
 - **Remove the operators:** delete the CRs first. Then delete the
   Subscriptions and CSVs. The CRDs are left in place unless removed by hand.
+
+## User-workload monitoring sizing
+
+`user-workload-monitoring-config` is not managed yet. Prometheus therefore
+uses OpenShift defaults: emptyDir storage and default retention, so metric
+history is lost when the pod restarts. Retention and a PVC on `lvms-vg1`
+will be set once usage is measured. That ConfigMap lives in a namespace
+created only after UWM is enabled, so it is a follow-up change.
 
 ## Lab limits
 

@@ -1,6 +1,7 @@
-# Tempo accepts spans only from the collector, and serves the Jaeger UI only
-# through the OpenShift router (OAuth proxy). Its query API (3200) is not
-# reachable from other namespaces.
+# Tempo accepts spans only from the collector. The router reaches only the
+# OAuth proxy (8443) in front of the Jaeger UI. User-workload monitoring
+# reaches only the HTTP server (3200), which serves /metrics; no other
+# namespace can reach the query API.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -24,13 +25,21 @@ spec:
         - namespaceSelector:
             matchLabels:
               policy-group.network.openshift.io/ingress: ""
+      ports:
+        - protocol: TCP
+          port: 8443
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 3200
 ---
-# The collector accepts OTLP from any namespace (services do not restrict
-# egress) and metrics scrapes from user-workload monitoring.
+# The collector accepts unauthenticated OTLP from any namespace (services do
+# not restrict egress). Any pod could inject or flood spans; memory_limiter
+# bounds the impact. Accepted for the lab. It also accepts metrics scrapes
+# from user-workload monitoring.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

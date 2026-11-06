@@ -2,7 +2,8 @@
 #   gRPC http://box1-collector.box1-observability.svc:4317
 #   HTTP http://box1-collector.box1-observability.svc:4318
 # A Tempo outage fills a bounded queue and then drops spans (counted in the
-# collector's otelcol_exporter_send_failed_spans metric); it never blocks the
+# collector's otelcol_exporter_send_failed_spans_total metric, scraped by
+# user-workload monitoring through the operator-created ServiceMonitor); it never blocks the
 # services, which export asynchronously in batches.
 apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
@@ -11,6 +12,9 @@ metadata:
   namespace: box1-observability
 spec:
   mode: deployment
+  observability:
+    metrics:
+      enableMetrics: true
   replicas: 1
   resources:
     requests:
@@ -40,7 +44,7 @@ spec:
           insecure: true
         sending_queue:
           enabled: true
-          queue_size: 2000
+          queue_size: 2000   # export requests, not spans
         retry_on_failure:
           enabled: true
           max_elapsed_time: 120s
