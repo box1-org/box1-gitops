@@ -28,8 +28,11 @@ spec:
     directAccessGrantsEnabled: false
     serviceAccountsEnabled: false
     fullScopeAllowed: false
+    # RH-SSO 7.6 checks post_logout_redirect_uri against these valid redirect URIs (it does not honour the
+    # post.logout.redirect.uris attribute below), so the exact signed-out page is listed too (box1-docs#18).
     redirectUris:
       - https://operations-console-dev.apps.ocp.box1.org/callback
+      - https://operations-console-dev.apps.ocp.box1.org/signed-out.html
     webOrigins:
       - https://operations-console-dev.apps.ocp.box1.org
     attributes:
