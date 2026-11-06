@@ -3,10 +3,12 @@
 # Client roles: console-viewer (read every page), console-operator (viewer + place orders),
 # console-developer (viewer + deployed revisions). Assigning roles to people is done in the Keycloak admin console;
 # this file assigns none.
-# Audience: the console's own only. The client is public, so any realm user could run a PKCE flow against it and
-# hold its token; it therefore carries no other service's audience (security review SEC-1). The console reads the
-# other services without a user token while their reads are open; forwarding tokens later needs a client whose
-# tokens are meant for them (box1-docs#18, user decision O-9).
+# Audience: the console's own, plus scenario-controller (box1-docs#19, user decision 2026-11-06). The client is public,
+# so any realm user could run a PKCE flow against it and hold its token; it therefore carries no other service's
+# audience (security review SEC-1) except the scenario controller's, which the console calls with the person's own
+# token so that the controller's scenario-viewer/scenario-operator roles decide what they may do and its audit names
+# them. A token without one of those roles is refused by the controller (403), as for scenario-controller-cli. The
+# console reads the other services without a user token while their reads are open (box1-docs#18, O-9).
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakClient
 metadata:
@@ -52,6 +54,26 @@ spec:
           included.client.audience: operations-console
           access.token.claim: "true"
           id.token.claim: "false"
+      - name: scenario-controller-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: scenario-controller
+          access.token.claim: "true"
+          id.token.claim: "false"
+  # fullScopeAllowed is false, so the scenario controller's roles reach this client's tokens only through this mapping.
+  # The operator's scope-mapping call needs the target's internal ID (pinned in scenario-controller-client.yaml, #79).
+  scopeMappings:
+    clientMappings:
+      scenario-controller:
+        id: 28ee7934-a30a-4dfc-9f78-c4447ad8e5a2  # scenario-controller's pinned internal ID
+        client: scenario-controller
+        mappings:
+          - name: scenario-viewer
+            clientRole: true
+          - name: scenario-operator
+            clientRole: true
   roles:
     - name: console-viewer
       description: Read every box1 Operations console page
