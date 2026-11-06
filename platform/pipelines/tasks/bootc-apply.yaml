@@ -1,0 +1,169 @@
+# Apply a promoted RHEL image mode (bootc) OS image to a running VM and prove it
+# booted (box1-docs#25). Runs after box1-gitops-promote merged and Argo synced, and
+# after box1-bootc-channel moved <name>:<channel> to the promoted digest.
+#
+#   1. virtctl ssh (port-forward through the KubeVirt API) as a restricted guest user
+#      whose sudoers allow only `bootc upgrade --apply` and `bootc status --format json`.
+#   2. `bootc upgrade --apply` pulls the channel tag and reboots if it changed.
+#   3. Wait for the guest, then require: booted digest == image-digest, the expected
+#      default target, and the listed units active.
+#
+# Run as ci-vm-deploy: the workload's box1-workloads-dev manifests grant it `get` on
+# its VMI and virtualmachineinstances/portforward, and nothing else.
+# The private key is a Secret created outside Git (key `ssh-privatekey`); the guest
+# receives the public key through KubeVirt accessCredentials.
+# Host keys are accepted on first use and printed; pinning them is a follow-up.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bootc-apply
+  namespace: box1-ci
+spec:
+  params:
+  - name: image-digest
+    type: string
+  - name: application-name
+    type: string
+  - name: application-namespace
+    type: string
+  - name: ssh-user
+    type: string
+    default: box1-deploy
+  - name: ssh-key-secret
+    type: string
+  - name: expected-target
+    type: string
+    default: ''
+    description: Optional; required `systemctl get-default` result.
+  - name: expected-units
+    type: string
+    default: ''
+    description: Optional space-separated units that must be active after boot.
+  - name: timeout-seconds
+    type: string
+    default: '900'
+  results:
+  - name: booted-digest
+    description: OS image digest the guest reports as booted.
+  volumes:
+  - name: ssh-key
+    secret:
+      secretName: $(params.ssh-key-secret)
+      defaultMode: 0440
+  steps:
+  - name: apply
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    computeResources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 512Mi}
+    volumeMounts:
+    - name: ssh-key
+      mountPath: /etc/box1-ssh
+      readOnly: true
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: IMAGE_DIGEST
+      value: $(params.image-digest)
+    - name: APPLICATION_NAME
+      value: $(params.application-name)
+    - name: APPLICATION_NAMESPACE
+      value: $(params.application-namespace)
+    - name: SSH_USER
+      value: $(params.ssh-user)
+    - name: EXPECTED_TARGET
+      value: $(params.expected-target)
+    - name: EXPECTED_UNITS
+      value: $(params.expected-units)
+    - name: TIMEOUT_SECONDS
+      value: $(params.timeout-seconds)
+    - name: VIRTCTL_URL
+      value: http://hyperconverged-cluster-cli-download.openshift-cnv.svc:8080/amd64/linux/virtctl.tar.gz
+    script: |
+      #!/usr/bin/env python3
+      import json, os, pathlib, re, shutil, subprocess, tarfile, time, urllib.request
+      env=os.environ
+      digest=env['IMAGE_DIGEST']; name=env['APPLICATION_NAME']; namespace=env['APPLICATION_NAMESPACE']; user=env['SSH_USER']
+      assert re.fullmatch('sha256:[a-f0-9]{64}',digest), 'image-digest must be sha256:<64 hex>'
+      assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name) and re.fullmatch('[a-z][a-z0-9-]{2,62}',namespace)
+      assert re.fullmatch('[a-z_][a-z0-9_-]{0,31}',user)
+      assert re.fullmatch('[A-Za-z0-9@._-]*',env['EXPECTED_TARGET'])
+      units=env['EXPECTED_UNITS'].split()
+      assert all(re.fullmatch('[A-Za-z0-9@._-]+',u) for u in units)
+      timeout=int(env['TIMEOUT_SECONDS'])
+      home=pathlib.Path(env['HOME']); home.mkdir(parents=True,exist_ok=True)
+      bin_dir=home/'bin'; bin_dir.mkdir(exist_ok=True)
+
+      # virtctl from the cluster's own download service, so it matches the cluster.
+      archive=home/'virtctl.tar.gz'
+      with urllib.request.urlopen(env['VIRTCTL_URL'],timeout=60) as r, open(archive,'wb') as f: shutil.copyfileobj(r,f)
+      with tarfile.open(archive) as t:
+          member=next(m for m in t.getmembers() if m.isfile() and pathlib.PurePath(m.name).name=='virtctl')
+          member.name='virtctl'; t.extract(member,bin_dir,filter='data')
+      virtctl=str(bin_dir/'virtctl'); os.chmod(virtctl,0o755)
+      print(subprocess.run([virtctl,'version','--client'],capture_output=True,text=True).stdout.strip())
+
+      key=home/'id'; key.write_bytes(pathlib.Path('/etc/box1-ssh/ssh-privatekey').read_bytes()); key.chmod(0o600)
+      known=home/'known_hosts'
+
+      def ssh(command,check=True,quiet=False):
+          cmd=[virtctl,'ssh','--namespace',namespace,'--username',user,'--identity-file',str(key),
+               '--known-hosts',str(known),
+               '-t','-o StrictHostKeyChecking=accept-new','-t','-o ConnectTimeout=15',
+               '-t','-o ServerAliveInterval=10','-t','-o BatchMode=yes','-t','-o LogLevel=ERROR',
+               '--command',command,'vmi/'+name]
+          r=subprocess.run(cmd,capture_output=True,text=True,timeout=300)
+          if not quiet:
+              print('$ '+command+' -> '+str(r.returncode))
+              if r.stdout.strip(): print(r.stdout.rstrip())
+              if r.stderr.strip(): print(r.stderr.rstrip())
+          if check and r.returncode!=0: raise SystemExit('Guest command failed: '+command)
+          return r
+
+      def booted():
+          r=ssh('sudo /usr/bin/bootc status --format json',check=False,quiet=True)
+          if r.returncode!=0: return None
+          status=json.loads(r.stdout).get('status',{})
+          image=(status.get('booted') or {}).get('image') or {}
+          return image.get('imageDigest'), image.get('image',{}).get('image')
+
+      deadline=time.monotonic()+timeout
+      before=None
+      while time.monotonic()<deadline and before is None:
+          before=booted()
+          if before is None: time.sleep(10)
+      if before is None: raise TimeoutError('Guest SSH did not become reachable')
+      print('Booted before: '+json.dumps(before))
+      if known.exists(): print('Guest host keys (trust on first use):\n'+known.read_text().strip())
+
+      if before[0]!=digest:
+          # The guest reboots into the new deployment; the session usually ends with 255.
+          r=ssh('sudo /usr/bin/bootc upgrade --apply',check=False)
+          if r.returncode not in (0,255): raise SystemExit('bootc upgrade --apply failed')
+          time.sleep(20)
+      after=None
+      while time.monotonic()<deadline:
+          after=booted()
+          if after and after[0]==digest: break
+          time.sleep(10)
+      else:
+          raise TimeoutError('Guest did not boot '+digest+'; last seen '+json.dumps(after))
+      print('Booted after: '+json.dumps(after))
+
+      failures=[]
+      settle=time.monotonic()+120
+      while True:
+          failures=[]
+          if env['EXPECTED_TARGET']:
+              got=ssh('systemctl get-default',check=False).stdout.strip()
+              if got!=env['EXPECTED_TARGET']: failures.append('default target '+got)
+          for unit in units:
+              got=ssh('systemctl is-active '+unit,check=False).stdout.strip()
+              if got!='active': failures.append(unit+' '+got)
+          if not failures or time.monotonic()>settle: break
+          time.sleep(10)
+      ssh('cat /usr/lib/box1-image-release',check=False)
+      if failures: raise SystemExit('Post-boot checks failed: '+', '.join(failures))
+      pathlib.Path('$(results.booted-digest.path)').write_text(after[0])
+      print('PASS: '+name+' booted '+digest)

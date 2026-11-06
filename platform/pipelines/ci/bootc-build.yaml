@@ -61,3 +61,14 @@ subjects:
   - kind: ServiceAccount
     name: ci-bootc-release
     namespace: box1-ci
+---
+# Deploys: box1-bootc-apply runs `bootc upgrade --apply` in a promoted VM over
+# virtctl ssh. Unprivileged. Each workload grants it `get` on its VMI and
+# virtualmachineinstances/portforward in its own box1-workloads-dev manifests.
+# The SSH private key is a Secret created outside Git, one per workload:
+#   - Secret box1-ci/legacy-erp-deploy-ssh (key ssh-privatekey), box1-docs#25.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-vm-deploy
+  namespace: box1-ci
