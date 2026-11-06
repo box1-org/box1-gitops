@@ -7,8 +7,11 @@
 # so any realm user could run a PKCE flow against it and hold its token; it therefore carries no other service's
 # audience (security review SEC-1) except the scenario controller's, which the console calls with the person's own
 # token so that the controller's scenario-viewer/scenario-operator roles decide what they may do and its audit names
-# them. A token without one of those roles is refused by the controller (403), as for scenario-controller-cli. The
-# console reads the other services without a user token while their reads are open (box1-docs#18, O-9).
+# them. A token without one of those roles is refused by the controller (403), as for scenario-controller-cli.
+# asset-service (box1-docs#80, interim until this client is confidential, box1-docs#79): audience asset-service and
+# only the telemetry-reader role are mapped, and asset-service keeps only that role for tokens issued to this client,
+# so a person's own reader role decides whether the console shows them alerts; writer and chaos roles never reach it.
+# The console reads the other services without a user token while their reads are open (box1-docs#18, O-9).
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakClient
 metadata:
@@ -62,6 +65,14 @@ spec:
           included.client.audience: scenario-controller
           access.token.claim: "true"
           id.token.claim: "false"
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: "true"
+          id.token.claim: "false"
   # fullScopeAllowed is false, so the scenario controller's roles reach this client's tokens only through this mapping.
   # The operator's scope-mapping call needs the target's internal ID (pinned in scenario-controller-client.yaml, #79).
   scopeMappings:
@@ -73,6 +84,12 @@ spec:
           - name: scenario-viewer
             clientRole: true
           - name: scenario-operator
+            clientRole: true
+      asset-service:
+        id: 0b509c04-6761-4cc3-af7d-be7ac1c7c743  # asset-service's pinned internal ID
+        client: asset-service
+        mappings:
+          - name: telemetry-reader
             clientRole: true
   roles:
     - name: console-viewer

@@ -13,6 +13,9 @@ spec:
     matchLabels:
       realm: box1
   client:
+    # Pinned to the internal ID Keycloak generated on first creation, so the operations console's scope mapping can
+    # name it (the operator's scope-mapping call takes this UUID, not the clientId; box1-docs#80).
+    id: 0b509c04-6761-4cc3-af7d-be7ac1c7c743
     clientId: asset-service
     name: Asset telemetry service
     enabled: true
