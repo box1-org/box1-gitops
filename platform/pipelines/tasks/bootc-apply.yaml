@@ -138,9 +138,12 @@ spec:
       if known.exists(): print('Guest host keys (trust on first use):\n'+known.read_text().strip())
 
       if before[0]!=digest:
-          # The guest reboots into the new deployment; the session usually ends with 255.
+          # The guest reboots into the new deployment and drops the session: ssh exits
+          # 255, which virtctl reports as its own exit status 1. Judge by bootc's output
+          # instead, and let the booted-digest check below decide success.
           r=ssh('sudo /usr/bin/bootc upgrade --apply',check=False)
-          if r.returncode not in (0,255): raise SystemExit('bootc upgrade --apply failed')
+          if r.returncode!=0 and 'Queued for next boot' not in r.stdout+r.stderr:
+              raise SystemExit('bootc upgrade --apply failed before staging an image')
           time.sleep(20)
       after=None
       while time.monotonic()<deadline:
