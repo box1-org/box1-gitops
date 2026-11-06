@@ -1,12 +1,16 @@
 # Tempo (with its gateway in the same pod) accepts spans only from the
 # collector, through the gateway. Queries reach only the gateway, which checks
-# the caller's OpenShift identity and tenant RBAC. Tempo's own query API (3200)
-# is reachable only from the pod itself and user-workload monitoring.
+# the caller's OpenShift identity and tenant RBAC. Tempo's own API (3200), which
+# trusts any X-Scope-OrgID, is not reachable from other pods; the gateway
+# reaches Tempo over localhost. Applied last (wave 2), after the collector has
+# moved to the gateway.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: tempo-box1
   namespace: box1-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   podSelector:
     matchLabels:
@@ -14,12 +18,6 @@ spec:
       app.kubernetes.io/instance: box1
   policyTypes: [Ingress]
   ingress:
-    # The gateway container reaches Tempo through Tempo's own Services.
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: tempo-monolithic
-              app.kubernetes.io/instance: box1
     # Span ingest: collector -> gateway OTLP gRPC (Service 4317 -> pod 8090).
     - from:
         - podSelector:
@@ -37,19 +35,12 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: openshift-cluster-observability-operator
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: distributed-tracing
       ports:
         - protocol: TCP
           port: 8080
-    # Metrics.
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: openshift-user-workload-monitoring
-      ports:
-        - protocol: TCP
-          port: 3200
-        - protocol: TCP
-          port: 8081
 ---
 # The collector accepts unauthenticated OTLP from any namespace (services do
 # not restrict egress). Any pod could inject or flood spans; memory_limiter
@@ -60,6 +51,8 @@ kind: NetworkPolicy
 metadata:
   name: box1-collector
   namespace: box1-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   podSelector:
     matchLabels:

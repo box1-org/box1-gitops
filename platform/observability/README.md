@@ -27,15 +27,26 @@ RBAC on resource `dev`, resourceName `traces`, in group `tempo.grafana.com`:
 | Who | Access | Granted by |
 |---|---|---|
 | Collector (`box1-collector`) | write (`create`) | ClusterRole `box1-traces-write-dev`, bound |
-| Cluster admins | read (`get`) | built-in |
+| Cluster admins, and service accounts with wildcard `get` (for example Argo CD and some operators) | read (`get`) | built-in |
 | Other users or groups | read (`get`) | bind ClusterRole `box1-traces-read-dev`; the user must also be able to view at least one namespace |
+
+Write authorization covers only the collector-to-gateway hop. The collector
+itself accepts unauthenticated OTLP from any namespace and writes everything
+as tenant `dev`.
 
 Two UIs share that access check:
 - **Console:** Observe → Traces, from the COO `distributed-tracing` UIPlugin.
-- **Jaeger UI:** its Route now targets the gateway. It is deprecated upstream and kept alongside the console view for now.
+- **Jaeger UI:** its Route now targets the gateway, and the UI lives at
+  `https://<route>/api/traces/v1/dev/search` (no longer `/`). It is deprecated
+  upstream and kept alongside the console view for now.
 
-Tempo's own query API (3200) is reachable only from the Tempo pod and
-user-workload monitoring.
+Tempo's own API (3200) trusts any tenant header, so it is not reachable from
+other pods. Tempo is not scraped by user-workload monitoring.
+
+Switching to multitenancy hid traces written earlier in single-tenant mode;
+they expire with the 72 h retention. Rolling back means reverting the Tempo,
+collector and NetworkPolicy changes together, which hides traces written as
+`dev` until they expire.
 
 ## Install order
 

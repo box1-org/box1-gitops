@@ -10,6 +10,11 @@ kind: OpenTelemetryCollector
 metadata:
   name: box1
   namespace: box1-observability
+  annotations:
+    # After the TempoMonolithic (wave 0) so the gateway exists before the
+    # collector switches to it. Argo has no health check for TempoMonolithic,
+    # so confirm the gateway Service has endpoints when syncing.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   mode: deployment
   observability:
