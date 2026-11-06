@@ -48,6 +48,38 @@ they expire with the 72 h retention. Rolling back means reverting the Tempo,
 collector and NetworkPolicy changes together, which hides traces written as
 `dev` until they expire.
 
+## Resources managed outside this repository
+
+**UIPlugin `monitoring` (with Perses).** OpenShift Virtualization's
+`virt-platform-autopilot` (asset `monitoring-ui-plugin`, deployment
+`openshift-cnv/virt-platform-autopilot`) created it at 2026-11-06 21:56Z. That
+was about 20 s after the Cluster Observability Operator installed the UIPlugin
+CRD. It is labelled `platform.kubevirt.io/managed-by: virt-platform-autopilot`
+and the autopilot reconciles it continuously.
+
+Its spec, recorded here for reference only:
+
+```yaml
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: monitoring
+spec:
+  type: Monitoring
+  monitoring:
+    perses:
+      enabled: true
+```
+
+It enables `monitoring-console-plugin` in the console and runs `perses` and
+`perses-operator` in `openshift-cluster-observability-operator` (about 85 Mi
+idle).
+
+Argo CD deliberately does not manage it, so two controllers do not own one
+object. Edits or deletes are reverted by the autopilot. A supported way to turn
+it off through HyperConverged has not been established. Removing the COO (and
+with it the UIPlugin CRD) makes the autopilot skip the asset.
+
 ## Install order
 
 1. Sync `observability-operators`. Approve the InstallPlans after checking
