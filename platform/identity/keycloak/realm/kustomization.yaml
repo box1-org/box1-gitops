@@ -7,6 +7,7 @@ resources:
   - developer-hub-client.yaml
   - asset-service-client.yaml
   - fulfillment-adapter-client.yaml
+  - notification-service-client.yaml
   - operations-console-client.yaml
   - inventory-service-client.yaml
   - scenario-controller-client.yaml
