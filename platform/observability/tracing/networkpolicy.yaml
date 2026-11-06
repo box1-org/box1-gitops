@@ -1,0 +1,58 @@
+# Tempo accepts spans only from the collector, and serves the Jaeger UI only
+# through the OpenShift router (OAuth proxy). Its query API (3200) is not
+# reachable from other namespaces.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tempo-box1
+  namespace: box1-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tempo-monolithic
+      app.kubernetes.io/instance: box1
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-user-workload-monitoring
+---
+# The collector accepts OTLP from any namespace (services do not restrict
+# egress) and metrics scrapes from user-workload monitoring.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: box1-collector
+  namespace: box1-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: opentelemetry-collector
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 8888
