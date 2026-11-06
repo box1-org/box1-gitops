@@ -1,0 +1,15 @@
+# Records the notification consumer group could not process, unchanged (box1-docs#16, decision D-006).
+# Operator replay only; see box1-org/notification-service docs/runbook.md.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: box1.notification.dlq.v1
+  namespace: box1-kafka
+  labels:
+    strimzi.io/cluster: box1-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 1209600000
+    cleanup.policy: delete

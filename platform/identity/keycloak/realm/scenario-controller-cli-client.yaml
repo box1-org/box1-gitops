@@ -1,0 +1,53 @@
+# Scenario controller CLI (box1-docs#19, D-009). Public client for people running scripts/scenario.sh: device
+# authorization grant or authorization code + PKCE, no secret. Its tokens carry only the scenario-controller audience
+# and, through the scope mapping, only the scenario-controller client roles the user has been assigned. Any realm user
+# can obtain a token, but without an assigned role the controller answers 403. The controller accepts azp
+# scenario-controller-cli only (SCENARIO_ALLOWED_AZP).
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: scenario-controller-cli
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: scenario-controller-cli
+    name: box1 scenario controller CLI
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    redirectUris:
+      - http://127.0.0.1/*
+    attributes:
+      pkce.code.challenge.method: S256
+      oauth2.device.authorization.grant.enabled: "true"
+    defaultClientScopes:
+      - profile
+      - roles
+    optionalClientScopes: []
+    protocolMappers:
+      - name: scenario-controller-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: scenario-controller
+          access.token.claim: "true"
+          id.token.claim: "false"
+  scopeMappings:
+    clientMappings:
+      scenario-controller:
+        client: scenario-controller
+        mappings:
+          - name: scenario-viewer
+            clientRole: true
+          - name: scenario-operator
+            clientRole: true
