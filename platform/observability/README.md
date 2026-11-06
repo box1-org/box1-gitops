@@ -62,9 +62,17 @@ collector and NetworkPolicy changes together, which hides traces written as
   | `fulfillment-adapter-erp` | `fulfillment-adapter-dev` | `Box1ErpAcknowledgementDelayed`, `Box1ErpAwaitingOperator`, `Box1FulfillmentNeedsAttention`, `Box1FulfillmentFilesQuarantined`, `Box1FulfillmentMetricsStale`, `Box1ServiceDown` |
   | `order-service-flow` | `order-service-dev` | `Box1OrdersStuck`, `Box1OrderOutboxDelayed`, `Box1ServiceDown` |
   | `inventory-service-flow` | `inventory-service-dev` | `Box1InventoryDeadLetters`, `Box1ServiceDown` |
+  | `<service>-availability` | notification, asset, scenario-controller, operations-console | `Box1ServiceDown` |
 
-  Alerts appear under Observe → Alerting and go to the platform Alertmanager.
-  Thresholds are lab starting points; measure and revise them.
+  Rules carry `openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus`, so
+  the user-workload Prometheus evaluates them (no Thanos Ruler lag). Alerts appear
+  under Observe → Alerting and go to the platform Alertmanager.
+
+  `Box1ErpAcknowledgementDelayed` counts from when the adapter accepts a request:
+  it fires once the oldest unacknowledged request is over 30 s old for 15 s.
+  Worst case is about 90 s, including the adapter's 15 s gauge refresh, a 15 s
+  scrape and 15 s evaluation. Thresholds are lab starting points; measure and
+  revise them.
 - **Dashboard:** `box1-order-flow` (Perses, in `box1-observability`) shows:
   - order age and stuck orders, and order state transitions;
   - ERP acknowledgement age, backlog and operator queue;
