@@ -5,3 +5,4 @@ resources:
   - realm.yaml
   - openshell-client.yaml
   - developer-hub-client.yaml
+  - asset-service-client.yaml
