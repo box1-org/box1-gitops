@@ -12,6 +12,9 @@ spec:
     matchLabels:
       realm: box1
   client:
+    # Pinned to the internal ID Keycloak generated on first creation, so other clients' scope mappings can name it
+    # (the operator's scope-mapping call takes this UUID, not the clientId; box1-docs#19).
+    id: e9b8158d-c5a6-4003-94ec-158e883bc9d5
     clientId: inventory-service
     name: box1 inventory service
     enabled: true

@@ -45,6 +45,7 @@ spec:
   scopeMappings:
     clientMappings:
       scenario-controller:
+        id: 28ee7934-a30a-4dfc-9f78-c4447ad8e5a2  # scenario-controller's pinned internal ID
         client: scenario-controller
         mappings:
           - name: scenario-viewer
