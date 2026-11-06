@@ -57,6 +57,14 @@ implicit flow, and service accounts are disabled. The realm declares
 also bootstrapped through the Admin API because the legacy operator did not
 add them during realm update.
 
+## Client roles
+
+The legacy operator (RH-SSO 7.6) creates a `KeycloakClient` but did not create the client roles declared in its
+`spec.roles` on this cluster. Observed for `asset-service` on 2026-11-05 (box1-docs#15): the client and its redirect
+rules appeared, its three roles did not. After a client with `spec.roles` syncs, check its **Roles** tab in the admin
+console and create any missing role with exactly the declared name, then assign it. The declaration in Git stays the
+record of which roles should exist. Service account role mappings for confidential clients were not checked.
+
 The `mike` account was provisioned through the Admin API with both roles.
 Its temporary initial password is in the out-of-Git Kubernetes Secret
 `openshell-mike-initial-login` in namespace `keycloak`. First browser login
