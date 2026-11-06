@@ -9,7 +9,7 @@ uses object storage. Centralized logging is deferred to
 |---|---|---|
 | `observability-operators` (0) | `operators/` | Red Hat build of Tempo and Red Hat build of OpenTelemetry operators, `stable` channel, manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
-| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, Jaeger UI behind OpenShift OAuth), `OpenTelemetryCollector` `box1`, NetworkPolicies |
+| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, Jaeger UI behind OpenShift OAuth, reencrypt Route), `OpenTelemetryCollector` `box1`, NetworkPolicies |
 
 All three Applications are manual-sync, like the other platform Applications.
 
@@ -37,7 +37,7 @@ which requires an OpenShift login with permission to get pods in
 Services export asynchronously, so a collector or Tempo outage drops spans
 and does not affect requests. The collector keeps a bounded queue of 2000
 export requests and retries for up to 120 s, then drops spans. Its
-`otelcol_exporter_send_failed_spans_total` metric counts the drops. User-workload
+`otelcol_exporter_send_failed_spans` (no `_total` suffix in collector v0.158) metric counts the drops. User-workload
 monitoring scrapes it through the ServiceMonitor that the operator creates.
 
 ## Disable and rollback
