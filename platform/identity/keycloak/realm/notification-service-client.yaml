@@ -1,0 +1,53 @@
+# Notification service operator API (box1-docs#16, decision D-007). Public PKCE client; no client secret exists.
+# Client roles:
+#   notification-reader          read notifications and the stub provider state
+#   notification-fault-operator  switch stub fault modes, only where the service allowlists its namespace
+# Assigning a role to a person is done in the Keycloak admin console; this file assigns none.
+# Tokens from other clients get no role from these: the service checks azp (asset-service SEC-3 lesson).
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: notification-service
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: notification-service
+    name: Notification service
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    # Native loopback redirect for a command-line PKCE login, as openshell-cli and fulfillment-adapter use.
+    redirectUris:
+      - http://127.0.0.1/callback
+    webOrigins: []
+    attributes:
+      pkce.code.challenge.method: S256
+    defaultClientScopes:
+      - profile
+      - roles
+    optionalClientScopes: []
+    protocolMappers:
+      - name: notification-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: notification-service
+          access.token.claim: "true"
+          id.token.claim: "false"
+  roles:
+    - name: notification-reader
+      description: Read operator notifications, their attempts and receipts, and the stub provider state
+      clientRole: true
+    - name: notification-fault-operator
+      description: Switch the stub delivery provider's fault modes in an allowlisted demo namespace
+      clientRole: true
