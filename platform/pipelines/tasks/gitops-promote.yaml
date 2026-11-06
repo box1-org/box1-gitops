@@ -137,6 +137,31 @@ spec:
           new[v]=vm
           return new
 
+      # Pipelines as Code 0.50.x can fail to start a PipelineRun when GitHub answers a
+      # check-run update with a transient 404 just after creating it (upstream
+      # tektoncd/pipelines-as-code#2920, fixed in 0.52.0; box1-docs#64). PaC then
+      # posts a separate failed check-run titled 'pipelinerun start failure'. That run
+      # never executed, so rerequest it instead of failing the release.
+      START_FAILURE='pipelinerun start failure'
+      MAX_START_RETRIES=2
+
+      def evaluate_checks(checks, required, rerequested):
+          """Judge the newest box1-pipelines run of each required check.
+
+          Returns (passed, failed_names, start_failures). Check-runs already in
+          `rerequested` count as pending until PaC posts a newer run.
+          """
+          selected={}
+          for check in sorted(checks,key=lambda value:value['id']):
+              if check['name'] in required and check['app']['slug']=='box1-pipelines': selected[check['name']]=check
+          failed=[]; start_failures=[]
+          for check_name,check in sorted(selected.items()):
+              if check['status']!='completed' or check['conclusion']=='success' or check['id'] in rerequested: continue
+              if (check.get('output') or {}).get('title')==START_FAILURE: start_failures.append(check)
+              else: failed.append(check_name)
+          passed=len(selected)==len(required) and all(c['status']=='completed' and c['conclusion']=='success' for c in selected.values())
+          return passed, failed, start_failures
+
       def kube(path, method='GET', body=None):
           account=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
           token=(account/'token').read_text().strip()
@@ -241,16 +266,20 @@ spec:
       expected_head=commit['sha']
       required=['Pipelines as Code CI / box1-phase1-smoke-','Pipelines as Code CI / box1-gitops-validate-']
       deadline=time.monotonic()+900
+      rerequested=set(); start_retries={}
       while time.monotonic()<deadline:
           current=github(gitops+'/pulls/'+str(pr['number']))
           assert current['state']=='open' and current['head']['sha']==expected_head, 'GitOps PR changed during validation'
-          checks=github(gitops+'/commits/'+expected_head+'/check-runs?per_page=100')['check_runs']
-          selected={}
-          for check in sorted(checks,key=lambda value:value['id']):
-              if check['name'] in required and check['app']['slug']=='box1-pipelines': selected[check['name']]=check
-          failed=[name for name,check in selected.items() if check['status']=='completed' and check['conclusion']!='success']
+          checks=github(gitops+'/commits/'+expected_head+'/check-runs?per_page=100&filter=all')['check_runs']
+          passed,failed,start_failures=evaluate_checks(checks,required,rerequested)
           assert not failed, 'Required GitOps check failed: '+', '.join(failed)
-          if len(selected)==len(required) and all(c['status']=='completed' and c['conclusion']=='success' for c in selected.values()): break
+          for check in start_failures:
+              start_retries[check['name']]=start_retries.get(check['name'],0)+1
+              assert start_retries[check['name']]<=MAX_START_RETRIES, 'Required GitOps check failed to start after %d rerequests: %s' % (MAX_START_RETRIES,check['name'])
+              github(gitops+'/check-runs/'+str(check['id'])+'/rerequest','POST')
+              rerequested.add(check['id'])
+              print('Rerequested %s after a Pipelines as Code start failure (check-run %s, attempt %d/%d; box1-docs#64)' % (check['name'],check['id'],start_retries[check['name']],MAX_START_RETRIES))
+          if passed: break
           time.sleep(10)
       else: raise TimeoutError('Timed out waiting for required checks on GitOps PR')
       # Validate the full file contents again, after checks, before the exact-SHA merge.

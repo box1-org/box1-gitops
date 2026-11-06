@@ -87,8 +87,8 @@ def promotion_functions():
     """Load only the pure helper definitions from the Task script (no network code runs)."""
     import re
     tree = ast.parse(script_text())
-    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in ("candidate_paths", "plan_updates"))
-            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "ZERO" for t in n.targets))]
+    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in ("candidate_paths", "plan_updates", "evaluate_checks"))
+            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") in ("ZERO", "START_FAILURE", "MAX_START_RETRIES") for t in n.targets))]
     namespace = {"re": re}
     exec(compile(ast.Module(body=keep, type_ignores=[]), str(TASK), "exec"), namespace)
     return namespace
@@ -157,6 +157,65 @@ class PromotionPlan(unittest.TestCase):
         for disk in ["", "sha256:" + "0" * 64, "latest"]:
             with self.assertRaisesRegex(AssertionError, "disk digest"):
                 self.f["plan_updates"]("virtual-machine", name, old, self.SOURCE, self.DIGEST, disk, "run")
+
+
+class RequiredChecks(unittest.TestCase):
+    """box1-docs#64: a PaC 'pipelinerun start failure' is rerequested, not treated as a failed release."""
+    VALIDATE = "Pipelines as Code CI / box1-gitops-validate-"
+    SMOKE = "Pipelines as Code CI / box1-phase1-smoke-"
+    REQUIRED = [SMOKE, VALIDATE]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.f = promotion_functions()
+
+    def run_(self, id_, name, status="completed", conclusion="success", title="Success", app="box1-pipelines"):
+        return {"id": id_, "name": name, "status": status, "conclusion": None if status != "completed" else conclusion,
+                "output": {"title": title}, "app": {"slug": app}}
+
+    def evaluate(self, checks, rerequested=()):
+        return self.f["evaluate_checks"](checks, self.REQUIRED, set(rerequested))
+
+    def test_all_success_passes(self):
+        self.assertEqual(self.evaluate([self.run_(1, self.SMOKE), self.run_(2, self.VALIDATE)]), (True, [], []))
+
+    def test_missing_or_running_check_is_pending(self):
+        self.assertEqual(self.evaluate([self.run_(1, self.SMOKE)]), (False, [], []))
+        self.assertEqual(self.evaluate([self.run_(1, self.SMOKE), self.run_(2, self.VALIDATE, status="in_progress")]), (False, [], []))
+
+    def test_real_failure_still_fails(self):
+        passed, failed, start = self.evaluate([self.run_(1, self.SMOKE), self.run_(2, self.VALIDATE, conclusion="failure", title="Failed")])
+        self.assertEqual((passed, failed, start), (False, [self.VALIDATE], []))
+
+    def test_start_failure_is_rerequested_not_failed(self):
+        # Observed shape: a stranded queued run, then a newer failed run titled 'pipelinerun start failure'.
+        stranded = self.run_(10, self.VALIDATE, status="queued", title="Pending")
+        start = self.run_(12, self.VALIDATE, conclusion="failure", title=self.f["START_FAILURE"])
+        passed, failed, starts = self.evaluate([self.run_(11, self.SMOKE), stranded, start])
+        self.assertEqual((passed, failed), (False, []))
+        self.assertEqual([c["id"] for c in starts], [12])
+
+    def test_rerequested_run_is_pending_until_superseded(self):
+        start = self.run_(12, self.VALIDATE, conclusion="failure", title=self.f["START_FAILURE"])
+        self.assertEqual(self.evaluate([self.run_(11, self.SMOKE), start], rerequested=[12]), (False, [], []))
+        rerun = self.run_(20, self.VALIDATE)
+        self.assertEqual(self.evaluate([self.run_(11, self.SMOKE), start, rerun], rerequested=[12]), (True, [], []))
+        # A rerun that genuinely fails is a real failure.
+        bad = self.run_(20, self.VALIDATE, conclusion="failure", title="Failed")
+        self.assertEqual(self.evaluate([self.run_(11, self.SMOKE), start, bad], rerequested=[12])[1], [self.VALIDATE])
+
+    def test_other_apps_and_checks_are_ignored(self):
+        foreign = self.run_(30, self.VALIDATE, conclusion="failure", title="Failed", app="someone-else")
+        other = self.run_(31, "Pipelines as Code CI / unrelated-", conclusion="failure", title="Failed")
+        self.assertEqual(self.evaluate([self.run_(1, self.SMOKE), self.run_(2, self.VALIDATE), foreign, other]), (True, [], []))
+
+    def test_loop_rerequests_with_a_bound(self):
+        script = script_text()
+        self.assertEqual(self.f["MAX_START_RETRIES"], 2)
+        self.assertIn("evaluate_checks(checks,required,rerequested)", script)
+        self.assertIn("'/check-runs/'+str(check['id'])+'/rerequest','POST'", script)
+        self.assertIn("start_retries[check['name']]<=MAX_START_RETRIES", script)
+        self.assertIn("check-runs?per_page=100&filter=all", script)
 
 
 if __name__ == "__main__":
