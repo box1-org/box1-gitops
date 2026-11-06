@@ -43,3 +43,34 @@ rules:
     resources: [dev]
     resourceNames: [traces]
     verbs: [get]
+---
+# The Tempo operator only enables OpenShift tenancy mode (which grants the
+# gateway's ServiceAccount create on tokenreviews) when the user applying the
+# TempoMonolithic already holds that permission. Argo CD applies it, so its
+# application controller needs exactly this one rule (tempo-operator
+# validateGatewayOpenShiftModeRBAC / NewAccessReviewClusterRole).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: box1-observability-argocd-tokenreview
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-observability-argocd-tokenreview
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: box1-observability-argocd-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
