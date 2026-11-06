@@ -73,9 +73,8 @@ holds the session, and tokens never reach the browser.
 - **Client roles:** `console-viewer`, `console-operator` and `console-developer`.
   - After a sync, check that they exist on the client's Roles tab.
   - Assign them to people in the admin console. This file assigns none.
-- **Audience mappers:** `operations-console`, `inventory-service` and `fulfillment-adapter`. Those two services accept
-  any box1 token that carries their audience. The mappers change only this client.
-- **asset-service:** not included. It also requires `azp=asset-service`.
+- **Audience:** `operations-console` only. Because the client is public, it carries no other service's audience.
+- **Redirect URI:** exactly `/callback`.
 
 ## Repository layout and ownership
 
