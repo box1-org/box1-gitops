@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - rbac.yaml
+  - rbac-traces.yaml
   - tempo.yaml
   - collector.yaml
   - networkpolicy.yaml
