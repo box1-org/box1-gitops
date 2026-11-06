@@ -1,6 +1,6 @@
 # Asset telemetry service console and API (box1-docs#15, decision D-013).
 # Public client: authorization code + PKCE only, so no client secret exists anywhere.
-# Client roles: chaos-operator (console and control API), telemetry-writer (ingestion API).
+# Client roles: chaos-operator (console and control API), telemetry-writer (ingestion API), telemetry-reader (read API).
 # Assigning a role to a person is done in the Keycloak admin console; this file assigns none.
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakClient
@@ -50,4 +50,7 @@ spec:
       clientRole: true
     - name: telemetry-writer
       description: Post readings to the asset telemetry ingestion API
+      clientRole: true
+    - name: telemetry-reader
+      description: Read readings and alerts from the asset telemetry API
       clientRole: true
