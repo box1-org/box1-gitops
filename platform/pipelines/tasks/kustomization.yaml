@@ -11,3 +11,4 @@ resources:
 - bootc-disk.yaml
 - bootc-channel.yaml
 - vm-smoke.yaml
+- bootc-apply.yaml

@@ -7,6 +7,11 @@
 # Secrets created outside Git: redhat-registry-pull (registry.redhat.io entry
 # only) and etc-pki-entitlement (copy of the cluster SCA entitlement). Both are
 # used only as build inputs and never reach an image layer.
+#
+# Optional extra source: extra-source-repo at extra-source-revision is unpacked
+# into <extra-source-path>/ inside the build context, so one OS image can build an
+# application from a second repository (legacy-erp + box1-ops-erp-simulator,
+# box1-docs#25). Its revision is passed as the EXTRA_SOURCE_REVISION build arg.
 ---
 apiVersion: tekton.dev/v1
 kind: Task
@@ -27,6 +32,18 @@ spec:
   - name: push-image
     type: string
     default: 'false'
+  - name: extra-source-repo
+    type: string
+    default: ''
+    description: Optional second box1-org/<name> repository unpacked into the build context.
+  - name: extra-source-revision
+    type: string
+    default: ''
+    description: 40-character commit of extra-source-repo (required with it).
+  - name: extra-source-path
+    type: string
+    default: extra-src
+    description: Directory in the build context for extra-source-repo.
   results:
   - name: image-digest
     description: Digest of the pushed OS image, or not-pushed.
@@ -58,6 +75,12 @@ spec:
       value: $(params.image-name)
     - name: PUSH_IMAGE
       value: $(params.push-image)
+    - name: EXTRA_SOURCE_REPO
+      value: $(params.extra-source-repo)
+    - name: EXTRA_SOURCE_REVISION
+      value: $(params.extra-source-revision)
+    - name: EXTRA_SOURCE_PATH
+      value: $(params.extra-source-path)
     - name: STORAGE_DRIVER
       value: overlay
     - name: BUILDAH_FORMAT
@@ -96,6 +119,17 @@ spec:
         "https://api.github.com/repos/$SOURCE_REPO/tarball/$REVISION" \
         | tar -xz --strip-components=1 -C source
       printf 'Fetched %s at %s\n' "$SOURCE_REPO" "$REVISION"
+      if [ -n "$EXTRA_SOURCE_REPO" ]; then
+        echo "$EXTRA_SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
+        echo "$EXTRA_SOURCE_REVISION" | grep -Eq '^[a-f0-9]{40}$'
+        echo "$EXTRA_SOURCE_PATH" | grep -Eq '^[a-z][a-z0-9-]{1,39}$'
+        test ! -e "source/$EXTRA_SOURCE_PATH" || { echo "source/$EXTRA_SOURCE_PATH already exists"; exit 1; }
+        mkdir -p "source/$EXTRA_SOURCE_PATH"
+        curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$EXTRA_SOURCE_REPO/tarball/$EXTRA_SOURCE_REVISION" \
+          | tar -xz --strip-components=1 -C "source/$EXTRA_SOURCE_PATH"
+        printf 'Fetched %s at %s into %s/\n' "$EXTRA_SOURCE_REPO" "$EXTRA_SOURCE_REVISION" "$EXTRA_SOURCE_PATH"
+      fi
   - name: build
     script: |
       #!/bin/sh
@@ -103,6 +137,7 @@ spec:
       image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME:$REVISION"
       # bootc container lint runs inside the Containerfile.
       buildah build --layers=false --build-arg SOURCE_REVISION="$REVISION" \
+        --build-arg EXTRA_SOURCE_REVISION="${EXTRA_SOURCE_REVISION:-none}" \
         --secret id=entitlement-cert,src=/etc/entitlement/entitlement.pem \
         --secret id=entitlement-key,src=/etc/entitlement/entitlement-key.pem \
         -t "$image" .

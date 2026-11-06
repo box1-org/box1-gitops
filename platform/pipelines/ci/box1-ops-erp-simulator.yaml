@@ -1,12 +1,15 @@
-# Legacy ERP appliance: box1-org/box1-ops-erp-simulator, box1-org/box1-docs#14.
+# Legacy ERP appliance: box1-org/box1-ops-erp-simulator, box1-org/box1-docs#14 and #25.
 #
-# Python, not the Quarkus Golden Path: the repository's .tekton/ runs inline tasks.
+# Python, not the Quarkus Golden Path.
 #   - Pull requests run as ci-test (existing; no API token, no registry rights).
-#   - Pushes to main run as ci-erp-release: tests, then a one-layer OCI image holding
-#     the wheel, systemd units and docs, pushed by digest to this ImageStream, then the
-#     central box1-security-gates task (observe). The VM image build (#25) pins that digest.
-# Nothing here is privileged: the image is assembled in Python and copied with skopeo.
-# No credentials in Git: the push uses the service account's own token.
+#   - Pushes to main run the shared legacy-erp-appliance Pipeline, defined once in
+#     box1-org/legacy-erp/.tekton/appliance-pipeline.yaml (box1-docs#25): ERP tests,
+#     then the legacy-erp bootc OS image built with this repository's source,
+#     security, disk, promotion to box1-workloads-dev, and `bootc upgrade --apply`
+#     in the VM. Hence the token scope below, matching the legacy-erp Repository.
+#   - The earlier one-layer bundle image (ci-erp-release, ImageStream below) is no
+#     longer produced; removing it is a box1-docs#25 follow-up.
+# No credentials in Git.
 apiVersion: pipelinesascode.tekton.dev/v1alpha1
 kind: Repository
 metadata:
@@ -17,6 +20,9 @@ spec:
   concurrency_limit: 1
   settings:
     pipelinerun_provenance: default_branch
+    github_app_token_scope_repos:
+    - box1-org/box1-workloads-dev
+    - box1-org/legacy-erp
 ---
 apiVersion: v1
 kind: ServiceAccount
