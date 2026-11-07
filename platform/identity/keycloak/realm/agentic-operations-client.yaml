@@ -1,0 +1,39 @@
+# agentic-operations (box1-docs#20, D-005). The resource client for the AI operations service: the audience of its
+# tokens and the owner of its client roles. Callers get tokens from agentic-operations-cli. The service checks the
+# audience agentic-operations, roles from resource_access/agentic-operations/roles, and azp agentic-operations-cli.
+# Its service account has no upstream grants in v1: order, inventory and fulfillment reads are unauthenticated in dev,
+# and telemetry alerts stay unavailable until an asset-service grant is approved (box1-docs#20 Q-5).
+# client.id is preset so that agentic-operations-cli's scope mapping can name it on first creation (the operator's
+# scope-mapping call takes this UUID, not the clientId; see scenario-controller-client.yaml).
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: agentic-operations
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    id: e7f3076c-02cd-405f-a148-3e4e0c2307b9
+    clientId: agentic-operations
+    name: box1 agentic operations
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    bearerOnly: true
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    defaultClientScopes: []
+    optionalClientScopes: []
+  roles:
+    - name: aiops-viewer
+      description: Read evidence and analyses through REST and MCP
+      clientRole: true
+    - name: aiops-analyst
+      description: aiops-viewer, plus start analyses (which propose actions only and never execute them)
+      clientRole: true
