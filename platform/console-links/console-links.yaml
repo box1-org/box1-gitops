@@ -40,7 +40,8 @@ spec:
   location: ApplicationMenu
   text: Keycloak
   applicationMenu:
-    section: box1 Platform---
+    section: box1 Platform
+---
 apiVersion: console.openshift.io/v1
 kind: ConsoleLink
 metadata:
