@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lightspeed
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/lightspeed/config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-lightspeed
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true
