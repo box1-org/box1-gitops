@@ -1,0 +1,96 @@
+# Vector collector: application logs from the seven Box1 services only, to the
+# LokiStack. Infrastructure and audit logs are not collected.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: logcollector
+  namespace: openshift-logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-logcollector-collect-application-logs
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-logcollector-logs-writer
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-collector-logs-writer
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging
+---
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: box1
+  namespace: openshift-logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  managementState: Managed
+  serviceAccount:
+    name: logcollector
+  inputs:
+    - name: box1-services
+      type: application
+      application:
+        includes:
+          - namespace: order-service-dev
+          - namespace: inventory-service-dev
+          - namespace: fulfillment-adapter-dev
+          - namespace: notification-service-dev
+          - namespace: asset-service-dev
+          - namespace: scenario-controller-dev
+          - namespace: operations-console-dev
+  filters:
+    # Last line of defence; the services already redact at source
+    # (box1-docs#22). Drops the whole line if it looks like it carries a
+    # bearer token, password, client secret or private key.
+    - name: drop-credentials
+      type: drop
+      drop:
+        - test:
+            - field: .message
+              matches: '(?i)(bearer\s+[a-z0-9._~+/=-]{16,}|password\s*["=:]+\s*\S|client_secret\s*["=:]|-----BEGIN [A-Z ]*PRIVATE KEY)'
+    # Parses the services' JSON lines into .structured, so LogQL `| json`
+    # exposes fields such as structured_mdc_orderId and structured_mdc_traceId.
+    - name: parse-json
+      type: parse
+  outputs:
+    - name: box1-lokistack
+      type: lokiStack
+      lokiStack:
+        target:
+          name: logging-loki
+          namespace: openshift-logging
+        authentication:
+          token:
+            from: serviceAccount
+      tls:
+        ca:
+          configMapName: openshift-service-ca.crt
+          key: service-ca.crt
+  pipelines:
+    - name: box1-services-to-loki
+      inputRefs: [box1-services]
+      filterRefs: [drop-credentials, parse-json]
+      outputRefs: [box1-lokistack]
