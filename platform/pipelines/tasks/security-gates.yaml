@@ -74,8 +74,12 @@ spec:
     description: >-
       RHACS vulnerability counts as {"vulnerabilities":{"critical","high","medium","low"}}
       for the console Vulnerabilities column. Expose it as a Pipeline result whose
-      name ends in SCAN_OUTPUT. Written only when roxctl returned a summary, so a
-      disabled or failed scan shows "-" rather than zeros.
+      name ends in SCAN_OUTPUT. Always written, because a Pipeline result that
+      references an unwritten Task result fails the PipelineRun with
+      CouldntGetPipelineResult (box1-docs#42). Without a roxctl summary the value
+      is "disabled" (enforcement disabled) or "unavailable" (no scan summary). The
+      console cannot show "-" for those: any result ending in SCAN_OUTPUT renders
+      as counts, so they display as zeros. Read the value, not the column.
   volumes:
   - name: reports
     emptyDir: {}
@@ -196,6 +200,7 @@ spec:
           pathlib.Path('/tekton/results/findings').write_text('disabled')
           pathlib.Path('/tekton/results/policy').write_text('disabled')
           pathlib.Path('/tekton/results/rhacs-url').write_text('disabled')
+          pathlib.Path('/tekton/results/SCAN_OUTPUT').write_text('disabled')
           print('Security gate disabled by explicit pipeline parameter')
           raise SystemExit(0)
       url='https://mirror.openshift.com/pub/rhacs/assets/4.11.6/bin/Linux/roxctl'
@@ -211,7 +216,10 @@ spec:
       pathlib.Path('/tekton/results/policy').write_text('pass' if check.returncode==0 else 'fail')
       print('RHACS scan exit='+str(scan.returncode)+' check exit='+str(check.returncode)+' digest='+env['IMAGE_DIGEST'])
       # Console Vulnerabilities column. roxctl reports RHACS severities in
-      # result.summary; map them to the console's four buckets.
+      # result.summary; map them to the console's four buckets. SCAN_OUTPUT is
+      # always written (see the result description): "unavailable" first, then
+      # replaced by the counts when a summary exists.
+      pathlib.Path('/tekton/results/SCAN_OUTPUT').write_text('unavailable')
       try:
           import json
           summary=json.loads(scan.stdout)['result']['summary'] if scan.returncode==0 else None
@@ -220,9 +228,9 @@ spec:
               pathlib.Path('/tekton/results/SCAN_OUTPUT').write_text(json.dumps({'vulnerabilities':counts}, sort_keys=True))
               print('RHACS vulnerability counts: '+json.dumps(counts, sort_keys=True))
           else:
-              print('RHACS: no scan summary; SCAN_OUTPUT not written')
+              print('RHACS: no scan summary; SCAN_OUTPUT=unavailable')
       except Exception as error:
-          print('RHACS: could not read the scan summary ('+type(error).__name__+'); SCAN_OUTPUT not written')
+          print('RHACS: could not read the scan summary ('+type(error).__name__+'); SCAN_OUTPUT=unavailable')
       # The ACS console addresses images by a UUIDv5 of (image full name, digest),
       # not by digest (stackrox pkg/images/utils NewImageV2ID). Ask Central for the
       # scanned image; use its id if it is already a UUID, otherwise derive it.
