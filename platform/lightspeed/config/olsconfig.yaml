@@ -1,0 +1,24 @@
+# OpenShift Lightspeed 2.0.0 backed by the in-cluster vLLM server (vllm/vllm-test).
+# The credentials Secret is created out-of-band (see README); vLLM currently has
+# no API-key enforcement, so its apitoken value is a placeholder.
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+spec:
+  llm:
+    providers:
+      - name: box1-vllm
+        type: rhoai_vllm
+        url: http://vllm-test-2.vllm.svc.cluster.local:8000/v1
+        credentialsSecretRef:
+          name: box1-vllm-credentials
+        models:
+          - name: box1-coder
+            contextWindowSize: 98304
+            parameters:
+              maxTokensForResponse: 4096
+  ols:
+    defaultProvider: box1-vllm
+    defaultModel: box1-coder
+    logLevel: INFO

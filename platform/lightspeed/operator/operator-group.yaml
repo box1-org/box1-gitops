@@ -1,0 +1,11 @@
+# Name matches the OperatorGroup created by the original console install so
+# Argo CD adopts it instead of creating a second (conflicting) OperatorGroup.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-lightspeed-bnj2t
+  namespace: openshift-lightspeed
+spec:
+  targetNamespaces:
+    - openshift-lightspeed
+  upgradeStrategy: Default
