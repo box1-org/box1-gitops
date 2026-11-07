@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: service-mesh-network
+  namespace: openshift-gitops
+  labels:
+    box1.org/profile: operate
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/service-mesh/network
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
