@@ -12,6 +12,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   Service repositories retain their original `deploy/` manifests.
 - [Pipelines](platform/pipelines/README.md): Operator installation, shared Tasks,
   scoped GitHub App credentials, and [automated CI/CD](platform/pipelines/AUTOMATION.md).
+- [MailHog](platform/mailhog/README.md): in-cluster SMTP sink for notification-service
+  operator notices; web UI behind the OpenShift login, SMTP only from `notification-service-dev`.
 - [OpenShift AI](platform/openshift-ai/README.md): lab-only AI 3.4.2 installation,
   CPU workbench, NooBaa connection and KServe inference validation.
 - [Trusted Profile Analyzer](platform/trusted-profile-analyzer/README.md): RHTPA 3.1.1,

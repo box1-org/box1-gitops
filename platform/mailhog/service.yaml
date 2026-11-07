@@ -1,0 +1,29 @@
+# SMTP, cluster-internal only: notification-service sends to mailhog.mailhog.svc.cluster.local:1025.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog
+  namespace: mailhog
+spec:
+  selector:
+    app.kubernetes.io/name: mailhog
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+---
+# Web UI and API on 8025, always through the OAuth proxy (TLS from the service CA).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog-web
+  namespace: mailhog
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: mailhog-web-tls
+spec:
+  selector:
+    app.kubernetes.io/name: mailhog
+  ports:
+    - name: https
+      port: 8025
+      targetPort: https

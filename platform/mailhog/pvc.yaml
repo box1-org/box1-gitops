@@ -1,0 +1,11 @@
+# Maildir storage, so the mailbox (the demo's visual evidence) survives a pod restart.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mailhog-maildir
+  namespace: mailhog
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

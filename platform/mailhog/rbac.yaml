@@ -1,0 +1,14 @@
+# --openshift-delegate-urls lets scripts use a bearer token (oc whoami -t) against the MailHog API through the Route.
+# The proxy needs TokenReview and SubjectAccessReview for that, which system:auth-delegator grants.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-mailhog-proxy-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: mailhog
+    namespace: mailhog

@@ -40,4 +40,14 @@ spec:
   location: ApplicationMenu
   text: Keycloak
   applicationMenu:
+    section: box1 Platform---
+apiVersion: console.openshift.io/v1
+kind: ConsoleLink
+metadata:
+  name: box1-mailhog
+spec:
+  href: https://mailhog.apps.ocp.box1.org
+  location: ApplicationMenu
+  text: MailHog (operator notices)
+  applicationMenu:
     section: box1 Platform
