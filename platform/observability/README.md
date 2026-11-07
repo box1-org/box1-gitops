@@ -1,19 +1,21 @@
 # Box1 observability (`operate` profile)
 
 Distributed tracing and user-workload monitoring for Box1, from
-[box1-docs#22](https://github.com/box1-org/box1-docs/issues/22). Nothing here
-uses object storage. Centralized logging is deferred to
-[box1-docs#82](https://github.com/box1-org/box1-docs/issues/82).
+[box1-docs#22](https://github.com/box1-org/box1-docs/issues/22), and
+centralized logging from
+[box1-docs#82](https://github.com/box1-org/box1-docs/issues/82). Only logging
+uses object storage (a NooBaa bucket); tracing and metrics do not.
 
 | Application (sync wave) | Path | Creates |
 |---|---|---|
-| `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator, `stable` channel, manual InstallPlan approval |
+| `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator (`stable`), Loki Operator (`stable-6.7`) and Red Hat OpenShift Logging (`stable-6.6`), all with manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
 | `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1`, per-tenant trace ClusterRoles, NetworkPolicies |
+| `observability-logging` (1) | `logging/` | In `openshift-logging`: ObjectBucketClaim `logging-loki`, a sync Job that builds Secret `logging-loki-s3` from it, LokiStack `logging-loki` (`1x.demo`, 3-day retention), Vector `ClusterLogForwarder` `box1` |
 | `observability-dashboards` (2) | `dashboards/` | Perses datasource `box1-thanos-querier` (default) and dashboard `box1-order-flow`, shown under Observe → Dashboards |
-| `observability-console` (2) | `console/` | `UIPlugin` `distributed-tracing` (console Observe → Traces) and Argo CD access to UIPlugins |
+| `observability-console` (2) | `console/` | `UIPlugin`s `distributed-tracing` (Observe → Traces), `logging` (Observe → Logs), `troubleshooting-panel` (korrel8r), and Argo CD access to UIPlugins |
 
-All five Applications are manual-sync, like the other platform Applications.
+All six Applications are manual-sync, like the other platform Applications.
 
 ## Data path and access
 
@@ -82,6 +84,48 @@ collector and NetworkPolicy changes together, which hides traces written as
   Its default datasource is the cluster Thanos querier, so viewers need
   permission to query cluster metrics (for example `cluster-monitoring-view`).
 
+## Logging
+
+**Collection.** The Vector collector (`ClusterLogForwarder` `box1`) collects
+application logs only from the seven Box1 service namespaces (`order-service-dev`,
+`inventory-service-dev`, `fulfillment-adapter-dev`, `notification-service-dev`,
+`asset-service-dev`, `scenario-controller-dev`, `operations-console-dev`).
+Infrastructure and audit logs are not collected. Two filters run in order:
+
+1. `drop-credentials` drops any line that looks like it carries a bearer token,
+   password, client secret or private key. The services already redact at
+   source; this is a backstop, and the dropped line is lost.
+2. `parse-json` parses the services' JSON lines into `structured`.
+
+**Storage.** LokiStack `logging-loki`, size `1x.demo`: one replica of each
+component (two gateways), no CPU or memory requests, and four 10 Gi PVCs on
+`lvms-vg1`. Chunks and index go to a dedicated NooBaa bucket (ObjectBucketClaim
+`logging-loki`, kept if the Application is deleted). Retention is 3 days.
+
+The `logging-loki-s3-sync` Job runs on every sync of `observability-logging`.
+It reads the Secret and ConfigMap that NooBaa writes for the claim and writes
+Secret `logging-loki-s3`, so no credential is stored in Git. The Job, not Argo
+CD, owns that Secret. Its image is the cluster's `openshift/cli` release image,
+pinned by digest; update it after a cluster upgrade.
+
+**Query.** Observe → Logs in the console, or LogQL through the LokiStack
+gateway. Tenant mode `openshift-logging`: a user sees application logs for
+namespaces they can view; cluster admins see all. Example, all lines for one
+order across services:
+
+```logql
+{log_type="application"} |= "ord_..." | json | structured_mdc_orderId="ord_..."
+```
+
+`structured_mdc_traceId` holds the trace ID, so a trace's lines can be found the
+same way. The troubleshooting panel (korrel8r) links a span to its logs.
+
+**Known risk: NooBaa (box1-docs#43).** NooBaa has one `pv-pool` backing store,
+and its agent pod is not recreated after an eviction. While it is offline,
+the ingesters cannot flush chunks and queries for older data fail. The
+collector buffers and retries, then drops. Order and fulfillment do not depend
+on logging.
+
 ## Resources managed outside this repository
 
 **UIPlugin `monitoring` (with Perses).** OpenShift Virtualization's
@@ -122,9 +166,13 @@ with it the UIPlugin CRD) makes the autopilot skip the asset.
    pods in `openshift-user-workload-monitoring` to be ready.
 3. Sync `observability-tracing`. Wait for the TempoMonolithic `Ready`
    condition, the `tempo-box1` PVC to bind, and the collector Deployment.
-4. Sync `observability-console`, then check that Observe → Traces lists
-   `box1-observability/box1` with tenant `dev`.
-5. Turn on trace export in each service in `box1-workloads-dev`.
+4. Sync `observability-logging`. Check that the ObjectBucketClaim is
+   `Bound`, the sync Job completed, the LokiStack reports `Ready`, and the
+   collector DaemonSet is running.
+5. Sync `observability-console`, then check that Observe → Traces lists
+   `box1-observability/box1` with tenant `dev`, and Observe → Logs returns
+   Box1 service logs.
+6. Turn on trace export in each service in `box1-workloads-dev`.
 
 ## Outage behaviour
 
@@ -140,6 +188,11 @@ monitoring scrapes it through the ServiceMonitor that the operator creates.
   `box1-workloads-dev`, then delete the `observability-tracing` Application
   with cascade. This deletes the Tempo PVC and the stored traces. No business
   data is stored here.
+- **Disable logging:** delete the `ClusterLogForwarder` `box1` (collection
+  stops), then the `observability-logging` Application with cascade. This
+  deletes the LokiStack PVCs. The ObjectBucketClaim `logging-loki` and Secret
+  `logging-loki-s3` remain; delete them by hand to remove the bucket and its data.
+  Remove the `logging` and `troubleshooting-panel` UIPlugins from `console/`.
 - **Disable user-workload monitoring:** delete the `user-workload-monitoring`
   Application, or set `enableUserWorkload: false`.
 - **Remove the operators:** delete the CRs first. Then delete the
