@@ -1,6 +1,7 @@
 # agentic-operations (box1-docs#20, D-005). The resource client for the AI operations service: the audience of its
-# tokens and the owner of its client roles. Callers get tokens from agentic-operations-cli. The service checks the
-# audience agentic-operations, roles from resource_access/agentic-operations/roles, and azp agentic-operations-cli.
+# tokens and the owner of its client roles. Callers get tokens from agentic-operations-cli, or from operations-console
+# for the console's Assistant (box1-docs#101). The service checks the audience agentic-operations, roles from
+# resource_access/agentic-operations/roles, and azp in AIOPS_ALLOWED_AZP (agentic-operations-cli, operations-console).
 # Its service account has no upstream grants in v1: order, inventory and fulfillment reads are unauthenticated in dev,
 # and telemetry alerts stay unavailable until an asset-service grant is approved (box1-docs#20 Q-5).
 # client.id is preset so that agentic-operations-cli's scope mapping can name it on first creation (the operator's

@@ -11,6 +11,10 @@
 # asset-service (box1-docs#80, interim until this client is confidential, box1-docs#79): audience asset-service and
 # only the telemetry-reader role are mapped, and asset-service keeps only that role for tokens issued to this client,
 # so a person's own reader role decides whether the console shows them alerts; writer and chaos roles never reach it.
+# agentic-operations (box1-docs#101, user decision 2026-11-06, interim until box1-docs#79): audience
+# agentic-operations and only the aiops-viewer and aiops-analyst roles are mapped, for the console's Assistant.
+# agentic-operations accepts azp operations-console (AIOPS_ALLOWED_AZP) and checks the person's own aiops role in its
+# service layer, so a token without one is refused (403) and its audit names the person.
 # The console reads the other services without a user token while their reads are open (box1-docs#18, O-9).
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakClient
@@ -73,6 +77,14 @@ spec:
           included.client.audience: asset-service
           access.token.claim: "true"
           id.token.claim: "false"
+      - name: agentic-operations-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: agentic-operations
+          access.token.claim: "true"
+          id.token.claim: "false"
   # fullScopeAllowed is false, so the scenario controller's roles reach this client's tokens only through this mapping.
   # The operator's scope-mapping call needs the target's internal ID (pinned in scenario-controller-client.yaml, #79).
   scopeMappings:
@@ -90,6 +102,14 @@ spec:
         client: asset-service
         mappings:
           - name: telemetry-reader
+            clientRole: true
+      agentic-operations:
+        id: e7f3076c-02cd-405f-a148-3e4e0c2307b9  # agentic-operations' preset internal ID (agentic-operations-client.yaml)
+        client: agentic-operations
+        mappings:
+          - name: aiops-viewer
+            clientRole: true
+          - name: aiops-analyst
             clientRole: true
   roles:
     - name: console-viewer
