@@ -38,6 +38,13 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/instance: distributed-tracing
+        # Kiali (box1-docs#23) queries traces with its own token.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kiali
       ports:
         - protocol: TCP
           port: 8080
