@@ -13,8 +13,10 @@ spec:
       namespace: openshift-logging
     schema: viaq
 ---
-# Troubleshooting panel (korrel8r): correlates a selected signal, such as a
-# trace or span, with related logs, alerts and resources.
+# Troubleshooting panel (korrel8r): correlates alerts, Pods and their logs.
+# Its trace store is fixed by the operator to tempo-platform in
+# openshift-tracing, which does not exist here, so it does not link Box1
+# traces to logs (box1-docs#82).
 apiVersion: observability.openshift.io/v1alpha1
 kind: UIPlugin
 metadata:
