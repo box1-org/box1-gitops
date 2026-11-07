@@ -1,0 +1,55 @@
+# agentic-operations CLI and MCP clients (box1-docs#20, D-005). This is a public client for people and MCP clients
+# (for example an IDE agent). It uses the device authorization grant or authorization code + PKCE, with no secret.
+# Its tokens carry only the agentic-operations audience and, through the scope mapping, only the aiops-* client roles
+# the user has been assigned. Any realm user can obtain a token; without an assigned role the service answers 403.
+# The service accepts azp agentic-operations-cli only (AIOPS_ALLOWED_AZP).
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: agentic-operations-cli
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: agentic-operations-cli
+    name: box1 agentic operations CLI and MCP
+    enabled: true
+    protocol: openid-connect
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    redirectUris:
+      - http://127.0.0.1/*
+      - http://localhost/*
+    attributes:
+      pkce.code.challenge.method: S256
+      oauth2.device.authorization.grant.enabled: "true"
+    defaultClientScopes:
+      - profile
+      - roles
+    optionalClientScopes: []
+    protocolMappers:
+      - name: agentic-operations-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: agentic-operations
+          access.token.claim: "true"
+          id.token.claim: "false"
+  scopeMappings:
+    clientMappings:
+      agentic-operations:
+        id: e7f3076c-02cd-405f-a148-3e4e0c2307b9  # agentic-operations' preset internal ID
+        client: agentic-operations
+        mappings:
+          - name: aiops-viewer
+            clientRole: true
+          - name: aiops-analyst
+            clientRole: true
