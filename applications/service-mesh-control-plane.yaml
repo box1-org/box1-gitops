@@ -18,3 +18,11 @@ spec:
   syncPolicy:
     syncOptions:
       - PruneLast=true
+    # Argo CD has no health check for the Istio CR, so the first sync can
+    # reach the Telemetry before istiod's validating webhook has endpoints.
+    retry:
+      limit: 5
+      backoff:
+        duration: 20s
+        factor: 2
+        maxDuration: 3m

@@ -14,10 +14,26 @@ spec:
   istio_namespace: istio-system
   deployment:
     cluster_wide_access: false
+    # An explicit list: the Kiali operator resolves selectors only when it
+    # reconciles and does not watch namespace labels, so a label-based
+    # selector misses namespaces enrolled later. Listing the seven Box1
+    # service namespaces up front lets them appear as they are enrolled
+    # (box1-docs#23).
     discovery_selectors:
       default:
-        - matchLabels:
-            istio-discovery: enabled
+        - matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: In
+              values:
+                - istio-system
+                - ztunnel
+                - operations-console-dev
+                - order-service-dev
+                - inventory-service-dev
+                - fulfillment-adapter-dev
+                - notification-service-dev
+                - asset-service-dev
+                - scenario-controller-dev
     resources:
       requests:
         cpu: 20m
