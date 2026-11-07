@@ -117,8 +117,19 @@ order across services:
 {log_type="application"} |= "ord_..." | json | structured_mdc_orderId="ord_..."
 ```
 
-`structured_mdc_traceId` holds the trace ID, so a trace's lines can be found the
-same way. The troubleshooting panel (korrel8r) links a span to its logs.
+`structured_mdc_traceId` holds the trace ID. To open a trace's log lines, copy
+the trace ID from Observe → Traces and use this console deep link (the logging
+plugin reads `tenant` and `q` from the URL):
+
+```text
+https://<console>/monitoring/logs?tenant=application&q={log_type="application"} | json | structured_mdc_traceId="<traceId>"
+```
+
+**No one-click trace → log link exists yet.** The trace plugin has no logs
+link. The troubleshooting panel's korrel8r trace store is fixed by the
+operator to `tempo-platform` in `openshift-tracing`, which does not exist
+here, and its trace rules only lead to Pods. The panel is still useful for
+alerts, Pods and logs. Tracked in box1-docs#82.
 
 **Known risk: NooBaa (box1-docs#43).** NooBaa has one `pv-pool` backing store,
 and its agent pod is not recreated after an eviction. While it is offline,
