@@ -1,0 +1,9 @@
+# MailHog: the in-cluster SMTP sink for notification-service operator notices (box1-docs#16).
+# Nothing in this namespace sends mail out of the cluster; MailHog's outgoing-release feature is not configured.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mailhog
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    pod-security.kubernetes.io/enforce: restricted

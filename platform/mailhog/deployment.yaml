@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailhog
+  namespace: mailhog
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # One RWO volume: the old pod must stop before the new one mounts it.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailhog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailhog
+    spec:
+      serviceAccountName: mailhog
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # A random cookie secret per pod start, so no secret lives in Git. Restarting the pod logs browsers out.
+        - name: cookie-secret
+          image: docker.io/mailhog/mailhog@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
+          command: [/bin/sh, -c, 'printf "%s" "$(head -c 24 /dev/urandom | base64)" > /cookie/secret']
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: cookie
+              mountPath: /cookie
+      containers:
+        - name: mailhog
+          # mailhog/mailhog v1.0.1, pinned by digest (linux/amd64).
+          image: docker.io/mailhog/mailhog@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
+          args:
+            - -smtp-bind-addr=0.0.0.0:1025
+            # The web UI and API listen on loopback only; the OAuth proxy in this pod is the only way in.
+            - -ui-bind-addr=127.0.0.1:8025
+            - -api-bind-addr=127.0.0.1:8025
+            - -storage=maildir
+            - -maildir-path=/maildir
+            - -hostname=mailhog.box1.local
+          ports:
+            - name: smtp
+              containerPort: 1025
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: maildir
+              mountPath: /maildir
+        - name: oauth-proxy
+          # The same Red Hat ose-oauth-proxy image the cluster already runs (openshift-storage).
+          image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9@sha256:01aff928e344429dd8edf807716594c2a60719c629a6e8277ec9be81c5c019a7
+          args:
+            - --https-address=:8443
+            - --provider=openshift
+            - --openshift-service-account=mailhog
+            - --upstream=http://127.0.0.1:8025
+            - --tls-cert=/etc/tls/private/tls.crt
+            - --tls-key=/etc/tls/private/tls.key
+            - --cookie-secret-file=/cookie/secret
+            - --cookie-secure=true
+            # Browser login: users who may get the mailhog-web Service (cluster admins and anyone granted it).
+            - '--openshift-sar={"namespace":"mailhog","resource":"services","resourceName":"mailhog-web","verb":"get"}'
+            # Bearer tokens (for example oc whoami -t) with the same permission reach the API without a browser.
+            - '--openshift-delegate-urls={"/":{"namespace":"mailhog","resource":"services","resourceName":"mailhog-web","verb":"get"}}'
+          ports:
+            - name: https
+              containerPort: 8443
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          readinessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/tls/private
+              readOnly: true
+            - name: cookie
+              mountPath: /cookie
+              readOnly: true
+      volumes:
+        - name: maildir
+          persistentVolumeClaim:
+            claimName: mailhog-maildir
+        - name: tls
+          secret:
+            secretName: mailhog-web-tls
+        - name: cookie
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
