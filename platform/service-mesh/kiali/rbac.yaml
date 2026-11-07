@@ -1,0 +1,27 @@
+# Kiali's service account reads cluster metrics (Thanos Querier) and the dev
+# tenant's traces (Tempo gateway). Approved on box1-docs#23 (decision 003).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-kiali-cluster-monitoring-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: kiali-service-account
+    namespace: istio-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-kiali-traces-read-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: box1-traces-read-dev
+subjects:
+  - kind: ServiceAccount
+    name: kiali-service-account
+    namespace: istio-system

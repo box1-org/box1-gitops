@@ -1,0 +1,26 @@
+# Mesh namespaces. istio-system and ztunnel carry the discovery label before
+# the ZTunnel exists (istio/istio#52057). box1-docs#23, decision 002.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    istio-discovery: enabled
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-cni
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ztunnel
+  labels:
+    istio-discovery: enabled
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"

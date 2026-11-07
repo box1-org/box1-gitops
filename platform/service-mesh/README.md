@@ -9,6 +9,8 @@ Run state and decisions:
 |---|---|---|
 | `service-mesh-network` (0) | `network/` | Sets OVN local gateway mode (`routingViaHost: true`) on `networks.operator.openshift.io/cluster` by server-side apply. Ambient probes need it. |
 | `service-mesh-operators` (0) | `operators/` | OSSM 3 operator (`stable-3.5`) and the Kiali operator (`stable`), each in its own namespace, with manual InstallPlan approval |
+| `service-mesh-control-plane` (1) | `mesh/` | Namespaces `istio-system`, `istio-cni`, `ztunnel`; `Istio` `default` (ambient, `v1.31.1`, discovery selector `istio-discovery: enabled`, `box1-otel` tracing provider); `IstioCNI` and `ZTunnel` (privileged node DaemonSets); Prometheus `Telemetry`; istiod ServiceMonitor and ztunnel PodMonitor for user-workload monitoring; Argo CD RBAC for these kinds |
+| `service-mesh-kiali` (2) | `kiali/` | `Kiali` in `istio-system`: OpenShift login, no cluster-wide access (same discovery selector), metrics from Thanos Querier, traces from the Tempo gateway (tenant `dev`); its service account is bound to `cluster-monitoring-view` and `box1-traces-read-dev` |
 
 All Applications are manual-sync, like the other platform Applications.
 
@@ -17,3 +19,9 @@ All Applications are manual-sync, like the other platform Applications.
 owns the `*.istio.io` CRDs. Inspect the OSSM InstallPlan's CRD steps before
 approving it. After install, `istiod-openshift-gateway` must stay healthy and the
 GatewayClasses must stay Accepted.
+
+**Enrollment:** a namespace joins the mesh only when it carries both
+`istio-discovery: enabled` (seen by this control plane and Kiali) and
+`istio.io/dataplane-mode: ambient` (ztunnel captures its traffic). Those labels
+live on the Namespace manifests in `box1-workloads-dev`. Removing them is the
+rollback.
