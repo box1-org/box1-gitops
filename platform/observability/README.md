@@ -8,7 +8,7 @@ uses object storage (a NooBaa bucket); tracing and metrics do not.
 
 | Application (sync wave) | Path | Creates |
 |---|---|---|
-| `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator (`stable`), Loki Operator (`stable-6.7`) and Red Hat OpenShift Logging (`stable-6.6`), all with manual InstallPlan approval |
+| `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator (`stable`), Loki Operator (`stable-6.7`) and Red Hat OpenShift Logging (`stable-6.7`), all with manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
 | `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1`, per-tenant trace ClusterRoles, NetworkPolicies |
 | `observability-logging` (1) | `logging/` | In `openshift-logging`: ObjectBucketClaim `logging-loki`, a sync Job that builds Secret `logging-loki-s3` from it, LokiStack `logging-loki` (`1x.demo`, 3-day retention), Vector `ClusterLogForwarder` `box1` |
