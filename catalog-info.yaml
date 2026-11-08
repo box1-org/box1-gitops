@@ -18,3 +18,63 @@ spec:
   type: repository
   lifecycle: experimental
   owner: user:default/mike4263
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: box1-kafka
+  title: box1-kafka (Streams for Apache Kafka)
+  description: Shared Kafka cluster for Box1 workload events; bootstrap box1-kafka-kafka-bootstrap.box1-kafka.svc:9092
+  tags: [kafka, messaging]
+  links:
+    - url: https://github.com/box1-org/box1-gitops/tree/main/platform/kafka
+      title: Kafka manifests
+    - url: https://github.com/box1-org/box1-ops-contracts/blob/main/TOPICS.md
+      title: Topic ownership and consumer groups
+      icon: docs
+spec:
+  type: kafka-cluster
+  lifecycle: experimental
+  owner: user:default/mike4263
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: keycloak-box1
+  title: Keycloak realm box1
+  description: OIDC/JWT issuer for Box1 workloads (https://keycloak.apps.ocp.box1.org/auth/realms/box1)
+  tags: [keycloak, oidc, identity]
+  links:
+    - url: https://github.com/box1-org/box1-gitops/tree/main/platform/identity
+      title: Identity manifests
+spec:
+  type: identity-provider
+  lifecycle: experimental
+  owner: user:default/mike4263
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: mailhog
+  description: Cluster-internal SMTP sink (mailhog.mailhog.svc.cluster.local:1025) used by notification-service
+  tags: [smtp, email]
+  links:
+    - url: https://github.com/box1-org/box1-gitops/tree/main/platform/mailhog
+      title: MailHog manifests
+spec:
+  type: smtp-server
+  lifecycle: experimental
+  owner: user:default/mike4263
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: vllm-test-2
+  description: >-
+    vLLM OpenAI-compatible model endpoint (http://vllm-test-2.vllm.svc:8000/v1) used by
+    agentic-operations. Its deployment is not declared in box1-gitops.
+  tags: [vllm, llm, openshift-ai]
+spec:
+  type: llm-inference
+  lifecycle: experimental
+  owner: user:default/mike4263
