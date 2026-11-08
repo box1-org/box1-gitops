@@ -1,0 +1,9 @@
+site_name: box1-gitops
+site_description: "GitOps for the box1 cluster and platform components"
+# docs/index.md includes the repository README.md, so README.md is the single
+# source for the TechDocs home page. mkdocs does not allow docs_dir to be the
+# repository root, which is why the README is included instead.
+nav:
+  - Home: index.md
+plugins:
+  - techdocs-core
