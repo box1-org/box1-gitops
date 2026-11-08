@@ -22,6 +22,13 @@ spec:
     # /dev/net/tun lets rootless podman set up container networking (pasta);
     # /dev/fuse enables fuse-overlayfs storage. Applies to all workspaces.
     # Revert: delete this block (back to the operator default, run disabled) and sync.
+    # Pod-level UID so every workspace container, including the project-clone
+    # init container, runs as 1000. With only the container-level runAsUser,
+    # nested-container gave project-clone UID 0: /projects was cloned as root and
+    # the editor (UID 1000) could not write it or use git.
+    security:
+      podSecurityContext:
+        runAsUser: 1000
     disableContainerRunCapabilities: false
     containerRunConfiguration:
       openShiftSecurityContextConstraint: nested-container
