@@ -20,6 +20,7 @@ spec:
       secrets:
         - name: developer-hub-secrets
         - name: developer-hub-platform-secrets
+        - name: developer-hub-lightspeed-secrets
     extraFiles:
       mountPath: /opt/app-root/src
     route:
@@ -55,6 +56,19 @@ spec:
               - name: platform-trust
                 configMap:
                   name: developer-hub-platform-trust
+              # Developer Lightspeed sidecars (lightspeed.yaml)
+              - name: lightspeed-stack
+                configMap:
+                  name: developer-hub-lightspeed-stack
+              - name: llama-stack-run
+                configMap:
+                  name: developer-hub-llama-stack
+              - name: lightspeed-shared
+                emptyDir:
+                  sizeLimit: 1Gi
+              - name: lightspeed-rag
+                emptyDir:
+                  sizeLimit: 4Gi
             containers:
               - name: backstage-backend
                 env:
@@ -70,6 +84,39 @@ spec:
                   - name: platform-trust
                     mountPath: /platform/trust
                     readOnly: true
+              - name: llama-stack
+                image: quay.io/redhat-ai-dev/llama-stack@sha256:3dab249bf3af8ccbbb2fc4b1117806ecd773cd275ce375ee557f205de889e341  # 0.1.4
+                envFrom:
+                  - configMapRef:
+                      name: developer-hub-llama-stack-env
+                resources:
+                  requests: {cpu: 250m, memory: 1Gi}
+                  limits: {cpu: "2", memory: 3Gi}
+                volumeMounts:
+                  - name: lightspeed-shared
+                    mountPath: /app-root/.llama
+                  - name: lightspeed-rag
+                    mountPath: /rag-content
+                  - name: llama-stack-run
+                    mountPath: /app-root/run.yaml
+                    subPath: run.yaml
+                    readOnly: true
+              - name: lightspeed-core
+                image: quay.io/lightspeed-core/lightspeed-stack@sha256:d17f7add7d7357f55d0555433a7b33b9227bc5c2604782126b03e845c24b4652  # 0.4.0
+                resources:
+                  requests: {cpu: 100m, memory: 256Mi}
+                  limits: {cpu: "1", memory: 1Gi}
+                volumeMounts:
+                  - name: lightspeed-stack
+                    mountPath: /app-root/lightspeed-stack.yaml
+                    subPath: lightspeed-stack.yaml
+                    readOnly: true
+                  - name: lightspeed-shared
+                    mountPath: /tmp/data/feedback
+                  - name: lightspeed-shared
+                    mountPath: /tmp/data/transcripts
+                  - name: lightspeed-shared
+                    mountPath: /tmp/data/conversations
             initContainers:
               - name: install-dynamic-plugins
                 # Runs the Extensions adapter around the image's installer. Registry auth
@@ -81,6 +128,16 @@ spec:
                   - name: extensions-bootstrap
                     mountPath: /extensions-bootstrap
                     readOnly: true
+              # RHDH product docs vector DB and embedding model for Lightspeed RAG.
+              - name: init-rag-data
+                image: quay.io/redhat-ai-dev/rag-content@sha256:e355c6d494317f4f418792bce4989e8a7d8bdc8d86468c7bfd5cba2faa1c03ba  # release-1.9-lcs
+                command:
+                  - sh
+                  - -c
+                  - mkdir -p /rag-content/vector_db && cp -r /rag/vector_db/rhdh_product_docs /rag-content/vector_db/ && cp -r /rag/embeddings_model /rag-content/
+                volumeMounts:
+                  - name: lightspeed-rag
+                    mountPath: /rag-content
   database:
     enableLocalDb: true
     authSecretName: developer-hub-db

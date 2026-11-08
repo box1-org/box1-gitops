@@ -68,6 +68,7 @@ credentials, ExternalSecret resources, or assumed secret-manager installations.
 | --- | --- |
 | `developer-hub-secrets` | `BACKEND_SECRET`, `AUTH_SESSION_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY` |
 | `developer-hub-db` | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRESQL_ADMIN_PASSWORD` |
+| `developer-hub-lightspeed-secrets` | `MCP_TOKEN` (random static token for the RHDH MCP server; see Developer Lightspeed) |
 
 Use independent, randomly generated values for backend, session, and database
 secrets. When `POSTGRES_USER=postgres`, set `POSTGRES_PASSWORD` and
@@ -108,6 +109,40 @@ oc -n rhdh create secret generic developer-hub-db \
 If a secret manager already owns these Secrets, use its provisioning workflow
 instead. Restart the Developer Hub deployment after updating environment-backed
 Secrets so the application reads the new values.
+
+## Developer Lightspeed and MCP (Developer Preview)
+
+Developer Lightspeed for RHDH 1.9 answers in a chat drawer (and at `/lightspeed`)
+using the in-cluster vLLM model and RHDH's own MCP tools.
+
+| Piece | Configuration |
+| --- | --- |
+| Plugins | `red-hat-developer-hub-backstage-plugin-lightspeed`/`-backend` `bs_1.45.3__1.2.3`; `backstage-plugin-mcp-actions-backend` `bs_1.45.3__0.1.5`; `software-catalog-mcp-tool` `bs_1.45.3__0.4.1`; `techdocs-mcp-tool` `bs_1.45.3__0.3.2` (`dynamic-plugins.yaml`) |
+| Sidecars | `lightspeed-core` (LCS 0.4.0, port 8080) and `llama-stack` (0.1.4, port 8321) in the developer-hub pod; `init-rag-data` copies the RHDH product-docs vector DB (`backstage.yaml`) |
+| Model | Llama Stack `remote::vllm` → `http://vllm-test-2.vllm.svc.cluster.local:8000/v1`, model `box1-coder` (`lightspeed.yaml`) |
+| Safety shield | **None.** The image default Llama Guard shield needs a separate guard model server; `developer-hub-llama-stack` removes it (lab-only choice) |
+| MCP | LCS `mcp::backstage` → `http://localhost:7007/api/mcp-actions/v1`; the Lightspeed backend sends `lightspeed.mcpServers[].token` (`MCP_TOKEN`), accepted by `backend.auth.externalAccess` type `static`, subject `mcp-clients` |
+| Data | Feedback and conversation cache on a pod `emptyDir` (lost on restart); transcripts off |
+
+Create the token Secret once, before syncing (value never printed or committed):
+
+```bash
+oc -n rhdh create secret generic developer-hub-lightspeed-secrets \
+  --from-literal=MCP_TOKEN="$(openssl rand -base64 33 | tr -d '\n')"
+```
+
+Rotate by replacing the Secret and restarting the Hub pod. External MCP clients
+(for example an IDE) can use the same endpoint at
+`https://developer-hub.apps.ocp.box1.org/api/mcp-actions/v1` with this token.
+The TechDocs tool returns only entities that have published TechDocs.
+
+Limits: vLLM serves one request at a time (`--max-num-seqs 1`) on the shared GPU.
+The agentic-operations MCP server is **not** connected; its Keycloak-only auth
+needs a decision first (box1-org/box1-docs#106).
+
+Rollback: remove the five plugin entries, the `lightspeed`/`backend.actions`/
+`backend.csp`/static `externalAccess` keys, the sidecars, init container and
+volumes, and `lightspeed.yaml`, then sync. The Secret can then be deleted.
 
 ## Staged rollout, only when authorized
 

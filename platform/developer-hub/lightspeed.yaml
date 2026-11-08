@@ -1,0 +1,173 @@
+# Developer Lightspeed for RHDH 1.9 (Developer Preview): Lightspeed Core (LCS) and
+# Llama Stack run as sidecars in the developer-hub pod (see backstage.yaml).
+# Inference: in-cluster vLLM (vllm/vllm-test, served model box1-coder).
+# Tools: RHDH's own MCP server (mcp-actions-backend) with the Software Catalog and
+# TechDocs tools, reached over localhost inside the pod.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: developer-hub-lightspeed-stack
+  namespace: rhdh
+data:
+  lightspeed-stack.yaml: |
+    name: Lightspeed Core Service (LCS)
+    service:
+      host: 0.0.0.0
+      port: 8080
+      auth_enabled: false
+      workers: 1
+      color_log: true
+      access_log: true
+    llama_stack:
+      use_as_library_client: false
+      url: http://localhost:8321
+    inference:
+      default_provider: vllm
+      default_model: box1-coder
+    user_data_collection:
+      feedback_enabled: true
+      feedback_storage: /tmp/data/feedback
+      # Transcripts would store every prompt and answer on the pod; keep off.
+      transcripts_enabled: false
+      transcripts_storage: /tmp/data/transcripts
+    authentication:
+      module: noop
+    conversation_cache:
+      type: sqlite
+      sqlite:
+        db_path: /tmp/data/conversations/lcs_cache.db
+    mcp_servers:
+      # "client": the RHDH Lightspeed backend forwards lightspeed.mcpServers[].token
+      # (MCP_TOKEN) as the Authorization header.
+      - name: mcp::backstage
+        provider_id: model-context-protocol
+        url: http://localhost:7007/api/mcp-actions/v1
+        authorization_headers:
+          Authorization: client
+---
+# Llama Stack run.yaml: the image default (quay.io/redhat-ai-dev/llama-stack:0.1.4)
+# minus the Llama Guard safety shield and model, which need a separate guard model
+# server that Box1 does not run. box1-coder is registered explicitly.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: developer-hub-llama-stack
+  namespace: rhdh
+data:
+  run.yaml: |
+    version: 2
+    image_name: redhat-ai-dev-llama-stack
+    apis:
+      - agents
+      - inference
+      - tool_runtime
+      - vector_io
+      - files
+    providers:
+      agents:
+        - provider_id: meta-reference
+          provider_type: inline::meta-reference
+          config:
+            persistence:
+              agent_state:
+                namespace: agents
+                backend: kv_default
+              responses:
+                table_name: responses
+                backend: sql_default
+      inference:
+        - provider_id: vllm
+          provider_type: remote::vllm
+          config:
+            url: ${env.VLLM_URL}
+            api_token: ${env.VLLM_API_KEY:=unused}
+            max_tokens: ${env.VLLM_MAX_TOKENS:=4096}
+            tls_verify: ${env.VLLM_TLS_VERIFY:=true}
+        - provider_id: sentence-transformers
+          provider_type: inline::sentence-transformers
+          config: {}
+      tool_runtime:
+        - provider_id: model-context-protocol
+          provider_type: remote::model-context-protocol
+          config: {}
+        - provider_id: rag-runtime
+          provider_type: inline::rag-runtime
+          config: {}
+      vector_io:
+        - provider_id: faiss
+          provider_type: inline::faiss
+          config:
+            persistence:
+              namespace: vector_io::faiss
+              backend: faiss_kv
+      files:
+        - provider_id: localfs
+          provider_type: inline::localfs
+          config:
+            storage_dir: /tmp/llama-stack-files
+            metadata_store:
+              table_name: files_metadata
+              backend: sql_files
+    storage:
+      backends:
+        kv_default:
+          type: kv_sqlite
+          db_path: /tmp/kvstore.db
+        sql_default:
+          type: sql_sqlite
+          db_path: /tmp/sql_store.db
+        sql_files:
+          type: sql_sqlite
+          db_path: /rag-content/vector_db/rhdh_product_docs/1.9/files_metadata.db
+        faiss_kv:
+          type: kv_sqlite
+          db_path: /rag-content/vector_db/rhdh_product_docs/1.9/faiss_store.db
+      stores:
+        metadata:
+          namespace: registry
+          backend: faiss_kv
+        inference:
+          table_name: inference_store
+          backend: sql_default
+          max_write_queue_size: 10000
+          num_writers: 4
+        conversations:
+          table_name: openai_conversations
+          backend: sql_default
+    registered_resources:
+      models:
+        - model_id: box1-coder
+          provider_id: vllm
+          provider_model_id: box1-coder
+          model_type: llm
+          metadata: {}
+        - model_id: sentence-transformers/all-mpnet-base-v2
+          provider_id: sentence-transformers
+          provider_model_id: /rag-content/embeddings_model
+          model_type: embedding
+          metadata:
+            embedding_dimension: 768
+      shields: []
+      tool_groups:
+        - provider_id: rag-runtime
+          toolgroup_id: builtin::rag
+      vector_dbs:
+        - vector_db_id: rhdh-product-docs-1_8
+          embedding_model: sentence-transformers/all-mpnet-base-v2
+          embedding_dimension: 768
+          provider_id: faiss
+    server:
+      port: 8321
+---
+# Non-secret Llama Stack settings. vLLM has no API-key enforcement today
+# (box1-docs#26), so VLLM_API_KEY is a placeholder.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: developer-hub-llama-stack-env
+  namespace: rhdh
+data:
+  VLLM_URL: http://vllm-test-2.vllm.svc.cluster.local:8000/v1
+  VLLM_API_KEY: unused-vllm-has-no-auth
+  VLLM_MAX_TOKENS: "4096"
+  VLLM_TLS_VERIFY: "false"
