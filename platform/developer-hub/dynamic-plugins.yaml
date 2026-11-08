@@ -28,3 +28,40 @@ data:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
         disabled: false
+      # Developer Lightspeed for RHDH 1.9 (Developer Preview). Sidecars: backstage.yaml, lightspeed.yaml.
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-lightspeed:bs_1.45.3__1.2.3!red-hat-developer-hub-backstage-plugin-lightspeed
+        disabled: false
+        pluginConfig:
+          dynamicPlugins:
+            frontend:
+              red-hat-developer-hub.backstage-plugin-lightspeed:
+                translationResources:
+                  - importName: lightspeedTranslations
+                    module: Alpha
+                    ref: lightspeedTranslationRef
+                dynamicRoutes:
+                  - path: /lightspeed
+                    importName: LightspeedPage
+                mountPoints:
+                  - mountPoint: application/listener
+                    importName: LightspeedFAB
+                  - mountPoint: application/provider
+                    importName: LightspeedDrawerProvider
+                  - mountPoint: application/internal/drawer-state
+                    importName: LightspeedDrawerStateExposer
+                    config:
+                      id: lightspeed
+                  - mountPoint: application/internal/drawer-content
+                    importName: LightspeedChatContainer
+                    config:
+                      id: lightspeed
+                      priority: 100
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-lightspeed-backend:bs_1.45.3__1.2.3!red-hat-developer-hub-backstage-plugin-lightspeed-backend
+        disabled: false
+      # RHDH MCP server (Developer Preview) at /api/mcp-actions/v1 with Catalog and TechDocs tools.
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-mcp-actions-backend:bs_1.45.3__0.1.5!backstage-plugin-mcp-actions-backend
+        disabled: false
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-software-catalog-mcp-tool:bs_1.45.3__0.4.1!red-hat-developer-hub-backstage-plugin-software-catalog-mcp-tool
+        disabled: false
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-techdocs-mcp-tool:bs_1.45.3__0.3.2!red-hat-developer-hub-backstage-plugin-techdocs-mcp-tool
+        disabled: false

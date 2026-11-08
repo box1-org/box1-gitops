@@ -27,6 +27,29 @@ data:
             options:
               subject: box1-automation
               secret: ${BACKEND_SECRET}
+          # RHDH MCP server clients (Developer Lightspeed). Token from
+          # developer-hub-lightspeed-secrets; see README.
+          - type: static
+            options:
+              token: ${MCP_TOKEN}
+              subject: mcp-clients
+      actions:
+        pluginSources:
+          - software-catalog-mcp-tool
+          - techdocs-mcp-tool
+      csp:
+        upgrade-insecure-requests: false
+        img-src:
+          - "'self'"
+          - "data:"
+          - https://img.freepik.com
+          - https://cdn.dribbble.com
+          - https://avatars.githubusercontent.com
+          - https://secure.gravatar.com
+        script-src:
+          - "'self'"
+          - "'unsafe-eval'"
+          - https://cdn.jsdelivr.net
     auth:
       environment: production
       session:
@@ -50,6 +73,11 @@ data:
               resolvers:
                 - resolver: emailMatchingUserEntityProfileEmail
     signInPage: oidc
+    lightspeed:
+      servicePort: 8080
+      mcpServers:
+        - name: mcp::backstage
+          token: ${MCP_TOKEN}
     integrations:
       github:
         - host: github.com

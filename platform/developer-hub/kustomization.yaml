@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - app-config.yaml
   - dynamic-plugins.yaml
+  - lightspeed.yaml
   - extensions-seed.yaml
   - dynamic-plugins-pvc.yaml
   - kubernetes-access.yaml
