@@ -24,10 +24,13 @@ for the rest of the PipelineRun and the three Tekton results expose the SBOM
 identifier, scan status, and policy status.
 
 The Task is installed by the `pipelines-ci` Kustomization. Application release
-definitions now invoke it between `build` and `promote` with an explicit
-`security-gates=disabled` default. Disabled mode records an auditable no-op and
-keeps the existing release flow intact; changing that parameter to `observe` or
-`gate` requires the scoped credentials below and runs before promotion. Issue #9
+definitions invoke it between `build` and `promote`. The Task's own
+`enforcement` default stays `disabled`, but since box1-docs#42 the Quarkus
+Golden Path template passes `security-gates=gate`, so new services block
+promotion of a policy-failing image without extra configuration. Generated
+services keep their own `.tekton/release.yaml`, so the template change does not
+alter existing services; each sets its mode in that file. `observe` reports
+without blocking, and `disabled` records an auditable no-op. Issue #9
 still records RHACS registry integration, representative image scanning, policy
 baseline, and admission violation testing as unverified. The enablement sequence
 is:

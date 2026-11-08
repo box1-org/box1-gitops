@@ -49,8 +49,25 @@ spec:
           req=urllib.request.Request('https://kubernetes.default.svc'+path,headers={'Authorization':'Bearer '+token})
           with urllib.request.urlopen(req,context=context,timeout=20) as response: return json.load(response)
 
+      # Keep in step with converged() in box1-gitops-promote (box1-docs#42): an
+      # Application OutOfSync only because old kustomize-generated ConfigMaps await
+      # pruning has converged; any other OutOfSync resource has not.
+      GENERATED_CONFIGMAP=re.compile(r'[a-z0-9][a-z0-9.-]*-[2456789bcdfghkmt]{10}')
+
+      def converged(status):
+          sync=(status.get('sync') or {}).get('status')
+          if sync=='Synced': return True, []
+          if sync!='OutOfSync': return False, []
+          drift=[r for r in status.get('resources') or [] if r.get('status')!='Synced']
+          orphans=[r for r in drift if r.get('requiresPruning') is True and r.get('kind')=='ConfigMap'
+                   and not r.get('group') and GENERATED_CONFIGMAP.fullmatch(r.get('name') or '')]
+          if drift and len(orphans)==len(drift):
+              return True, sorted('%s/%s' % (r.get('namespace',''),r['name']) for r in orphans)
+          return False, []
+
       expected='image-registry.openshift-image-registry.svc:5000/box1-ci/'+name+'@'+digest
       deadline=time.monotonic()+900
+      orphans=[]
       while time.monotonic()<deadline:
           app=kube('/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/'+name)
           deployment=kube('/apis/apps/v1/namespaces/'+namespace+'/deployments/'+name)
@@ -61,11 +78,18 @@ spec:
           ready=any(not pod['metadata'].get('deletionTimestamp') and
               any(c['type']=='Ready' and c['status']=='True' for c in pod.get('status',{}).get('conditions',[])) and
               any(c.get('imageID','').endswith('@'+digest) for c in pod.get('status',{}).get('containerStatuses',[])) for pod in pods)
-          synced=app.get('status',{}).get('sync',{}).get('status')=='Synced'
+          synced,orphans=converged(app.get('status',{}))
           healthy=app.get('status',{}).get('health',{}).get('status')=='Healthy'
           if desired and source and available and ready and synced and healthy: break
           time.sleep(10)
-      else: raise TimeoutError('Argo rollout did not reach the expected source revision and image digest')
+      else:
+          status=app.get('status',{})
+          drift=['%s/%s' % (r.get('kind'),r.get('name')) for r in status.get('resources') or [] if r.get('status')!='Synced']
+          raise TimeoutError('Argo rollout did not reach the expected source revision and image digest: '
+              'image=%s source-revision=%s available=%s pod-ready=%s sync=%s health=%s out-of-sync resources=%s' %
+              (desired,source,available,ready,(status.get('sync') or {}).get('status'),
+               (status.get('health') or {}).get('status'),', '.join(drift) or 'none'))
+      if orphans: print('Tolerating generated ConfigMaps that await pruning (box1-docs#42): '+', '.join(orphans))
       base='https://'+namespace+'.apps.ocp.box1.org'
 
       def get(path,accept='application/json'):
@@ -95,5 +119,5 @@ spec:
           get('/api/greetings?name=%20')
           raise AssertionError('Blank name should be rejected')
       except urllib.error.HTTPError as error: assert error.code==400
-      print('PASS: Argo Synced/Healthy, expected source and runtime digest, REST, Java 21, health, OpenAPI, metrics, validation.')
+      print('PASS: Argo converged/Healthy, expected source and runtime digest, REST, Java 21, health, OpenAPI, metrics, validation.')
       print('Source: '+revision+' image: '+digest+' Route: '+base)

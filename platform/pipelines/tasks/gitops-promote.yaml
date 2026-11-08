@@ -180,17 +180,49 @@ spec:
           if not value: return 0
           return datetime.datetime.fromisoformat(value.replace('Z','+00:00')).timestamp()
 
-      def diagnostics(app, expected, phase=''):
+      # A configMapGenerator change gives the ConfigMap a new kustomize hash suffix.
+      # Workload Applications do not auto-prune, so the old ConfigMap stays live and
+      # keeps the Application OutOfSync after a correct rollout (box1-docs#42). Only
+      # that leftover is tolerated: anything else OutOfSync still fails the release.
+      GENERATED_CONFIGMAP=re.compile(r'[a-z0-9][a-z0-9.-]*-[2456789bcdfghkmt]{10}')
+
+      def converged(status):
+          """Return (ok, orphans): ok when the Application is Synced, or OutOfSync only
+          because kustomize-generated ConfigMaps await pruning; orphans names those."""
+          sync=(status.get('sync') or {}).get('status')
+          if sync=='Synced': return True, []
+          if sync!='OutOfSync': return False, []
+          drift=[r for r in status.get('resources') or [] if r.get('status')!='Synced']
+          orphans=[r for r in drift if r.get('requiresPruning') is True and r.get('kind')=='ConfigMap'
+                   and not r.get('group') and GENERATED_CONFIGMAP.fullmatch(r.get('name') or '')]
+          if drift and len(orphans)==len(drift):
+              return True, sorted('%s/%s' % (r.get('namespace',''),r['name']) for r in orphans)
+          return False, []
+
+      def diagnostics(app, expected):
           status=app.get('status',{}); operation=status.get('operationState') or {}
           sync=status.get('sync') or {}; health=status.get('health') or {}
           messages=[]
           for condition in status.get('conditions') or []:
               if condition.get('message'): messages.append(condition['message'])
           if operation.get('message'): messages.append(operation['message'])
+          drift=['%s/%s%s' % (r.get('kind'),r.get('name'),' (requires pruning)' if r.get('requiresPruning') else '')
+                 for r in status.get('resources') or [] if r.get('status')!='Synced']
           return ('Argo Application %s did not reach the requested state: expected GitOps revision=%s, '
-              'observed revision=%s, sync=%s, health=%s, operation phase=%s, %s' %
+              'observed revision=%s, sync=%s, health=%s, operation phase=%s, out-of-sync resources=%s, %s' %
               (name,expected,sync.get('revision') or sync.get('revisions'),sync.get('status'),
-               health.get('status'),operation.get('phase') or phase,'; '.join(messages) or 'no condition message'))
+               health.get('status'),operation.get('phase') or 'none',', '.join(drift) or 'none',
+               '; '.join(messages) or 'no condition message'))
+
+      def settled(app, expected, direct):
+          """True when the Application runs `expected`, is Healthy and has converged."""
+          status=app.get('status',{}); sync=status.get('sync') or {}
+          observed=sync.get('revision') or sync.get('revisions')
+          revision_ok=not direct or expected in ([observed] if isinstance(observed,str) else observed or [])
+          ok,orphans=converged(status)
+          if not (ok and revision_ok and (status.get('health') or {}).get('status')=='Healthy'): return False
+          if orphans: print('Tolerating generated ConfigMaps that await pruning (box1-docs#42): '+', '.join(orphans))
+          return True
 
       def sync_application(expected, timeout):
           path='/apis/argoproj.io/v1alpha1/namespaces/openshift-gitops/applications/'+name
@@ -201,10 +233,8 @@ spec:
           # repository owns the Task and RBAC, but is not the desired-state source.
           direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-workloads-dev']
           active=(app.get('status',{}).get('operationState') or {}).get('phase') in ['Running','Terminating']
-          current=app.get('status',{}).get('sync',{}) or {}
-          observed=current.get('revision') or current.get('revisions')
-          if not active and current.get('status')=='Synced' and app.get('status',{}).get('health',{}).get('status')=='Healthy' and (not direct or expected in ([observed] if isinstance(observed,str) else observed or [])):
-              print('Argo Application already Synced/Healthy at '+str(observed))
+          if not active and settled(app,expected,direct):
+              print('Argo Application already at the expected revision and Healthy')
               return
           if active:
               print('Waiting for existing Argo operation before requesting '+expected)
@@ -212,11 +242,9 @@ spec:
               time.sleep(5); app=kube(path); operation=app.get('status',{}).get('operationState') or {}; active=operation.get('phase') in ['Running','Terminating']
               if not active and operation.get('phase') not in [None,'Succeeded']:
                   raise RuntimeError(diagnostics(app,expected))
-          if active: raise TimeoutError(diagnostics(app,expected,'Running'))
-          current=app.get('status',{}).get('sync',{}) or {}
-          observed=current.get('revision') or current.get('revisions')
-          if current.get('status')=='Synced' and app.get('status',{}).get('health',{}).get('status')=='Healthy' and (not direct or expected in ([observed] if isinstance(observed,str) else observed or [])):
-              print('Argo Application reached expected state while waiting: '+str(observed))
+          if active: raise TimeoutError(diagnostics(app,expected))
+          if settled(app,expected,direct):
+              print('Argo Application reached the expected state while waiting')
               return
           sync={}
           if len(direct)==1 and len(sources)==1: sync['revision']=expected
@@ -229,14 +257,11 @@ spec:
           while time.time()<deadline:
               time.sleep(5); app=kube(path); status=app.get('status',{}); operation= status.get('operationState') or {}; phase=operation.get('phase')
               if phase in ['Error','Failed']: raise RuntimeError(diagnostics(app,expected))
-              sync=status.get('sync') or {}; health=status.get('health') or {}; observed=sync.get('revision') or sync.get('revisions')
-              operation_started=when(operation.get('startedAt'))
-              fresh=operation_started >= request_started-5
-              revision_ok=not direct or expected in ([observed] if isinstance(observed,str) else observed or [])
-              if phase=='Succeeded' and fresh and sync.get('status')=='Synced' and health.get('status')=='Healthy' and revision_ok:
-                  print('Argo sync completed for '+name+' at '+str(observed))
+              fresh=when(operation.get('startedAt')) >= request_started-5
+              if phase=='Succeeded' and fresh and settled(app,expected,direct):
+                  print('Argo sync completed for '+name+' at '+expected)
                   return
-          raise TimeoutError(diagnostics(app,expected,'Running'))
+          raise TimeoutError(diagnostics(app,expected))
       result('promoted','false'); result('gitops-revision','not-merged'); result('pr-url','not-created')
       if github(application+'/commits/main')['sha'] != source:
           print('Source revision was superseded; no promotion is performed.')
