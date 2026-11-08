@@ -6,6 +6,12 @@ metadata:
   labels:
     app.kubernetes.io/part-of: dev-spaces
 spec:
+  components:
+    pluginRegistry:
+      # The embedded registry lacks Kaoto (redhat.vscode-kaoto) and Tekton
+      # (redhat.vscode-tekton-pipelines), which Box1 devfiles recommend
+      # (box1-docs#114). open-vsx.org has both, plus everything the embedded one had.
+      openVSXURL: https://open-vsx.org
   devEnvironments:
     maxNumberOfWorkspacesPerUser: -1
     maxNumberOfRunningWorkspacesPerUser: 3

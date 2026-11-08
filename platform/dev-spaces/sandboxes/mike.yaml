@@ -1,0 +1,28 @@
+# Remote-dev sandbox for OpenShift user "mike" (box1-docs#114).
+# Argo CD owns the namespace and access only. What runs inside is applied by
+# box1-remote-dev from a Dev Spaces workspace (pre-commit code, Quarkus remote dev),
+# so <service>-dev stays Argo-only. Labels match the <service>-dev namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mike-sandbox
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    box1.org/sandbox-owner: mike
+    pod-security.kubernetes.io/enforce: restricted
+    istio-discovery: enabled
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sandbox-owner-edit
+  namespace: mike-sandbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: mike

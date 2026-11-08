@@ -1,0 +1,108 @@
+# Box1 Universal Developer Image: box1-org/box1-devspaces, box1-org/box1-docs#114.
+#
+#   - Pull requests build the image only, as ci-udi-check (buildah SCC, no registry or API rights).
+#   - Pushes to main build and push box1-devtools/box1-udi:<sha12>, as ci-udi-release.
+#   - Dev Spaces workspaces pull the image from box1-devtools, a dedicated image project,
+#     so box1-ci stays maintainer-only. The image holds no credentials (public source).
+# The base image comes from registry.redhat.io through the existing redhat-registry-pull
+# Secret (created outside Git). No credentials in Git.
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: box1-devspaces
+  namespace: box1-ci
+spec:
+  url: https://github.com/box1-org/box1-devspaces
+  concurrency_limit: 1
+  settings:
+    pipelinerun_provenance: default_branch
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-devtools
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-udi-check
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-udi-release
+  namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-udi-buildah-scc
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pipelines-scc-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: ci-udi-check
+    namespace: box1-ci
+  - kind: ServiceAccount
+    name: ci-udi-release
+    namespace: box1-ci
+---
+# Declared so the release never needs rights to create image streams.
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: box1-udi
+  namespace: box1-devtools
+spec:
+  lookupPolicy:
+    local: false
+---
+# Push to this one ImageStream only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-udi-release-push
+  namespace: box1-devtools
+rules:
+  - apiGroups: ["", "image.openshift.io"]
+    resources: ["imagestreams/layers"]
+    resourceNames: ["box1-udi"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-udi-release-push
+  namespace: box1-devtools
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-udi-release-push
+subjects:
+  - kind: ServiceAccount
+    name: ci-udi-release
+    namespace: box1-ci
+---
+# Workspace pods run under per-workspace service accounts in each user's namespace.
+# The image is built from public source and holds no credentials, so any service
+# account may pull it; box1-devtools holds nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspaces-image-puller
+  namespace: box1-devtools
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts
