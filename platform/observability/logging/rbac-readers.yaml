@@ -1,0 +1,42 @@
+# Who may read box1 application logs from LokiStack logging-loki (tenant "application").
+#
+# agentic-operations reads logs as evidence for incident analyses and the console Assistant (box1-docs#111, user
+# decision 2026-11-08), with its own ServiceAccount. cluster-logging-application-view (shipped by the logging operator)
+# lets the gateway accept it for the application tenant; the gateway then returns only namespaces the subject may
+# read, which box1-workloads-dev limits to the box1 *-dev namespaces (RoleBindings to box1-observability-reader).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-agentic-operations-application-logs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-logging-application-view
+subjects:
+  - kind: ServiceAccount
+    name: agentic-operations
+    namespace: agentic-operations-dev
+---
+# Namespace-scoped read for observability evidence (box1-docs#111). Bound only through RoleBindings in the box1
+# service namespaces (box1-workloads-dev workloads/<service>/rolebinding-agentic-operations-observe.yaml), never
+# cluster-wide.
+#
+# - pods get/list: the Thanos querier tenancy port (9092) authorizes ?namespace= queries with a SubjectAccessReview
+#   for pods in that namespace; the LokiStack gateway uses namespace access to filter application logs.
+# - pods/log get: reading that namespace's logs.
+# No secrets, configmaps, exec or writes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: box1-observability-reader
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
