@@ -17,7 +17,7 @@ metadata:
 spec:
   type: repository
   lifecycle: experimental
-  owner: user:default/mike4263
+  owner: user:default/mike
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -35,7 +35,7 @@ metadata:
 spec:
   type: kafka-cluster
   lifecycle: experimental
-  owner: user:default/mike4263
+  owner: user:default/mike
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -50,7 +50,7 @@ metadata:
 spec:
   type: identity-provider
   lifecycle: experimental
-  owner: user:default/mike4263
+  owner: user:default/mike
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -64,7 +64,7 @@ metadata:
 spec:
   type: smtp-server
   lifecycle: experimental
-  owner: user:default/mike4263
+  owner: user:default/mike
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -77,4 +77,4 @@ metadata:
 spec:
   type: llm-inference
   lifecycle: experimental
-  owner: user:default/mike4263
+  owner: user:default/mike
