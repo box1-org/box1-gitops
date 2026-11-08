@@ -18,10 +18,13 @@ spec:
     clientCertCommonName: hawtio-online.hawtio.svc
     clientCertExpirationPeriod: 24
     internalSSL: true
+  # Applies to both the nginx and gateway containers. In cluster mode the
+  # gateway watches pods in every namespace the user can see (~100 on Box1);
+  # at the operator's example 200Mi limit it was OOM-killed on 2026-11-08.
   resources:
     requests:
       cpu: 200m
-      memory: 32Mi
+      memory: 128Mi
     limits:
       cpu: "1"
-      memory: 200Mi
+      memory: 512Mi
