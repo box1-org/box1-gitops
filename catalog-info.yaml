@@ -36,6 +36,7 @@ spec:
   type: kafka-cluster
   lifecycle: experimental
   owner: user:default/mike
+  system: box1-operations
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -51,6 +52,7 @@ spec:
   type: identity-provider
   lifecycle: experimental
   owner: user:default/mike
+  system: box1-operations
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -65,6 +67,7 @@ spec:
   type: smtp-server
   lifecycle: experimental
   owner: user:default/mike
+  system: box1-operations
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Resource
@@ -77,4 +80,21 @@ metadata:
 spec:
   type: llm-inference
   lifecycle: experimental
+  owner: user:default/mike
+  system: box1-operations
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: box1-operations
+  title: Box1 Operations
+  description: >-
+    Box1 order lifecycle, industrial telemetry, AI-assisted operations and legacy ERP
+    modernization demo, with the APIs, event topics and resources they share.
+  tags: [box1, demo]
+  links:
+    - url: https://github.com/box1-org/box1-ops-contracts
+      title: Shared event and HTTP contracts
+      icon: docs
+spec:
   owner: user:default/mike
