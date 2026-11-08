@@ -174,3 +174,96 @@ data:
             frequency: { minutes: 30 }
             timeout: { minutes: 10 }
             initialDelay: { seconds: 15 }
+    # Home page: replaces the stock "Get started / Explore / Learn" onboarding
+    # banner with a Box1 operations banner. Red Hat branding stays for demos;
+    # the banner reuses the RHDH product icon the frontend already serves.
+    # This file loads after app-config.dynamic-plugins.yaml and config arrays
+    # replace rather than merge, so the full default card list (RHDH 1.9,
+    # dynamic-home-page 1.10.x) is restated here minus OnboardingSection.
+    # Re-check dynamic-plugins.default.yaml on RHDH upgrades.
+    dynamicPlugins:
+      frontend:
+        red-hat-developer-hub.backstage-plugin-dynamic-home-page:
+          mountPoints:
+            - mountPoint: application/listener
+              importName: VisitListener
+            - mountPoint: home.page/cards
+              importName: Markdown
+              config:
+                id: box1-operations-banner
+                title: Box1 Operations
+                cardLayout:
+                  width: { minColumns: 4, maxColumns: 12, defaultColumns: 12 }
+                  height: { minRows: 2, maxRows: 12, defaultRows: 4 }
+                layouts:
+                  xl: { w: 12, h: 6 }
+                  lg: { w: 12, h: 6 }
+                  md: { w: 12, h: 7 }
+                  sm: { w: 12, h: 8 }
+                  xs: { w: 12, h: 9 }
+                  xxs: { w: 12, h: 14 }
+                props:
+                  content: |
+                    ## Box1 Operations Hub
+                    Self-service delivery and day-2 operations for the Box1 OpenShift lab, powered by Red Hat Developer Hub.
+
+                    | ![Red Hat Developer Hub](/android-chrome-192x192.png) | **Build** | **Deliver** | **Operate** |
+                    | :---: | --- | --- | --- |
+                    | | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](https://devspaces.apps.ocp.box1.org). | Pipelines as Code runs Tekton checks; [Argo CD](https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](https://operations-console-dev.apps.ocp.box1.org), trace traffic in [Kiali](https://kiali-istio-system.apps.ocp.box1.org), and ask Developer Lightspeed. |
+                    | | [Software Catalog →](/catalog) | [OpenShift Console →](https://console-openshift-console.apps.ocp.box1.org) | [Box1 backlog →](https://github.com/box1-org/box1-docs/issues) |
+            - mountPoint: home.page/cards
+              importName: EntitySection
+              config:
+                id: rhdh-entity-section
+                title: Red Hat Developer Hub - Software Catalog
+                cardLayout:
+                  width: { minColumns: 4, maxColumns: 12, defaultColumns: 12 }
+                  height: { minRows: 2, maxRows: 12, defaultRows: 4 }
+                layouts:
+                  xl: { w: 12, h: 7 }
+                  lg: { w: 12, h: 7 }
+                  md: { w: 12, h: 8 }
+                  sm: { w: 12, h: 9 }
+                  xs: { w: 12, h: 11 }
+                  xxs: { w: 12, h: 15 }
+            - mountPoint: home.page/cards
+              importName: TemplateSection
+              config:
+                id: rhdh-template-section
+                title: Red Hat Developer Hub - Explore templates
+                cardLayout:
+                  width: { minColumns: 4, maxColumns: 12, defaultColumns: 12 }
+                  height: { minRows: 2, maxRows: 12, defaultRows: 4 }
+                layouts:
+                  xl: { w: 12, h: 5 }
+                  lg: { w: 12, h: 5 }
+                  md: { w: 12, h: 5 }
+                  sm: { w: 12, h: 5 }
+                  xs: { w: 12, h: 7.5 }
+                  xxs: { w: 12, h: 13.5 }
+            - mountPoint: home.page/cards
+              importName: QuickAccessCard
+              config: { id: quickaccess-card, title: Quick Access Card }
+            - mountPoint: home.page/cards
+              importName: SearchBar
+              config:
+                id: searchbar
+                title: Search
+                cardLayout:
+                  width: { minColumns: 4, maxColumns: 12, defaultColumns: 12 }
+                  height: { minRows: 1, maxRows: 2, defaultRows: 2 }
+            - mountPoint: home.page/cards
+              importName: CatalogStarredEntitiesCard
+              config: { id: catalog-starred-entities-card, title: Starred catalog entities }
+            - mountPoint: home.page/cards
+              importName: RecentlyVisitedCard
+              config: { id: recently-visited-card, title: Recently visited }
+            - mountPoint: home.page/cards
+              importName: TopVisitedCard
+              config: { id: top-visited-card, title: Top visited }
+            - mountPoint: home.page/cards
+              importName: FeaturedDocsCard
+              config: { id: featured-docs-card, title: Featured docs }
+            - mountPoint: home.page/cards
+              importName: JokeCard
+              config: { id: joke-card, title: Random joke }
