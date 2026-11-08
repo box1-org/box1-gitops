@@ -48,7 +48,9 @@ spec:
             - -ui-bind-addr=127.0.0.1:8025
             - -api-bind-addr=127.0.0.1:8025
             - -storage=maildir
-            - -maildir-path=/maildir
+            # Keep the maildir one level below the volume mount. "Delete all" removes and recreates
+            # this directory; that fails with a 500 when it is the mount point under a read-only root.
+            - -maildir-path=/var/mailhog/maildir
             - -hostname=mailhog.box1.local
           ports:
             - name: smtp
@@ -72,7 +74,7 @@ spec:
               drop: [ALL]
           volumeMounts:
             - name: maildir
-              mountPath: /maildir
+              mountPath: /var/mailhog
         - name: oauth-proxy
           # The same Red Hat ose-oauth-proxy image the cluster already runs (openshift-storage).
           image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9@sha256:01aff928e344429dd8edf807716594c2a60719c629a6e8277ec9be81c5c019a7
