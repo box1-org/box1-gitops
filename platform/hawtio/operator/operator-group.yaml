@@ -1,0 +1,8 @@
+# Empty spec = AllNamespaces install mode (supported by the v2 channel), which
+# lets the operator reconcile a cluster-mode Hawtio CR.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: hawtio-operator
+  namespace: hawtio
+spec: {}

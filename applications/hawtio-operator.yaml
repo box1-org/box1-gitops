@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hawtio-operator
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/hawtio/operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hawtio
+  # Manual sync; OLM InstallPlans require explicit approval.
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true

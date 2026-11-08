@@ -1,0 +1,27 @@
+# Cluster mode: one console discovers Jolokia-enabled pods in every namespace
+# the logged-in user can access. On OpenShift the operator registers an
+# OAuthClient and the console requires OpenShift OAuth login; there is no
+# separate auth-mode field in hawt.io/v2.
+#
+# The operator issues a client certificate for the console's Jolokia requests.
+# Its CN is pinned below; Jolokia agents trust it via `clientPrincipal`, so
+# changing it breaks every agent's configuration.
+apiVersion: hawt.io/v2
+kind: Hawtio
+metadata:
+  name: hawtio-online
+  namespace: hawtio
+spec:
+  type: Cluster
+  replicas: 1
+  auth:
+    clientCertCommonName: hawtio-online.hawtio.svc
+    clientCertExpirationPeriod: 24
+    internalSSL: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 32Mi
+    limits:
+      cpu: "1"
+      memory: 200Mi
