@@ -17,8 +17,11 @@ spec:
           - name: box1-coder
             contextWindowSize: 98304
             parameters:
-              maxTokensForResponse: 4096
+              maxTokensForResponse: 4096        
   ols:
     defaultProvider: box1-vllm
     defaultModel: box1-coder
     logLevel: INFO
+    guardrails:
+      toolResultInspection:
+        enabled: false
