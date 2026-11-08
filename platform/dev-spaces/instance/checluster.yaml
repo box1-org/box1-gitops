@@ -8,3 +8,4 @@ metadata:
 spec:
   devEnvironments:
     maxNumberOfWorkspacesPerUser: -1
+    maxNumberOfRunningWorkspacesPerUser: -1
