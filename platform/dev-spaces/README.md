@@ -12,6 +12,9 @@ The `CheCluster` mostly keeps the operator defaults. Box1 changes:
 - `openVSXURL: https://open-vsx.org`, because the embedded registry lacks the
   Kaoto and Tekton extensions recommended by Box1 devfiles (box1-docs#114).
 - At most 3 running workspaces per user.
+- Container run capabilities with the built-in `nested-container` SCC, so `podman run`
+  (and Testcontainers) works in workspaces. Every workspace pod runs in its own user
+  namespace with `/dev/fuse` and `/dev/net/tun`.
 
 `sandboxes/` holds one namespace per developer (`<user>-sandbox`) for Quarkus
 remote dev of uncommitted code from a workspace (`box1-remote-dev`, from the

@@ -15,3 +15,22 @@ spec:
   devEnvironments:
     maxNumberOfWorkspacesPerUser: -1
     maxNumberOfRunningWorkspacesPerUser: 3
+    # Nested containers (podman run with networking, Testcontainers) in workspaces
+    # (box1-docs#114). Uses the built-in OpenShift nested-container SCC: every
+    # workspace pod then runs in its own user namespace (hostUsers: false), so the
+    # SETUID/SETGID capabilities and devices below do not apply on the host.
+    # /dev/net/tun lets rootless podman set up container networking (pasta);
+    # /dev/fuse enables fuse-overlayfs storage. Applies to all workspaces.
+    # Revert: delete this block (back to the operator default, run disabled) and sync.
+    disableContainerRunCapabilities: false
+    containerRunConfiguration:
+      openShiftSecurityContextConstraint: nested-container
+      workspacesPodAnnotations:
+        io.kubernetes.cri-o.Devices: /dev/fuse,/dev/net/tun
+      containerSecurityContext:
+        allowPrivilegeEscalation: true
+        procMount: Unmasked
+        capabilities:
+          add:
+            - SETGID
+            - SETUID
