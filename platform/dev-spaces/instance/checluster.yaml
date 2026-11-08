@@ -28,6 +28,10 @@ spec:
       workspacesPodAnnotations:
         io.kubernetes.cri-o.Devices: /dev/fuse,/dev/net/tun
       containerSecurityContext:
+        # nested-container allows UIDs 0-65534 and otherwise assigns 0, which
+        # Dev Spaces' runAsNonRoot rejects. The UDI entrypoint builds podman's
+        # sub-UID range from a UID below 65536.
+        runAsUser: 1000
         allowPrivilegeEscalation: true
         procMount: Unmasked
         capabilities:
