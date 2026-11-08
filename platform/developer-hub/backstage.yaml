@@ -18,7 +18,7 @@ spec:
         - name: NODE_EXTRA_CA_CERTS
           value: /platform/trust/ca-bundle.crt
       configMaps:
-        # BOX1_FULL_LOGO / BOX1_ICON_LOGO data URIs for app.branding and the home banner.
+        # BOX1_ICON_LOGO data URI for the home banner.
         - name: developer-hub-branding
       secrets:
         - name: developer-hub-secrets
