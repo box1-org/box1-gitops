@@ -46,8 +46,10 @@ data:
           Authorization: client
 ---
 # Llama Stack run.yaml: the image default (quay.io/redhat-ai-dev/llama-stack:0.1.4)
-# minus the Llama Guard safety shield and model, which need a separate guard model
-# server that Box1 does not run. box1-coder is registered explicitly.
+# minus the Llama Guard shield and guard model, which need a separate guard model
+# server that Box1 does not run. The inline::llama-guard safety provider stays
+# because the meta-reference agents provider requires a safety API; with no shield
+# registered it never calls a model. box1-coder is registered explicitly.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -60,6 +62,7 @@ data:
     apis:
       - agents
       - inference
+      - safety
       - tool_runtime
       - vector_io
       - files
@@ -86,6 +89,11 @@ data:
         - provider_id: sentence-transformers
           provider_type: inline::sentence-transformers
           config: {}
+      safety:
+        - provider_id: llama-guard
+          provider_type: inline::llama-guard
+          config:
+            excluded_categories: []
       tool_runtime:
         - provider_id: model-context-protocol
           provider_type: remote::model-context-protocol

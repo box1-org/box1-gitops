@@ -120,7 +120,7 @@ using the in-cluster vLLM model and RHDH's own MCP tools.
 | Plugins | `red-hat-developer-hub-backstage-plugin-lightspeed`/`-backend` `bs_1.45.3__1.2.3`; `backstage-plugin-mcp-actions-backend` `bs_1.45.3__0.1.5`; `software-catalog-mcp-tool` `bs_1.45.3__0.4.1`; `techdocs-mcp-tool` `bs_1.45.3__0.3.2` (`dynamic-plugins.yaml`) |
 | Sidecars | `lightspeed-core` (LCS 0.4.0, port 8080) and `llama-stack` (0.1.4, port 8321) in the developer-hub pod; `init-rag-data` copies the RHDH product-docs vector DB (`backstage.yaml`) |
 | Model | Llama Stack `remote::vllm` → `http://vllm-test-2.vllm.svc.cluster.local:8000/v1`, model `box1-coder` (`lightspeed.yaml`) |
-| Safety shield | **None.** The image default Llama Guard shield needs a separate guard model server; `developer-hub-llama-stack` removes it (lab-only choice) |
+| Safety shield | **None registered.** The image default Llama Guard shield needs a separate guard model server, so `developer-hub-llama-stack` registers no shield or guard model (lab-only choice). The `inline::llama-guard` safety provider stays configured because the agents provider requires a safety API |
 | MCP | LCS `mcp::backstage` → `http://localhost:7007/api/mcp-actions/v1`; the Lightspeed backend sends `lightspeed.mcpServers[].token` (`MCP_TOKEN`), accepted by `backend.auth.externalAccess` type `static`, subject `mcp-clients` |
 | Data | Feedback and conversation cache on a pod `emptyDir` (lost on restart); transcripts off |
 
