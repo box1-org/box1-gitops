@@ -45,6 +45,13 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: kiali
+        # agentic-operations (box1-docs#111) reads traces as evidence with its own token.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentic-operations-dev
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentic-operations
       ports:
         - protocol: TCP
           port: 8080

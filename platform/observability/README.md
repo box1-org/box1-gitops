@@ -131,6 +131,21 @@ operator to `tempo-platform` in `openshift-tracing`, which does not exist
 here, and its trace rules only lead to Pods. The panel is still useful for
 alerts, Pods and logs. Tracked in box1-docs#82.
 
+**Service readers (box1-docs#111).** agentic-operations reads traces, logs
+and alerts as evidence with its own ServiceAccount
+(`agentic-operations-dev/agentic-operations`), read only:
+
+- traces: `box1-agentic-operations-traces-read-dev` binds `box1-traces-read-dev`,
+  and the `tempo-box1` NetworkPolicy admits its pods on 8080;
+- logs: `box1-agentic-operations-application-logs` binds the logging operator's
+  `cluster-logging-application-view` (`logging/rbac-readers.yaml`);
+- which namespaces: ClusterRole `box1-observability-reader` (pods get/list,
+  pods/log get) is bound only by RoleBindings in the Box1 service namespaces,
+  kept with each service in box1-workloads-dev. It limits the Loki application
+  tenant, the Thanos querier tenancy port (9092) and, with
+  `monitoring-rules-view`, the Alertmanager tenancy port (9095) to those
+  namespaces. Nothing grants it secrets, exec or cluster-wide metrics.
+
 **Known risk: NooBaa (box1-docs#43).** NooBaa has one `pv-pool` backing store,
 and its agent pod is not recreated after an eviction. While it is offline,
 the ingesters cannot flush chunks and queries for older data fail. The
