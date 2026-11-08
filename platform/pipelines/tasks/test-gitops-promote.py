@@ -12,6 +12,7 @@ import unittest
 ROOT = pathlib.Path(__file__).parent
 TASK = ROOT / "gitops-promote.yaml"
 RBAC = ROOT.parent / "ci" / "argo-sync-rbac.yaml"
+SMOKE = ROOT / "quarkus-smoke.yaml"
 
 
 def script_text():
@@ -62,7 +63,9 @@ class PromotionSyncContract(unittest.TestCase):
     def test_active_and_terminal_operation_states_are_handled(self):
         self.assertIn("['Running','Terminating']", self.script)
         self.assertIn("['Error','Failed']", self.script)
-        self.assertIn("raise TimeoutError(diagnostics(app,expected,'Running'))", self.script)
+        # box1-docs#42: the timeout reports the observed phase, never a fixed 'Running'.
+        self.assertIn("raise TimeoutError(diagnostics(app,expected))", self.script)
+        self.assertNotIn("diagnostics(app,expected,'Running')", self.script)
 
     def test_multi_source_and_expected_revision_are_handled(self):
         self.assertIn("spec.get('sources')", self.script)
@@ -83,15 +86,28 @@ class PromotionSyncContract(unittest.TestCase):
         self.assertNotIn("- delete", text)
 
 
-def promotion_functions():
-    """Load only the pure helper definitions from the Task script (no network code runs)."""
+def promotion_functions(text=None, task=TASK):
+    """Load only the pure helper definitions from a Task script (no network code runs)."""
     import re
-    tree = ast.parse(script_text())
-    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in ("candidate_paths", "plan_updates", "evaluate_checks"))
-            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") in ("ZERO", "START_FAILURE", "MAX_START_RETRIES") for t in n.targets))]
-    namespace = {"re": re}
-    exec(compile(ast.Module(body=keep, type_ignores=[]), str(TASK), "exec"), namespace)
+    tree = ast.parse(text if text is not None else script_text())
+    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in (
+                "candidate_paths", "plan_updates", "evaluate_checks", "converged", "diagnostics", "settled"))
+            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") in (
+                "ZERO", "START_FAILURE", "MAX_START_RETRIES", "GENERATED_CONFIGMAP") for t in n.targets))]
+    namespace = {"re": re, "name": "order-service"}
+    exec(compile(ast.Module(body=keep, type_ignores=[]), str(task), "exec"), namespace)
     return namespace
+
+
+def smoke_script_text():
+    text = SMOKE.read_text()
+    start = text.index("    script: |")
+    body = []
+    for line in text[start:].splitlines()[1:]:
+        if line and not line.startswith("      "):
+            break
+        body.append(line[6:] if line else '')
+    return "\n".join(body)
 
 
 class PromotionPlan(unittest.TestCase):
@@ -216,6 +232,84 @@ class RequiredChecks(unittest.TestCase):
         self.assertIn("'/check-runs/'+str(check['id'])+'/rerequest','POST'", script)
         self.assertIn("start_retries[check['name']]<=MAX_START_RETRIES", script)
         self.assertIn("check-runs?per_page=100&filter=all", script)
+
+
+class GeneratedConfigMapOrphans(unittest.TestCase):
+    """box1-docs#42: a configMapGenerator change must not fail a healthy release.
+
+    Changing a literal renames the generated ConfigMap. Workload Applications do not
+    prune, so the old one stays live and keeps the Application OutOfSync.
+    """
+    EXPECTED = "5fd61de" + "0" * 33
+
+    @classmethod
+    def setUpClass(cls):
+        cls.f = promotion_functions()
+        cls.smoke = promotion_functions(smoke_script_text(), SMOKE)
+
+    def res(self, name, kind="ConfigMap", status="OutOfSync", prune=True, group=""):
+        r = {"group": group, "version": "v1", "kind": kind, "namespace": "order-service", "name": name, "status": status}
+        if prune:
+            r["requiresPruning"] = True
+        return r
+
+    def app(self, sync="OutOfSync", health="Healthy", resources=(), phase="Succeeded"):
+        return {"status": {"sync": {"status": sync, "revision": self.EXPECTED}, "health": {"status": health},
+                           "operationState": {"phase": phase}, "resources": list(resources)}}
+
+    def both(self, status):
+        promote = self.f["converged"](status)
+        self.assertEqual(promote, self.smoke["converged"](status), "promote and smoke must agree")
+        return promote
+
+    def test_observed_orphans_are_tolerated(self):
+        # Names from order-service-release-dq2fk and the 2026-11-06 cleanup.
+        for orphan in ["order-service-config-29d2hgcc29", "order-service-config-8btd4c24mh",
+                       "inventory-service-config-cb8h282db5", "fulfillment-adapter-config-89db8g96gh"]:
+            status = self.app(resources=[self.res("order-service", kind="Deployment", status="Synced", prune=False, group="apps"),
+                                         self.res(orphan)])["status"]
+            self.assertEqual(self.both(status), (True, ["order-service/" + orphan]))
+        self.assertTrue(self.f["settled"](self.app(resources=[self.res("order-service-config-29d2hgcc29")]), self.EXPECTED, True))
+
+    def test_synced_is_unchanged(self):
+        self.assertEqual(self.both(self.app(sync="Synced")["status"]), (True, []))
+
+    def test_real_drift_still_fails(self):
+        cases = {
+            "modified live object": [self.res("order-service", kind="Deployment", prune=False, group="apps")],
+            "missing generated ConfigMap": [self.res("order-service-config-29d2hgcc29", prune=False)],
+            "orphan plus real drift": [self.res("order-service-config-29d2hgcc29"),
+                                       self.res("order-service", kind="Service", prune=False)],
+            "pruning a non-generated ConfigMap": [self.res("order-service-config")],
+            "pruning another kind": [self.res("order-service-db-29d2hgcc29", kind="Secret")],
+            "pruning a PVC": [self.res("postgres-data", kind="PersistentVolumeClaim")],
+            "pruning a grouped kind": [self.res("order-service-config-29d2hgcc29", group="example.com")],
+            "OutOfSync with no resource detail": [],
+        }
+        for label, resources in cases.items():
+            with self.subTest(label):
+                self.assertEqual(self.both(self.app(resources=resources)["status"]), (False, []))
+        for sync in ["Unknown", None]:
+            self.assertEqual(self.both(self.app(sync=sync)["status"]), (False, []))
+
+    def test_unhealthy_or_wrong_revision_still_fails(self):
+        orphan = [self.res("order-service-config-29d2hgcc29")]
+        self.assertFalse(self.f["settled"](self.app(health="Degraded", resources=orphan), self.EXPECTED, True))
+        self.assertFalse(self.f["settled"](self.app(resources=orphan), "f" * 40, True))
+
+    def test_diagnostics_report_the_observed_phase_and_drift(self):
+        app = self.app(resources=[self.res("order-service", kind="Deployment", prune=False, group="apps")])
+        message = self.f["diagnostics"](app, self.EXPECTED)
+        self.assertIn("operation phase=Succeeded", message)
+        self.assertNotIn("phase=Running", message)
+        self.assertIn("out-of-sync resources=Deployment/order-service", message)
+        app["status"]["operationState"] = {}
+        self.assertIn("operation phase=none", self.f["diagnostics"](app, self.EXPECTED))
+
+    def test_smoke_uses_the_tolerance(self):
+        script = smoke_script_text()
+        self.assertIn("synced,orphans=converged(app.get('status',{}))", script)
+        self.assertNotIn("get('status')=='Synced'", script)
 
 
 if __name__ == "__main__":

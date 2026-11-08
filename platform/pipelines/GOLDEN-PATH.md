@@ -74,6 +74,13 @@ development GitOps PR. If a required check reports the Pipelines as Code
 the gate rerequests that check-run up to twice instead of failing the release;
 any other failed check still fails it. The parameterized observer verifies that service's Argo
 state, runtime digest, source annotation, public endpoints, and `/api/info.gitRef`.
+Promotion and smoke accept the Argo Application as converged when it is
+`Synced`, or `OutOfSync` only because old kustomize-generated ConfigMaps
+(`<name>-<10-char hash>`) await pruning. A `configMapGenerator` change leaves
+that leftover, and workload Applications do not auto-prune (box1-docs#42). Any
+other out-of-sync resource, an unhealthy Application or a wrong revision still
+fails the release. The orphans are listed in the Task log and remain until
+someone prunes them.
 The validator renders every workload target and accepts a zero digest only for
 a zero-replica onboarding Deployment.
 
