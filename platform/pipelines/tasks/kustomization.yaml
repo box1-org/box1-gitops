@@ -14,3 +14,4 @@ resources:
 - bootc-apply.yaml
 - maven-bundle.yaml
 - bundle-consumer-pr.yaml
+- bootc-status.yaml

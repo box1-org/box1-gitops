@@ -51,6 +51,18 @@ spec:
       # Adding a source is a reviewed box1-gitops PR that edits this tuple.
       VM_INSTANCE_SOURCES=('site-gateway-os',)
       INLINE_CLOUD_INIT=['userData','userDataBase64','networkData','networkDataBase64']
+      # The <instance>-site ConfigMap (box1-docs#140): only these keys, each with its pattern.
+      # The assembly script (box1-docs scripts/vm-cloud-init) applies the same allowlist. URLs
+      # carry no user info, query, spaces, quotes or '$', so site.env stays safe to source.
+      _SITE_PATH=r'(?:/[A-Za-z0-9._%+:-]*)*'
+      SITE_KEYS={'siteId':(True,r'[a-z][a-z0-9_]{1,62}'),
+                 'keycloakClientId':(True,r'[a-z][a-z0-9-]{1,62}'),
+                 'keycloakTokenUrl':(True,r'https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?'+_SITE_PATH),
+                 'assetServiceUrl':(False,r'https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?'+_SITE_PATH),
+                 'kafkaBootstrapServers':(False,r'[A-Za-z0-9.-]+:[0-9]{1,5}(?:,[A-Za-z0-9.-]+:[0-9]{1,5})*'),
+                 'otlpEndpoint':(False,r'https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?'+_SITE_PATH)}
+      # Secret keys KubeVirt reads as cloud-init user or network data.
+      CLOUD_INIT_SECRET_KEYS={'userdata','userData','networkdata','networkData'}
       CREDENTIAL_WORDS={'secret','secrets','password','passwords','passwd','pwd','passphrase',
                         'token','tokens','key','keys','apikey','privatekey','credential','credentials','kubeconfig'}
       # A credential assigned inside a file-shaped ConfigMap value (PASSWORD=..., secret: ...).
@@ -167,14 +179,17 @@ spec:
               assert len(urls)==1 and re.fullmatch(disk,urls[0]) and not urls[0].endswith(ZERO), 'Root DataVolume must pull the digest-pinned '+disk_image+'-disk image'
               assert re.search(r'(?m)^ +pullMethod: node$',dvs[0]), 'Root DataVolume must use pullMethod: node'
 
-      def credential_keys(text):
+      def credential_keys(text, allowed=()):
           """ConfigMap data keys that look like credentials (clientSecret, admin_password, apiKey...).
 
-          Keys are split into words (camelCase, -, _, .), so keycloakUrl is not a key.
+          Keys are split into words (camelCase, -, _, .), so keycloakUrl is not a key. Keys in
+          `allowed` (the #140 site keys, such as keycloakTokenUrl) skip the key-name test only;
+          their values are still checked.
           """
           found=[]
           for key in re.findall(r'(?m)^  [\'"]?([-._A-Za-z0-9]+)[\'"]?:',section(text,'data')+section(text,'binaryData')):
               words=re.split(r'[-_.]+',re.sub(r'([a-z0-9])([A-Z])',r'\1_\2',key).lower())
+              if key in allowed: continue
               if CREDENTIAL_WORDS.intersection(words) or 'apikey' in key.lower(): found.append(key)
           if re.search(r'-----BEGIN [A-Z ]*PRIVATE KEY-----',text): found.append('a PEM private key value')
           embedded=re.search(EMBEDDED_CREDENTIAL,section(text,'data')+section(text,'binaryData'))
@@ -203,11 +218,113 @@ spec:
           for ref in refs.values():
               assert ref not in rendered_secrets, 'Secret '+ref+' must be created outside Git, not rendered from it: cloud-init userData carries the instance credential'
           for _,n,t in [d for d in docs if d[0]=='ConfigMap']:
-              leaked=credential_keys(t)
+              leaked=credential_keys(t, SITE_KEYS if n==name+'-site' else ())
               assert not leaked, 'ConfigMap '+n+' must not hold credentials; found '+', '.join(leaked)+'. Put credentials in the '+name+'-cloud-init Secret, created outside Git'
           dvs=[n for k,n,_ in docs if k=='DataVolume']
           assert all(n==name+'-root' for n in dvs), 'Root DataVolume must be named '+name+'-root; found '+', '.join(dvs)
+          check_instance_cloud_init(name, docs, vm)
+          check_instance_rbac(name, docs)
           check_vm(name, rendered, disk_image=source)
+
+      def block_items(text, key):
+          """Items of the first block list under `key:` (kustomize renders `- ` at the key's column).
+
+          Each item is returned with its own keys at column 0.
+          """
+          found=re.search(r'(?m)^( *)'+re.escape(key)+r':\n',text)
+          if not found: return []
+          indent=found.group(1); items=[]
+          for line in text[found.end():].splitlines():
+              if line.startswith(indent+'- '): items.append(line[len(indent)+2:]+'\n')
+              elif line.startswith(indent+'  ') and items: items[-1]+=line[len(indent)+2:]+'\n'
+              else: break
+          return items
+
+      def rendered_rules(rules):
+          """A Role's rules as kustomize renders them (keys sorted, block lists)."""
+          out=''
+          for rule in rules:
+              lines=[]
+              for key in sorted(rule):
+                  lines.append(key+':')
+                  lines+=['- '+('""' if v=='' else v) for v in rule[key]]
+              out+='- '+lines[0]+'\n'+''.join('  '+l+'\n' for l in lines[1:])
+          return out
+
+      def check_instance_rbac(name, docs):
+          """vm-instance RBAC is exactly what the template generates (box1-docs#138 review).
+
+          The Hub may get one Secret (the cloud-init check) and ci-vm-deploy may port-forward
+          to one VMI (the booted-digest check); both rely on these Roles staying this narrow.
+          """
+          ns=name+'-dev'
+          roles={(name+'-release-observer',ns):[{'apiGroups':['kubevirt.io'],'resources':['virtualmachines','virtualmachineinstances'],'resourceNames':[name],'verbs':['get']},
+                                               {'apiGroups':['cdi.kubevirt.io'],'resources':['datavolumes'],'resourceNames':[name+'-root'],'verbs':['get']}],
+                 (name+'-release-observer','openshift-gitops'):[{'apiGroups':['argoproj.io'],'resources':['applications'],'resourceNames':[name],'verbs':['get']}],
+                 (name+'-cloud-init-observer',ns):[{'apiGroups':[''],'resources':['secrets'],'resourceNames':[name+'-cloud-init'],'verbs':['get']}],
+                 (name+'-status-reader',ns):[{'apiGroups':['kubevirt.io'],'resources':['virtualmachineinstances'],'resourceNames':[name],'verbs':['get']},
+                                            {'apiGroups':['subresources.kubevirt.io'],'resources':['virtualmachineinstances/portforward'],'resourceNames':[name],'verbs':['get','update']}]}
+          subjects={(name+'-image-puller','box1-ci'):('ClusterRole','system:image-puller','- apiGroup: rbac.authorization.k8s.io\n  kind: Group\n  name: system:serviceaccounts:'+ns+'\n'),
+                    (name+'-release-observer',ns):('Role',name+'-release-observer','- kind: ServiceAccount\n  name: ci-observe\n  namespace: box1-ci\n'),
+                    (name+'-release-observer','openshift-gitops'):('Role',name+'-release-observer','- kind: ServiceAccount\n  name: ci-observe\n  namespace: box1-ci\n'),
+                    (name+'-cloud-init-observer',ns):('Role',name+'-cloud-init-observer','- kind: ServiceAccount\n  name: developer-hub-onboarding\n  namespace: rhdh\n'),
+                    (name+'-status-reader',ns):('Role',name+'-status-reader','- kind: ServiceAccount\n  name: ci-vm-deploy\n  namespace: box1-ci\n')}
+          for kind,n,t in docs:
+              assert kind not in ('ClusterRole','ClusterRoleBinding'), 'VM instances must not create '+kind+' '+n
+              if kind not in ('Role','RoleBinding'): continue
+              key=(n,scalar(section(t,'metadata'),'namespace'))
+              if kind=='Role':
+                  assert key in roles and section(t,'rules')==rendered_rules(roles[key]), 'Role %s in %s is not one of the generated vm-instance Roles, exactly as generated' % key
+              else:
+                  assert key in subjects, 'RoleBinding %s in %s is not one of the generated vm-instance bindings' % key
+                  ref_kind,ref_name,subject=subjects[key]
+                  ref=section(t,'roleRef')
+                  assert scalar(ref,'kind')==ref_kind and scalar(ref,'name')==ref_name and section(t,'subjects')==subject, 'RoleBinding %s in %s must bind exactly its generated Role and subject' % key
+
+      def check_instance_cloud_init(name, docs, vm):
+          """The #140 instance bundle rules that #139's first cut left open (box1-docs#138)."""
+          for key in ['accessCredentials','volumes','disks']:
+              count=len(re.findall(r'(?m)^ +'+key+r':$',vm))
+              assert count==1, 'The VirtualMachine must have exactly one '+key+' block; found '+str(count)
+          volumes=block_items(vm,'volumes')
+          cloud=[v for v in volumes if re.search(r'(?m)^cloudInit(NoCloud|ConfigDrive):',v)]
+          assert len(cloud)==1 and re.search(r'(?m)^name: cloudinitdisk$',cloud[0]), 'The only cloud-init volume must be named cloudinitdisk'
+          assert not re.search(r'(?m)^cloudInitConfigDrive:',cloud[0]), 'VM instances must not use cloudInitConfigDrive; use the cloudinitdisk NoCloud volume'
+          assert cloud[0]=='cloudInitNoCloud:\n  secretRef:\n    name: '+name+'-cloud-init\nname: cloudinitdisk\n', \
+                 'cloudInitNoCloud must set only secretRef.name: '+name+'-cloud-init (no networkDataSecretRef or other keys)'
+          disks=block_items(vm,'disks')
+          assert any(re.search(r'(?m)^name: cloudinitdisk$',d) for d in disks), 'VM instance needs a disk named cloudinitdisk for the NoCloud volume'
+          for serial in re.findall(r'(?m)^ +serial: (.+)$',vm):
+              assert not unquote(serial).startswith('ds='), 'VM instances must not set a ds= SMBIOS or disk serial: cloud-init would take its datasource from it'
+          assert not re.search(r'(?m)^ +(noCloud|configDrive):',vm), 'accessCredentials must use qemuGuestAgent; noCloud and configDrive propagation are refused'
+          for credential in block_items(vm,'accessCredentials'):
+              assert not re.search(r'(?m)^ +(noCloud|configDrive):',credential), 'accessCredentials must use qemuGuestAgent; noCloud and configDrive propagation are refused'
+              users=re.findall(r'(?m)^ +- (\S+)$',credential.split('users:',1)[1]) if 'users:' in credential else []
+              assert re.search(r'(?m)^ +qemuGuestAgent:$',credential) and users==['cloud-user'], 'accessCredentials may only propagate keys to cloud-user through qemuGuestAgent'
+          for kind,n,t in docs:
+              if kind!='Secret': continue
+              stored=re.findall(r'(?m)^  [\'"]?([-._A-Za-z0-9]+)[\'"]?:',section(t,'data')+section(t,'stringData'))
+              found=CLOUD_INIT_SECRET_KEYS.intersection(stored)
+              assert not found, 'Secret '+n+' must not hold cloud-init '+', '.join(sorted(found))+' in Git; the '+name+'-cloud-init Secret is assembled outside Git'
+          sites=[t for k,n,t in docs if k=='ConfigMap' and n==name+'-site']
+          assert len(sites)==1, 'VM instance needs exactly one ConfigMap '+name+'-site with its siteId and endpoints'
+          site=sites[0]
+          labels=[unquote(v) for v in re.findall(r'(?m)^    box1\.org/instance: (.+)$',site)]
+          assert labels==[name], 'ConfigMap '+name+'-site must be labelled box1.org/instance: '+name
+          assert not re.search(r'(?m)^binaryData:',site), 'ConfigMap '+name+'-site must not have binaryData'
+          lines=section(site,'data').splitlines()
+          data={}
+          for line in lines:
+              entry=re.fullmatch(r'  [\'"]?([-._A-Za-z0-9]+)[\'"]?: (.+)',line)
+              assert entry and not re.match(r'[|>]',entry.group(2)), 'ConfigMap '+name+'-site values must be single-line scalars'
+              data[entry.group(1)]=unquote(entry.group(2))
+          unknown=sorted(set(data)-set(SITE_KEYS))
+          assert not unknown, 'ConfigMap '+name+'-site may only hold '+', '.join(SITE_KEYS)+'; found '+', '.join(unknown)
+          for key,(required,pattern) in SITE_KEYS.items():
+              if key not in data:
+                  assert not required, 'ConfigMap '+name+'-site must set '+key
+              else:
+                  assert re.fullmatch(pattern,data[key]), 'ConfigMap '+name+'-site '+key+' does not match the #140 pattern '+pattern
 
       def check_ci_role(repo, role, text):
           rules=entries(section(text,'rules'))
