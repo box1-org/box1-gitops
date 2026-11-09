@@ -1,0 +1,233 @@
+# Propose a gated bundle to its declared consumer (`artifact` profile, box1-docs#137).
+#
+# Opens, or updates, ONE pull request in box1-org/<consumer-repository> that rewrites
+# the digest of the single line
+#
+#   COPY --from=<registry>/box1-ci/<repo>-bundle@sha256:<digest> <src> <dest>
+#
+# in <consumer-path>. It never merges. Run it only after box1-security-gates in `gate`
+# mode; it also refuses any gate-policy other than "pass", so a bundle that fails policy
+# is never proposed.
+#
+# Behaviour:
+#   - zero, or two or more, such COPY lines (or a tag instead of a digest): fails and
+#     names the lines; nothing is written.
+#   - the source repository's main no longer equals `revision`: outcome "superseded",
+#     nothing is written (the newer revision's release proposes its own bundle).
+#   - the consumer already pins this digest: outcome "current"; an open bump PR from
+#     this automation is then obsolete and is closed.
+#   - an open bump PR exists (branch bundle/<repo>): its branch is replaced by one commit
+#     on the consumer's current default branch and the PR is retitled; outcome
+#     "updated". If it already proposes this digest: outcome "unchanged", nothing is
+#     written (a rerun of the same revision is idempotent).
+#   - otherwise a new PR: outcome "opened".
+# The token is the PipelineRun's git-auth-secret; for Pipelines-as-Code it is scoped by
+# the Repository's github_app_token_scope_repos, which must list the consumer.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bundle-consumer-pr
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: image-digest
+    type: string
+  - name: bundle-name
+    type: string
+    description: The bundle ImageStream in box1-ci, <repo>-bundle.
+  - name: source-repository
+    type: string
+    description: box1-org/<repo>, whose main must still equal revision.
+  - name: consumer-repository
+    type: string
+    description: The consumer repository name in box1-org (no owner), for example site-gateway-os.
+  - name: consumer-path
+    type: string
+    default: Containerfile
+  - name: gate-policy
+    type: string
+    description: The box1-security-gates `policy` result; must be "pass".
+  - name: git-auth-secret
+    type: string
+  - name: pipeline-run
+    type: string
+    default: ''
+  results:
+  - name: pr-url
+    type: string
+    description: The consumer PR URL; "current" when the consumer already pins the digest; "superseded" when source main moved on.
+  - name: outcome
+    type: string
+    description: opened, updated, unchanged, current or superseded.
+  steps:
+  - name: propose
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: IMAGE_DIGEST
+      value: "$(params.image-digest)"
+    - name: BUNDLE_NAME
+      value: "$(params.bundle-name)"
+    - name: SOURCE_REPOSITORY
+      value: "$(params.source-repository)"
+    - name: CONSUMER_REPOSITORY
+      value: "$(params.consumer-repository)"
+    - name: CONSUMER_PATH
+      value: "$(params.consumer-path)"
+    - name: GATE_POLICY
+      value: "$(params.gate-policy)"
+    - name: PIPELINE_RUN
+      value: "$(params.pipeline-run)"
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: "$(params.git-auth-secret)"
+          key: git-provider-token
+    script: |
+      #!/usr/bin/env python3
+      import base64, json, os, pathlib, re, urllib.parse, urllib.request, urllib.error
+
+      ORG='box1-org'
+      NAME=r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*'
+      PROTECTED=('box1-gitops','box1-workloads-dev')
+      MARKER='box1-bundle-source: '
+      PATH=re.compile(r'(?!/)(?!.*(?:^|/)\.\.?(?:/|$))[A-Za-z0-9._/-]{1,200}')
+
+      class Missing(Exception):
+          pass
+
+      def github(path, method='GET', body=None, missing=False):
+          request=urllib.request.Request('https://api.github.com'+path, method=method,
+              data=None if body is None else json.dumps(body).encode(),
+              headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],
+                       'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',
+                       'User-Agent':'box1-tekton'})
+          try:
+              with urllib.request.urlopen(request,timeout=45) as response:
+                  data=response.read()
+                  return json.loads(data) if data else None
+          except urllib.error.HTTPError as error:
+              if missing and error.code==404: return None
+              try: detail=json.loads(error.read()).get('message','')
+              except ValueError: detail=''
+              raise RuntimeError('GitHub API %s %s: %s %s' % (method,path.split('?')[0],error.code,detail)) from None
+
+      def bundle_reference(bundle):
+          """--from=<anything>/box1-ci/<bundle>, then @digest, :tag or nothing; never a longer name."""
+          return re.compile(r'--from=(?P<image>\S*/box1-ci/'+re.escape(bundle)+r')(?P<pin>[@:][^\s]*)?(?=\s|$)')
+
+      def rewrite(text, bundle, digest, path='the consumer file'):
+          """Return (new text, previous digest). Exactly one COPY --from line may name the bundle."""
+          reference=bundle_reference(bundle)
+          lines=text.split('\n')
+          hits=[i for i,line in enumerate(lines) if re.match(r'\s*COPY\s',line,re.I) and reference.search(line)]
+          named=re.compile(r'/box1-ci/'+re.escape(bundle)+r'(?=[@:\s,"\']|$)')
+          other=[str(i+1) for i,line in enumerate(lines) if i not in hits and named.search(line)]
+          if len(hits)!=1 or other:
+              # Any other reference (FROM ... AS, RUN --mount from=...) would keep the old digest.
+              raise SystemExit('%s must contain exactly one COPY --from=.../box1-ci/%s@sha256:<digest> line; found %d%s%s. Nothing was proposed.' % (
+                  path,bundle,len(hits),' (lines '+', '.join(str(i+1) for i in hits)+')' if hits else '',
+                  '; other references on lines '+', '.join(other)+' (FROM stage aliases are not supported)' if other else ''))
+          line=lines[hits[0]]; found=reference.search(line); pin=found.group('pin') or ''
+          if not re.fullmatch(r'@sha256:[a-f0-9]{64}',pin):
+              raise SystemExit('%s line %d must pin box1-ci/%s by digest (@sha256:<64 hex>); found %s. Nothing was proposed.' % (path,hits[0]+1,bundle,pin or 'no tag or digest'))
+          lines[hits[0]]=line[:found.start('pin')]+'@'+digest+line[found.end('pin'):]
+          return '\n'.join(lines),pin[1:]
+
+      def check_inputs(env):
+          revision,digest=env['REVISION'],env['IMAGE_DIGEST']
+          source,consumer,bundle,path=env['SOURCE_REPOSITORY'],env['CONSUMER_REPOSITORY'],env['BUNDLE_NAME'],env['CONSUMER_PATH']
+          if env['GATE_POLICY']!='pass':
+              raise SystemExit('The security gate did not pass (policy=%s); a bundle that fails policy is never proposed' % (env['GATE_POLICY'] or 'empty'))
+          if not re.fullmatch('[a-f0-9]{40}',revision): raise SystemExit('Immutable source revision required')
+          if not re.fullmatch('sha256:[a-f0-9]{64}',digest): raise SystemExit('Immutable bundle digest required')
+          if not re.fullmatch(ORG+'/'+NAME,source): raise SystemExit('Source repository must be box1-org/<name>')
+          repo=source.split('/')[1]
+          if bundle!=repo+'-bundle': raise SystemExit('bundle-name must be %s-bundle' % repo)
+          if not re.fullmatch(NAME,consumer) or consumer in PROTECTED or consumer==repo:
+              raise SystemExit('consumer-repository must be another box1-org repository name, not %r (and never box1-gitops or box1-workloads-dev)' % consumer)
+          if not PATH.fullmatch(path): raise SystemExit('consumer-path must be a relative path without . or .. segments')
+          return revision,digest,source,repo,consumer,bundle,path
+
+      def content(api, repo, path, ref):
+          found=api('/repos/%s/contents/%s?ref=%s' % (repo,urllib.parse.quote(path),ref),missing=True)
+          if found is None or found.get('type')!='file': raise Missing(path)
+          return base64.b64decode(found['content']).decode()
+
+      def propose(env, api, result):
+          revision,digest,source,repo,consumer,bundle,path=check_inputs(env)
+          CONSUMER=ORG+'/'+consumer
+          if api('/repos/%s/commits/main' % source)['sha']!=revision:
+              result('outcome','superseded'); result('pr-url','superseded')
+              print('%s main moved past %s; its newer release proposes its own bundle. Nothing was proposed.' % (source,revision))
+              return 'superseded'
+          info=api('/repos/'+CONSUMER,missing=True)
+          if info is None: raise SystemExit('Consumer repository %s does not exist, or this token cannot read it (github_app_token_scope_repos)' % CONSUMER)
+          base_branch=info['default_branch']
+          base=api('/repos/%s/git/ref/heads/%s' % (CONSUMER,base_branch))['object']['sha']
+          try: current=content(api,CONSUMER,path,base)
+          except Missing: raise SystemExit('%s has no file %s on %s' % (CONSUMER,path,base_branch))
+          updated,previous=rewrite(current,bundle,digest,CONSUMER+'/'+path)
+          branch='bundle/'+repo
+          # Every open PR from the branch, whatever its base.
+          open_prs=api('/repos/%s/pulls?state=open&head=%s' % (CONSUMER,urllib.parse.quote(ORG+':'+branch)))
+          if len(open_prs)>1: raise SystemExit('More than one open PR from %s; resolve them by hand' % branch)
+          pr=open_prs[0] if open_prs else None
+          if pr and ((pr['head']['repo'] or {}).get('full_name')!=CONSUMER or MARKER+source not in (pr.get('body') or '') or pr['base']['ref']!=base_branch):
+              raise SystemExit('Open PR %s from %s was not opened by this automation for %s; refusing to change it' % (pr['html_url'],branch,source))
+          if previous==digest:
+              if pr:
+                  api('/repos/%s/pulls/%d' % (CONSUMER,pr['number']),'PATCH',{'state':'closed'})
+                  print('Closed obsolete bump PR '+pr['html_url'])
+              result('outcome','current'); result('pr-url','current')
+              print('%s already pins %s@%s' % (CONSUMER,bundle,digest))
+              return 'current'
+          title='Bump %s to %s (%s@%s)' % (bundle,digest[:19],repo,revision[:12])
+          body=('Automated bundle digest bump from `%s@%s`.\n\n'
+                'Bundle: `box1-ci/%s@%s`\nSecurity gate: `box1-security-gates` in gate mode, policy pass\nPipelineRun: `box1-ci/%s`\n\n'
+                'Changes one line of `%s` (previous digest `%s`). Review and merge by hand; this automation never merges.\n\n'
+                '<!-- %s%s -->\n') % (source,revision,bundle,digest,env.get('PIPELINE_RUN') or 'unknown',path,previous,MARKER,source)
+          if pr:
+              try: proposed=content(api,CONSUMER,path,pr['head']['sha'])
+              except Missing: proposed=None
+              if proposed==updated:
+                  result('outcome','unchanged'); result('pr-url',pr['html_url'])
+                  print('Open PR already proposes this digest: '+pr['html_url'])
+                  return 'unchanged'
+          blob=api('/repos/%s/git/blobs' % CONSUMER,'POST',{'content':updated,'encoding':'utf-8'})
+          tree_base=api('/repos/%s/git/commits/%s' % (CONSUMER,base))['tree']['sha']
+          tree=api('/repos/%s/git/trees' % CONSUMER,'POST',{'base_tree':tree_base,'tree':[{'path':path,'mode':'100644','type':'blob','sha':blob['sha']}]})
+          commit=api('/repos/%s/git/commits' % CONSUMER,'POST',{'message':title,'tree':tree['sha'],'parents':[base]})
+          existing=api('/repos/%s/git/ref/heads/%s' % (CONSUMER,branch),missing=True)
+          if existing is None:
+              api('/repos/%s/git/refs' % CONSUMER,'POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
+          else:
+              # bundle/<repo> belongs to this automation and is always rebuilt on the default
+              # branch; commits pushed to it by hand are discarded. Without our open PR, its tip
+              # must still be one of our bump commits.
+              if not pr:
+                  tip=api('/repos/%s/git/commits/%s' % (CONSUMER,existing['object']['sha']))
+                  if not tip.get('message','').startswith('Bump %s to ' % bundle):
+                      raise SystemExit('Branch %s exists in %s but its tip is not a bump commit of this automation; delete or rename it' % (branch,CONSUMER))
+              api('/repos/%s/git/refs/heads/%s' % (CONSUMER,branch),'PATCH',{'sha':commit['sha'],'force':True})
+          if pr:
+              pr=api('/repos/%s/pulls/%d' % (CONSUMER,pr['number']),'PATCH',{'title':title,'body':body})
+              outcome='updated'
+          else:
+              pr=api('/repos/%s/pulls' % CONSUMER,'POST',{'title':title,'head':branch,'base':base_branch,'body':body})
+              outcome='opened'
+          result('outcome',outcome); result('pr-url',pr['html_url'])
+          print('%s %s: %s -> %s' % (outcome.capitalize(),pr['html_url'],previous,digest))
+          return outcome
+
+      def result(name, value):
+          pathlib.Path('/tekton/results/'+name).write_text(value)
+
+      if __name__=='__main__':
+          propose(os.environ,github,result)

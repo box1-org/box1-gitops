@@ -12,3 +12,5 @@ resources:
 - bootc-channel.yaml
 - vm-smoke.yaml
 - bootc-apply.yaml
+- maven-bundle.yaml
+- bundle-consumer-pr.yaml

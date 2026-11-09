@@ -44,6 +44,11 @@ rules:
   - apiGroups: ['']
     resources: [secrets]
     verbs: [get, create, update, delete]
+  # artifact onboarding profile (box1-docs#137): verify reads box1-ci/<repo>-bundle to
+  # confirm the published bundle digest. Read-only; ImageStream names are per repository.
+  - apiGroups: [image.openshift.io]
+    resources: [imagestreams]
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
