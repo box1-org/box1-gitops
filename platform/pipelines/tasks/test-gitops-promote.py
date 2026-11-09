@@ -91,7 +91,7 @@ def promotion_functions(text=None, task=TASK):
     import re
     tree = ast.parse(text if text is not None else script_text())
     keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in (
-                "candidate_paths", "plan_updates", "evaluate_checks", "converged", "diagnostics", "settled"))
+                "candidate_paths", "plan_updates", "plan_instance_updates", "evaluate_checks", "converged", "diagnostics", "settled"))
             or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") in (
                 "ZERO", "START_FAILURE", "MAX_START_RETRIES", "GENERATED_CONFIGMAP") for t in n.targets))]
     namespace = {"re": re, "name": "order-service"}
@@ -173,6 +173,119 @@ class PromotionPlan(unittest.TestCase):
         for disk in ["", "sha256:" + "0" * 64, "latest"]:
             with self.assertRaisesRegex(AssertionError, "disk digest"):
                 self.f["plan_updates"]("virtual-machine", name, old, self.SOURCE, self.DIGEST, disk, "run")
+
+
+class VmInstancePromotionPlan(unittest.TestCase):
+    """box1-docs#139: a vm-instance promotion edits one instance; the source repo gates supersession."""
+    SOURCE = "d" * 40
+    DIGEST = "sha256:" + "e" * 64
+    DISK = "sha256:" + "f" * 64
+    NEXT_DIGEST = "sha256:" + "1" * 64
+    NEXT_DISK = "sha256:" + "2" * 64
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        cls.f = promotion_functions()
+        spec = importlib.util.spec_from_file_location("vt", ROOT / "test-gitops-validate.py")
+        cls.vt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.vt)
+
+    def repo(self, promoted=False):
+        """Two instances of one source image, as box1-workloads-dev would hold them."""
+        import textwrap
+        tree = {}
+        for instance in ["site-west", "site-east"]:
+            _, files = self.vt.instance_bundle(instance, promoted=promoted)
+            for path, content in files.items():
+                tree["workloads/" + instance + "/" + path] = textwrap.dedent(content).lstrip()
+        return tree
+
+    def plan(self, tree, instance, disk, digest=None, run="site-gateway-os-release-abcde"):
+        paths = self.f["candidate_paths"]("vm-instance", instance)
+        old = {p: tree[p] for p in paths}
+        return paths, self.f["plan_instance_updates"](instance, "site-gateway-os", old, self.SOURCE, digest or self.DIGEST, disk, run)
+
+    def validates(self, tree, instance, new):
+        if not self.vt.KUSTOMIZE:
+            return
+        base = "workloads/" + instance + "/"
+        files = {p[len(base):]: c for p, c in tree.items() if p.startswith(base)}
+        files.update({p[len(base):]: c for p, c in new.items()})
+        self.assertEqual(self.vt.load_validator()["validate"](instance, self.vt.render(files)), "vm-instance")
+
+    def test_candidate_paths_are_the_instance_files(self):
+        self.assertEqual(self.f["candidate_paths"]("vm-instance", "site-west"),
+                         ["workloads/site-west/virtualmachine.yaml", "workloads/site-west/datavolume.yaml",
+                          "workloads/site-west/kustomization.yaml"])
+
+    def test_first_promotion_of_one_instance_changes_only_that_instance(self):
+        tree = self.repo()
+        paths, new = self.plan(tree, "site-west", self.DISK)
+        self.assertEqual(sorted(new), ["workloads/site-west/datavolume.yaml", "workloads/site-west/kustomization.yaml",
+                                       "workloads/site-west/virtualmachine.yaml"])
+        self.assertTrue(all(p.startswith("workloads/site-west/") for p in paths))
+        vm = new["workloads/site-west/virtualmachine.yaml"]
+        self.assertIn("box1.org/os-image-digest: " + self.DIGEST, vm)
+        self.assertIn("box1.org/source-revision: " + self.SOURCE, vm)
+        self.assertIn("box1.org/build-pipelinerun: box1-ci/site-gateway-os-release-abcde", vm)
+        self.assertIn("box1.org/source-image: site-gateway-os", vm)
+        self.assertIn("runStrategy: Always", vm)
+        self.assertIn("box1-ci/site-gateway-os-disk@" + self.DISK, new["workloads/site-west/datavolume.yaml"])
+        self.assertIn("  - datavolume.yaml", new["workloads/site-west/kustomization.yaml"])
+        self.validates(tree, "site-west", new)
+        # The sibling instance of the same source is untouched and still unbuilt.
+        self.assertIn("box1.org/os-image-digest: sha256:" + "0" * 64, tree["workloads/site-east/virtualmachine.yaml"])
+
+    def test_day2_promotion_changes_only_the_instance_annotations(self):
+        tree = self.repo(promoted=True)
+        _, new = self.plan(tree, "site-east", self.NEXT_DISK, digest=self.NEXT_DIGEST, run="site-gateway-os-release-fghij")
+        self.assertEqual(sorted(new), ["workloads/site-east/virtualmachine.yaml"])
+        vm = new["workloads/site-east/virtualmachine.yaml"]
+        self.assertIn("box1.org/os-image-digest: " + self.NEXT_DIGEST, vm)
+        self.assertIn("runStrategy: Always", vm)
+        self.assertEqual(vm.replace(self.NEXT_DIGEST, "X").count("X"), 1)
+        self.validates(tree, "site-east", new)
+
+    def test_first_promotion_requires_a_disk_digest(self):
+        tree = self.repo()
+        for disk in ["", "sha256:" + "0" * 64, "latest"]:
+            with self.assertRaisesRegex(AssertionError, "disk digest"):
+                self.plan(tree, "site-west", disk)
+
+    def test_source_annotation_must_match_the_promoting_repository(self):
+        tree = self.repo()
+        paths = self.f["candidate_paths"]("vm-instance", "site-west")
+        old = {p: tree[p] for p in paths}
+        with self.assertRaisesRegex(AssertionError, "box1.org/source-image: legacy-erp"):
+            self.f["plan_instance_updates"]("site-west", "legacy-erp", old, self.SOURCE, self.DIGEST, self.DISK, "run")
+
+    def test_unbuilt_datavolume_must_reference_the_source_disk(self):
+        tree = self.repo()
+        dv = "workloads/site-west/datavolume.yaml"
+        tree[dv] = tree[dv].replace("site-gateway-os-disk@", "site-west-disk@")
+        with self.assertRaisesRegex(AssertionError, "zero site-gateway-os-disk digest"):
+            self.plan(tree, "site-west", self.DISK)
+
+    def test_existing_profiles_do_not_use_the_instance_plan(self):
+        script = script_text()
+        self.assertIn("plan_instance_updates(name,source_image,old,", script)
+        self.assertIn("if profile=='vm-instance' else plan_updates(profile,name,old,", script)
+
+    def test_task_contract_for_instance_promotions(self):
+        task = TASK.read_text()
+        self.assertIn("  - name: instance-name\n    type: string\n    default: ''", task)
+        self.assertIn('value: "$(params.instance-name)"', task)
+        script = script_text()
+        # Supersession is judged on the source repository (application-name) ...
+        source_repo = script.index("application='/repos/box1-org/'+name")
+        retarget = script.index("source_image,name=name,instance")
+        self.assertLess(source_repo, retarget)
+        # ... and every later use of `name` (files, branch, PR, Argo sync) is the instance.
+        self.assertLess(retarget, script.index("def sync_application"))
+        self.assertLess(retarget, script.index("candidates=candidate_paths(profile,name)"))
+        self.assertIn("assert profile in ['service','virtual-machine','vm-instance'], 'Unsupported workload profile'", script)
+        self.assertIn("assert not instance, 'instance-name is only valid with workload-profile vm-instance'", script)
 
 
 class RequiredChecks(unittest.TestCase):
