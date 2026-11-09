@@ -46,6 +46,17 @@ with the real key; the operator restarts the service on Secret change.
 shared with other Box1 consumers, so Lightspeed requests queue behind (and
 delay) other inference traffic.
 
+## CPU requests
+
+The operator defaults request 2 CPU for `lightspeed-rhokp` and 500m for the
+`lightspeed-service-api` container, about 2.3 cores on the single Box1 node,
+while 7-day usage peaked under 100m. `OLSConfig` sets
+`spec.ols.deployment.rhokp.resources` (200m) and
+`spec.ols.deployment.api.resources` (100m). Memory and ephemeral-storage
+requests restate the operator defaults because `resources` replaces the whole
+block. No CPU limits are set, so both containers can still burst. To return to
+the operator defaults, remove the `deployment` block and sync.
+
 ## Rollback
 
 - Remove the LLM wiring: delete `OLSConfig/cluster` (sync `lightspeed` with

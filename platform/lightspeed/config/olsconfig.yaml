@@ -25,3 +25,20 @@ spec:
     guardrails:
       toolResultInspection:
         enabled: false
+    # CPU requests sized from a 7-day Prometheus sample (2026-11-09): rhokp p95 55m,
+    # max 64m; lightspeed-service-api p95 2m, max 96m. Operator defaults (2 and 500m
+    # CPU) reserved ~2.3 cores on the single Box1 node. No CPU limits are set, so both
+    # can still burst. Setting `resources` replaces the operator default block, so the
+    # default memory and ephemeral-storage requests are restated here unchanged.
+    deployment:
+      rhokp:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 2Gi
+            ephemeral-storage: 75Gi
+      api:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 1Gi
