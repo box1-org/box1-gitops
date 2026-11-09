@@ -49,6 +49,11 @@ rules:
   - apiGroups: [image.openshift.io]
     resources: [imagestreams]
     verbs: [get]
+  # vm-instance onboarding profile (box1-docs#138): read the box1.org/bootc-image label of
+  # box1-ci/<source>-disk@<digest> to confirm the install disk holds the approved OS digest.
+  - apiGroups: [image.openshift.io]
+    resources: [imagestreamimages]
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

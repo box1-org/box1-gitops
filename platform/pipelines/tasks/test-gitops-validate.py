@@ -730,6 +730,86 @@ class VmInstanceProfile(unittest.TestCase):
         files["kustomization.yaml"] += "  - other.yaml\n"
         self.rejects("ConfigMap site-west-other must not hold credentials; found keycloakTokenUrl", name, files)
 
+    # box1-docs#138 review pass: decoy blocks and RBAC.
+    def test_decoy_access_credentials_block_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "              template:\n",
+                     "              template:\n                metadata:\n                  accessCredentials:\n"
+                     "                    - sshPublicKey:\n                        propagationMethod:\n"
+                     "                          qemuGuestAgent:\n                            users: [cloud-user]\n")
+        files = edit(files, "virtualmachine.yaml", "users: [cloud-user]\n                  domain:", "users: [cloud-user, root]\n                  domain:")
+        self.rejects("exactly one accessCredentials block", name, files)
+
+    RBAC = """
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: site-west-cloud-init-observer
+              namespace: site-west-dev
+            rules:
+            - apiGroups: [""]
+              resources: [secrets]
+              resourceNames: [site-west-cloud-init]
+              verbs: [get]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: site-west-cloud-init-observer
+              namespace: site-west-dev
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: Role
+              name: site-west-cloud-init-observer
+            subjects:
+            - kind: ServiceAccount
+              name: developer-hub-onboarding
+              namespace: rhdh
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: site-west-status-reader
+              namespace: site-west-dev
+            rules:
+            - apiGroups: [kubevirt.io]
+              resources: [virtualmachineinstances]
+              resourceNames: [site-west]
+              verbs: [get]
+            - apiGroups: [subresources.kubevirt.io]
+              resources: [virtualmachineinstances/portforward]
+              resourceNames: [site-west]
+              verbs: [get, update]
+        """
+
+    def rbac_bundle(self, rbac):
+        name, files = instance_bundle(files={"rbac.yaml": rbac})
+        files["kustomization.yaml"] += "  - rbac.yaml\n"
+        return name, files
+
+    def test_generated_instance_rbac_is_accepted(self):
+        self.assertEqual(self.check(*self.rbac_bundle(self.RBAC)), "vm-instance")
+
+    def test_widened_instance_role_is_rejected(self):
+        name, files = self.rbac_bundle(self.RBAC.replace("resourceNames: [site-west-cloud-init]\n              verbs: [get]", "verbs: [get, list]"))
+        self.rejects("Role site-west-cloud-init-observer in site-west-dev is not one of the generated", name, files)
+
+    def test_unknown_role_and_binding_subject_are_rejected(self):
+        name, files = self.rbac_bundle(self.RBAC.replace("site-west-status-reader", "site-west-extra"))
+        self.rejects("Role site-west-extra in site-west-dev", name, files)
+        name, files = self.rbac_bundle(self.RBAC.replace("name: developer-hub-onboarding", "name: default"))
+        self.rejects("must bind exactly its generated Role and subject", name, files)
+
+    def test_cluster_rbac_is_rejected(self):
+        name, files = self.rbac_bundle("""
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata: {name: site-west-admin}
+            roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin}
+            subjects: [{apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:serviceaccounts:site-west-dev"}]
+        """)
+        self.rejects("must not create ClusterRoleBinding site-west-admin", name, files)
+
     def test_virtual_machine_profile_ignores_instance_rules(self):
         # The existing profile is unchanged: no source annotation, cloud-init or allowlist needed.
         self.assertEqual(self.check(*vm_bundle(promoted=True)), "virtual-machine")

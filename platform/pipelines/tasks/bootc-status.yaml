@@ -1,15 +1,17 @@
-# Read the OS image digest a running RHEL image mode (bootc) VM has booted, and
-# compare it with an expected digest (box1-docs#138). Read-only: unlike
-# box1-bootc-apply it never runs `bootc upgrade`, `bootc switch` or a reboot, so it
-# cannot move a vm-instance guest onto the source image's shared channel tag.
+# Read the OS image digest a running RHEL image mode (bootc) VM has booted
+# (box1-docs#138). Read-only: unlike box1-bootc-apply it never runs `bootc upgrade`,
+# `bootc switch` or a reboot, so it cannot move a vm-instance guest onto the source
+# image's shared channel tag.
 #
-# The onboarding plugin's vm-instance verify runs it after the first promotion, as
-# ci-vm-deploy. The instance's box1-workloads-dev manifests (deploy-access.yaml)
-# grant that account `get` on the instance VMI and on virtualmachineinstances/portforward
-# (what `virtctl ssh` needs), and nothing else. The guest user (default box1-deploy)
-# comes from the source OS image, whose sudoers must allow only
-# `/usr/bin/bootc status --format json`. The private key is a Secret in box1-ci created
-# outside Git (key `ssh-privatekey`); its public half is baked into the source image.
+# The onboarding plugin's vm-instance verify runs it as ci-vm-deploy. The instance's
+# box1-workloads-dev manifests (deploy-access.yaml, Role <instance>-status-reader) grant
+# that account `get` on the instance VMI and on virtualmachineinstances/portforward (what
+# `virtctl ssh` needs), and nothing else. The guest user (default box1-status) must come
+# from the source OS image, with its key restricted to this one command, for example
+# `restrict,command="sudo /usr/bin/bootc status --format json" <public key>` and sudoers
+# allowing only `/usr/bin/bootc status --format json`. It must not be box1-deploy, whose
+# bootc-apply contract also allows `bootc upgrade --apply`. The private key is the Secret
+# box1-ci/vm-instance-status-ssh (key `ssh-privatekey`), created outside Git.
 # Host keys are accepted on first use and printed; pinning them is a follow-up.
 ---
 apiVersion: tekton.dev/v1
@@ -30,7 +32,7 @@ spec:
     description: Optional sha256:<64 hex>. When set, the Task fails unless the guest booted exactly this digest.
   - name: ssh-user
     type: string
-    default: box1-deploy
+    default: box1-status
   - name: ssh-key-secret
     type: string
   - name: timeout-seconds

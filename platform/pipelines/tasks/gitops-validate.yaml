@@ -223,6 +223,7 @@ spec:
           dvs=[n for k,n,_ in docs if k=='DataVolume']
           assert all(n==name+'-root' for n in dvs), 'Root DataVolume must be named '+name+'-root; found '+', '.join(dvs)
           check_instance_cloud_init(name, docs, vm)
+          check_instance_rbac(name, docs)
           check_vm(name, rendered, disk_image=source)
 
       def block_items(text, key):
@@ -239,8 +240,52 @@ spec:
               else: break
           return items
 
+      def rendered_rules(rules):
+          """A Role's rules as kustomize renders them (keys sorted, block lists)."""
+          out=''
+          for rule in rules:
+              lines=[]
+              for key in sorted(rule):
+                  lines.append(key+':')
+                  lines+=['- '+('""' if v=='' else v) for v in rule[key]]
+              out+='- '+lines[0]+'\n'+''.join('  '+l+'\n' for l in lines[1:])
+          return out
+
+      def check_instance_rbac(name, docs):
+          """vm-instance RBAC is exactly what the template generates (box1-docs#138 review).
+
+          The Hub may get one Secret (the cloud-init check) and ci-vm-deploy may port-forward
+          to one VMI (the booted-digest check); both rely on these Roles staying this narrow.
+          """
+          ns=name+'-dev'
+          roles={(name+'-release-observer',ns):[{'apiGroups':['kubevirt.io'],'resources':['virtualmachines','virtualmachineinstances'],'resourceNames':[name],'verbs':['get']},
+                                               {'apiGroups':['cdi.kubevirt.io'],'resources':['datavolumes'],'resourceNames':[name+'-root'],'verbs':['get']}],
+                 (name+'-release-observer','openshift-gitops'):[{'apiGroups':['argoproj.io'],'resources':['applications'],'resourceNames':[name],'verbs':['get']}],
+                 (name+'-cloud-init-observer',ns):[{'apiGroups':[''],'resources':['secrets'],'resourceNames':[name+'-cloud-init'],'verbs':['get']}],
+                 (name+'-status-reader',ns):[{'apiGroups':['kubevirt.io'],'resources':['virtualmachineinstances'],'resourceNames':[name],'verbs':['get']},
+                                            {'apiGroups':['subresources.kubevirt.io'],'resources':['virtualmachineinstances/portforward'],'resourceNames':[name],'verbs':['get','update']}]}
+          subjects={(name+'-image-puller','box1-ci'):('ClusterRole','system:image-puller','- apiGroup: rbac.authorization.k8s.io\n  kind: Group\n  name: system:serviceaccounts:'+ns+'\n'),
+                    (name+'-release-observer',ns):('Role',name+'-release-observer','- kind: ServiceAccount\n  name: ci-observe\n  namespace: box1-ci\n'),
+                    (name+'-release-observer','openshift-gitops'):('Role',name+'-release-observer','- kind: ServiceAccount\n  name: ci-observe\n  namespace: box1-ci\n'),
+                    (name+'-cloud-init-observer',ns):('Role',name+'-cloud-init-observer','- kind: ServiceAccount\n  name: developer-hub-onboarding\n  namespace: rhdh\n'),
+                    (name+'-status-reader',ns):('Role',name+'-status-reader','- kind: ServiceAccount\n  name: ci-vm-deploy\n  namespace: box1-ci\n')}
+          for kind,n,t in docs:
+              assert kind not in ('ClusterRole','ClusterRoleBinding'), 'VM instances must not create '+kind+' '+n
+              if kind not in ('Role','RoleBinding'): continue
+              key=(n,scalar(section(t,'metadata'),'namespace'))
+              if kind=='Role':
+                  assert key in roles and section(t,'rules')==rendered_rules(roles[key]), 'Role %s in %s is not one of the generated vm-instance Roles, exactly as generated' % key
+              else:
+                  assert key in subjects, 'RoleBinding %s in %s is not one of the generated vm-instance bindings' % key
+                  ref_kind,ref_name,subject=subjects[key]
+                  ref=section(t,'roleRef')
+                  assert scalar(ref,'kind')==ref_kind and scalar(ref,'name')==ref_name and section(t,'subjects')==subject, 'RoleBinding %s in %s must bind exactly its generated Role and subject' % key
+
       def check_instance_cloud_init(name, docs, vm):
           """The #140 instance bundle rules that #139's first cut left open (box1-docs#138)."""
+          for key in ['accessCredentials','volumes','disks']:
+              count=len(re.findall(r'(?m)^ +'+key+r':$',vm))
+              assert count==1, 'The VirtualMachine must have exactly one '+key+' block; found '+str(count)
           volumes=block_items(vm,'volumes')
           cloud=[v for v in volumes if re.search(r'(?m)^cloudInit(NoCloud|ConfigDrive):',v)]
           assert len(cloud)==1 and re.search(r'(?m)^name: cloudinitdisk$',cloud[0]), 'The only cloud-init volume must be named cloudinitdisk'
@@ -251,6 +296,7 @@ spec:
           assert any(re.search(r'(?m)^name: cloudinitdisk$',d) for d in disks), 'VM instance needs a disk named cloudinitdisk for the NoCloud volume'
           for serial in re.findall(r'(?m)^ +serial: (.+)$',vm):
               assert not unquote(serial).startswith('ds='), 'VM instances must not set a ds= SMBIOS or disk serial: cloud-init would take its datasource from it'
+          assert not re.search(r'(?m)^ +(noCloud|configDrive):',vm), 'accessCredentials must use qemuGuestAgent; noCloud and configDrive propagation are refused'
           for credential in block_items(vm,'accessCredentials'):
               assert not re.search(r'(?m)^ +(noCloud|configDrive):',credential), 'accessCredentials must use qemuGuestAgent; noCloud and configDrive propagation are refused'
               users=re.findall(r'(?m)^ +- (\S+)$',credential.split('users:',1)[1]) if 'users:' in credential else []

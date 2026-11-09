@@ -330,13 +330,24 @@ switches, rolls back or reboots, so it cannot move an instance onto the shared c
 tag (unlike `box1-bootc-apply`). Optional `expected-digest` turns it into a gate.
 
 The onboarding plugin's `vm-instance` verify runs it as `ci-vm-deploy` with the private
-key Secret `box1-ci/vm-instance-deploy-ssh` (key `ssh-privatekey`, created outside Git;
+key Secret `box1-ci/vm-instance-status-ssh` (key `ssh-privatekey`, created outside Git;
 **approval required, not created**). The instance bundle grants `ci-vm-deploy` `get` on
-its VMI and `get`/`update` on `virtualmachineinstances/portforward` (the `legacy-erp`
-`deploy-access.yaml` pattern). The source OS image must provide the guest user
-`box1-deploy`, with the key's public half in its authorized keys and sudoers allowing
-only `/usr/bin/bootc status --format json`; the #140 rule keeps `accessCredentials` for
-`cloud-user` only, so the deploy key cannot be delivered by the guest agent.
+its VMI and `get`/`update` on `virtualmachineinstances/portforward` (Role
+`<instance>-status-reader`, the `legacy-erp` `deploy-access.yaml` pattern). The source OS
+image must provide a guest user `box1-status` whose authorized key is restricted to the one
+command (`restrict,command="sudo /usr/bin/bootc status --format json" …`) and whose sudoers
+allow only `/usr/bin/bootc status --format json`. It must not be `box1-deploy`: that user's
+`box1-bootc-apply` contract also allows `bootc upgrade --apply`, which on an instance would
+follow the shared channel tag. The #140 rule keeps `accessCredentials` for `cloud-user`
+only, so the key cannot be delivered by the guest agent. Known limit: any PipelineRun in
+`box1-ci` can run as `ci-vm-deploy` and mount the key; the forced command limits what it
+can do in a guest to reading `bootc status`. A dedicated ServiceAccount is a follow-up.
+
+`box1-gitops-validate` checks that a `vm-instance` workload's Roles and RoleBindings are
+exactly the generated ones (release observers, `<instance>-cloud-init-observer` for the
+Hub, `<instance>-status-reader` for `ci-vm-deploy`, and the image-puller binding), and
+refuses ClusterRoles and ClusterRoleBindings. The VirtualMachine must have exactly one
+`accessCredentials`, `volumes` and `disks` block, so a decoy block cannot hide the real one.
 
 ### Channels
 
