@@ -202,6 +202,30 @@ with the root disk expected from `box1-ci/<source>-disk` instead of `<name>-disk
 | Unbuilt (zero OS digest): `runStrategy: Halted` and no DataVolume | `Unbuilt virtual machines must stay Halted`, `Unbuilt virtual machines must not create their DataVolume yet` |
 | Secrets other than the updater token hold only SSH public keys (the `virtual-machine` rule) | `Only SSH public keys may be stored in Secrets` |
 
+box1-docs#138 adds the remaining rules of the #140 instance bundle specification
+(`box1-docs/runbooks/vm-cloud-init-identity.md`), checked after the rules above:
+
+| Rule | Failure message (prefix) |
+| --- | --- |
+| The only cloud-init volume (`cloudInitNoCloud` or `cloudInitConfigDrive`) is named `cloudinitdisk` | `The only cloud-init volume must be named cloudinitdisk` |
+| It is `cloudInitNoCloud` with exactly `secretRef.name: <instance>-cloud-init`: no `networkDataSecretRef` or other keys | `cloudInitNoCloud must set only secretRef.name: <instance>-cloud-init` |
+| A disk named `cloudinitdisk` exists | `VM instance needs a disk named cloudinitdisk` |
+| No `serial` (firmware SMBIOS or disk) starts with `ds=`, which would point cloud-init at another datasource | `VM instances must not set a ds= SMBIOS or disk serial` |
+| `accessCredentials` use `qemuGuestAgent` for `cloud-user` only; `noCloud` and `configDrive` propagation are refused | `accessCredentials must use qemuGuestAgent…`, `accessCredentials may only propagate keys to cloud-user…` |
+| No rendered Secret has a `userdata`, `userData`, `networkdata` or `networkData` key | `Secret <name> must not hold cloud-init <key> in Git` |
+| Exactly one ConfigMap `<instance>-site`, labelled `box1.org/instance: <instance>`, without `binaryData` | `VM instance needs exactly one ConfigMap <instance>-site…`, `…must be labelled box1.org/instance: <instance>`, `…must not have binaryData` |
+| Its keys are only `siteId`, `keycloakClientId`, `keycloakTokenUrl` (required) and `assetServiceUrl`, `kafkaBootstrapServers`, `otlpEndpoint` (optional), each a single-line value matching the #140 pattern | `ConfigMap <instance>-site may only hold…`, `…must set <key>`, `…does not match the #140 pattern…` |
+
+The #140 patterns: `siteId` `^[a-z][a-z0-9_]{1,62}$`; `keycloakClientId`
+`^[a-z][a-z0-9-]{1,62}$`; `keycloakTokenUrl` and `assetServiceUrl` `https://host[:port][/path]`;
+`otlpEndpoint` `http(s)://host[:port][/path]`; `kafkaBootstrapServers` `host:port[,host:port…]`.
+URL paths allow only `A-Za-z0-9._%+:-` and `/`, so user info (`@`), queries (`?`), spaces,
+quotes and `$` are refused. The assembly script in box1-docs applies the same allowlist.
+
+The six `<instance>-site` keys above are exempt from the key-name test below (the #140
+key `keycloakTokenUrl` contains the word `token`); their values are still checked, and
+every other ConfigMap keeps the key-name test.
+
 Credential-looking ConfigMap keys are split into words on camelCase, `-`, `_` and `.`;
 a key containing the word `secret`, `password`, `passwd`, `pwd`, `passphrase`,
 `token`, `key`, `apikey`, `privatekey`, `credential` or `kubeconfig` (or a plural)
@@ -228,9 +252,9 @@ differences:
   `docker://image-registry.openshift-image-registry.svc:5000/box1-ci/<source>-disk@sha256:000…`
   until the first promotion. As for `virtual-machine`, the file exists from onboarding
   but is not listed in `kustomization.yaml` until then.
-- An optional non-secret ConfigMap `<instance>-site` (siteId, endpoints). Use a plain
-  resource, or `generatorOptions.disableNameSuffixHash: true`, so its name is stable for
-  the #140 assembly script.
+- The non-secret ConfigMap `<instance>-site` (siteId and endpoints, the #140 keys
+  above). Required since box1-docs#138: the cloud-init assembly script reads it. Use a
+  plain resource, or `generatorOptions.disableNameSuffixHash: true`, so its name is stable.
 - The `<instance>-cloud-init` Secret is never in Git. It must exist before the first
   promotion starts the VM; otherwise the VM cannot start and `box1-vm-smoke` fails.
 
@@ -296,6 +320,23 @@ Example (inside a source repository's release Pipeline):
 `box1-vm-smoke` and `box1-bootc-apply` use `application-name` as both the Argo
 Application and the VM, so an instance release passes the **instance** name there
 (and `application-namespace: <instance>-dev`).
+
+### Booted-digest check (`box1-bootc-status`, for #138)
+
+`tasks/bootc-status.yaml` reads `bootc status --format json` in a running guest through
+`virtctl ssh` and returns `booted-digest` and `booted-image`. It is read-only: the only
+guest command is `sudo /usr/bin/bootc status --format json`, and it never upgrades,
+switches, rolls back or reboots, so it cannot move an instance onto the shared channel
+tag (unlike `box1-bootc-apply`). Optional `expected-digest` turns it into a gate.
+
+The onboarding plugin's `vm-instance` verify runs it as `ci-vm-deploy` with the private
+key Secret `box1-ci/vm-instance-deploy-ssh` (key `ssh-privatekey`, created outside Git;
+**approval required, not created**). The instance bundle grants `ci-vm-deploy` `get` on
+its VMI and `get`/`update` on `virtualmachineinstances/portforward` (the `legacy-erp`
+`deploy-access.yaml` pattern). The source OS image must provide the guest user
+`box1-deploy`, with the key's public half in its authorized keys and sudoers allowing
+only `/usr/bin/bootc status --format json`; the #140 rule keeps `accessCredentials` for
+`cloud-user` only, so the deploy key cannot be delivered by the guest agent.
 
 ### Channels
 

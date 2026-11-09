@@ -1,0 +1,126 @@
+# Read the OS image digest a running RHEL image mode (bootc) VM has booted, and
+# compare it with an expected digest (box1-docs#138). Read-only: unlike
+# box1-bootc-apply it never runs `bootc upgrade`, `bootc switch` or a reboot, so it
+# cannot move a vm-instance guest onto the source image's shared channel tag.
+#
+# The onboarding plugin's vm-instance verify runs it after the first promotion, as
+# ci-vm-deploy. The instance's box1-workloads-dev manifests (deploy-access.yaml)
+# grant that account `get` on the instance VMI and on virtualmachineinstances/portforward
+# (what `virtctl ssh` needs), and nothing else. The guest user (default box1-deploy)
+# comes from the source OS image, whose sudoers must allow only
+# `/usr/bin/bootc status --format json`. The private key is a Secret in box1-ci created
+# outside Git (key `ssh-privatekey`); its public half is baked into the source image.
+# Host keys are accepted on first use and printed; pinning them is a follow-up.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-bootc-status
+  namespace: box1-ci
+spec:
+  params:
+  - name: application-name
+    type: string
+    description: The VirtualMachine (VMI) name.
+  - name: application-namespace
+    type: string
+  - name: expected-digest
+    type: string
+    default: ''
+    description: Optional sha256:<64 hex>. When set, the Task fails unless the guest booted exactly this digest.
+  - name: ssh-user
+    type: string
+    default: box1-deploy
+  - name: ssh-key-secret
+    type: string
+  - name: timeout-seconds
+    type: string
+    default: '600'
+  results:
+  - name: booted-digest
+    description: OS image digest the guest reports as booted (bootc status .status.booted.image.imageDigest).
+  - name: booted-image
+    description: Image reference the guest reports as booted.
+  volumes:
+  - name: ssh-key
+    secret:
+      secretName: $(params.ssh-key-secret)
+      defaultMode: 0440
+  steps:
+  - name: status
+    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    computeResources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: 500m, memory: 512Mi}
+    volumeMounts:
+    - name: ssh-key
+      mountPath: /etc/box1-ssh
+      readOnly: true
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: APPLICATION_NAME
+      value: $(params.application-name)
+    - name: APPLICATION_NAMESPACE
+      value: $(params.application-namespace)
+    - name: EXPECTED_DIGEST
+      value: $(params.expected-digest)
+    - name: SSH_USER
+      value: $(params.ssh-user)
+    - name: TIMEOUT_SECONDS
+      value: $(params.timeout-seconds)
+    - name: VIRTCTL_URL
+      value: http://hyperconverged-cluster-cli-download.openshift-cnv.svc:8080/amd64/linux/virtctl.tar.gz
+    script: |
+      #!/usr/bin/env python3
+      import json, os, pathlib, re, shutil, subprocess, tarfile, time, urllib.request
+      env=os.environ
+      name=env['APPLICATION_NAME']; namespace=env['APPLICATION_NAMESPACE']; user=env['SSH_USER']; expected=env['EXPECTED_DIGEST']
+      assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name) and re.fullmatch('[a-z][a-z0-9-]{2,62}',namespace)
+      assert re.fullmatch('[a-z_][a-z0-9_-]{0,31}',user)
+      assert expected=='' or re.fullmatch('sha256:[a-f0-9]{64}',expected), 'expected-digest must be empty or sha256:<64 hex>'
+      timeout=int(env['TIMEOUT_SECONDS'])
+      home=pathlib.Path(env['HOME']); home.mkdir(parents=True,exist_ok=True)
+      bin_dir=home/'bin'; bin_dir.mkdir(exist_ok=True)
+
+      # virtctl from the cluster's own download service, so it matches the cluster.
+      archive=home/'virtctl.tar.gz'
+      with urllib.request.urlopen(env['VIRTCTL_URL'],timeout=60) as r, open(archive,'wb') as f: shutil.copyfileobj(r,f)
+      with tarfile.open(archive) as t:
+          member=next(m for m in t.getmembers() if m.isfile() and pathlib.PurePath(m.name).name=='virtctl')
+          member.name='virtctl'; t.extract(member,bin_dir,filter='data')
+      virtctl=str(bin_dir/'virtctl'); os.chmod(virtctl,0o755)
+
+      key=home/'id'; key.write_bytes(pathlib.Path('/etc/box1-ssh/ssh-privatekey').read_bytes()); key.chmod(0o600)
+      known=home/'known_hosts'
+
+      # The only guest command this Task runs.
+      STATUS='sudo /usr/bin/bootc status --format json'
+
+      def booted():
+          cmd=[virtctl,'ssh','--namespace',namespace,'--username',user,'--identity-file',str(key),
+               '--known-hosts',str(known),
+               '-t','-o StrictHostKeyChecking=accept-new','-t','-o ConnectTimeout=15',
+               '-t','-o ServerAliveInterval=10','-t','-o BatchMode=yes','-t','-o LogLevel=ERROR',
+               '--command',STATUS,'vmi/'+name]
+          r=subprocess.run(cmd,capture_output=True,text=True,timeout=120)
+          if r.returncode!=0:
+              print('$ '+STATUS+' -> '+str(r.returncode)+(': '+r.stderr.strip().splitlines()[-1] if r.stderr.strip() else ''))
+              return None
+          image=((json.loads(r.stdout).get('status') or {}).get('booted') or {}).get('image') or {}
+          return image.get('imageDigest'), (image.get('image') or {}).get('image')
+
+      deadline=time.monotonic()+timeout
+      result=None
+      while time.monotonic()<deadline and result is None:
+          result=booted()
+          if result is None: time.sleep(10)
+      if result is None: raise TimeoutError('Guest SSH did not become reachable as '+user)
+      if known.exists(): print('Guest host keys (trust on first use):\n'+known.read_text().strip())
+      digest,image=result
+      assert digest and re.fullmatch('sha256:[a-f0-9]{64}',digest), 'bootc status reported no booted image digest'
+      pathlib.Path('$(results.booted-digest.path)').write_text(digest)
+      pathlib.Path('$(results.booted-image.path)').write_text(image or '')
+      print('Booted: '+json.dumps({'imageDigest':digest,'image':image}))
+      if expected and digest!=expected: raise SystemExit('Booted digest '+digest+' is not the expected '+expected)
+      print('PASS: '+name+' booted '+(expected or digest))

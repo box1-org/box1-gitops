@@ -313,11 +313,15 @@ def instance_bundle(name="site-west", source=SOURCE_IMAGE, promoted=False, **ove
             metadata:
               name: {name}-site
               namespace: {ns}
+              labels:
+                box1.org/instance: {name}
             data:
               siteId: site_ds9
-              gatewayUrl: https://gateway.example.test
-              keycloakUrl: https://sso.example.test/realms/box1
-              keycloakClientId: {name}-gateway
+              keycloakClientId: {name}
+              keycloakTokenUrl: https://sso.example.test/realms/box1/protocol/openid-connect/token
+              assetServiceUrl: https://assets.example.test
+              kafkaBootstrapServers: kafka-0.example.test:9092,kafka-1.example.test:9092
+              otlpEndpoint: http://collector.example.test:4318
         """,
         "virtualmachine.yaml": f"""
             apiVersion: kubevirt.io/v1
@@ -585,6 +589,146 @@ class VmInstanceProfile(unittest.TestCase):
         """})
         files["kustomization.yaml"] += "  - extra.yaml\n"
         self.rejects("must not include Deployment", name, files)
+
+    # box1-docs#138: the #140 instance bundle rules that #139's first cut left open.
+    def test_cloud_init_volume_must_be_named_cloudinitdisk(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "                    - name: cloudinitdisk\n                      cloudInitNoCloud:",
+                     "                    - name: seed\n                      cloudInitNoCloud:")
+        self.rejects("The only cloud-init volume must be named cloudinitdisk", name, files)
+
+    def test_a_second_cloud_init_volume_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "                    - name: cloudinitdisk\n                      cloudInitNoCloud:",
+                     "                    - name: configdrive\n                      cloudInitConfigDrive:\n"
+                     "                        secretRef:\n                          name: other\n"
+                     "                    - name: cloudinitdisk\n                      cloudInitNoCloud:")
+        self.rejects("The only cloud-init volume must be named cloudinitdisk", name, files)
+
+    def test_config_drive_instead_of_nocloud_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "cloudInitNoCloud:", "cloudInitConfigDrive:")
+        self.rejects("exactly one cloudInitNoCloud volume", name, files)
+
+    def test_network_data_secret_ref_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "                          name: site-west-cloud-init\n",
+                     "                          name: site-west-cloud-init\n                        networkDataSecretRef:\n"
+                     "                          name: site-west-network\n")
+        self.rejects("cloudInitNoCloud must set only secretRef.name: site-west-cloud-init", name, files)
+
+    def test_cloud_init_disk_is_required(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "                        - name: cloudinitdisk\n                          disk: {bus: virtio}\n", "")
+        self.rejects("needs a disk named cloudinitdisk", name, files)
+
+    def test_ds_serial_is_rejected(self):
+        for where, old, new in [
+            ("firmware", "                  domain:\n", "                  domain:\n                    firmware:\n                      serial: 'ds=nocloud;s=http://10.0.0.1/'\n"),
+            ("disk", "serial: regtoken", "serial: ds=nocloud"),
+        ]:
+            with self.subTest(where=where):
+                name, files = instance_bundle()
+                files = edit(files, "virtualmachine.yaml", old, new)
+                self.rejects("must not set a ds= SMBIOS or disk serial", name, files)
+
+    def test_nocloud_ssh_propagation_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "                          qemuGuestAgent:\n                            users: [cloud-user]\n",
+                     "                          noCloud: {}\n")
+        self.rejects("noCloud and configDrive propagation are refused", name, files)
+
+    def test_access_credentials_are_for_cloud_user_only(self):
+        name, files = instance_bundle()
+        files = edit(files, "virtualmachine.yaml", "users: [cloud-user]", "users: [cloud-user, root]")
+        self.rejects("may only propagate keys to cloud-user", name, files)
+
+    def test_secret_with_userdata_key_is_rejected(self):
+        for key in ["userdata", "userData", "networkdata"]:
+            with self.subTest(key=key):
+                name, files = instance_bundle(files={"seed.yaml": f"""
+                    apiVersion: v1
+                    kind: Secret
+                    metadata:
+                      name: site-west-seed
+                      namespace: site-west-dev
+                    type: Opaque
+                    stringData:
+                      {key}: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureFixtureFixtureFixtureFixtureFixture x
+                """})
+                files["kustomization.yaml"] += "  - seed.yaml\n"
+                self.rejects("must not hold cloud-init " + key, name, files)
+
+    def test_site_configmap_is_required(self):
+        name, files = instance_bundle(resources=["namespace.yaml", "updater.yaml", "admin-access.yaml", "virtualmachine.yaml"])
+        self.rejects("needs exactly one ConfigMap site-west-site", name, files)
+
+    def test_site_configmap_needs_the_instance_label(self):
+        name, files = instance_bundle()
+        files = edit(files, "site.yaml", "box1.org/instance: site-west", "box1.org/instance: site-east")
+        self.rejects("must be labelled box1.org/instance: site-west", name, files)
+
+    def test_site_configmap_rejects_binary_data(self):
+        name, files = instance_bundle()
+        files = edit(files, "site.yaml", "            data:\n", "            binaryData:\n              blob: AAAA\n            data:\n")
+        self.rejects("must not have binaryData", name, files)
+
+    def test_site_configmap_keys_are_allowlisted(self):
+        for key in ["gatewayUrl", "keycloakUrl", "hostname"]:
+            with self.subTest(key=key):
+                name, files = instance_bundle()
+                files = edit(files, "site.yaml", "siteId: site_ds9", f"siteId: site_ds9\n              {key}: https://example.test")
+                self.rejects("may only hold siteId, keycloakClientId, keycloakTokenUrl", name, files)
+
+    def test_site_configmap_required_keys(self):
+        for key in ["siteId", "keycloakClientId", "keycloakTokenUrl"]:
+            with self.subTest(key=key):
+                name, files = instance_bundle()
+                files["site.yaml"] = re.sub(r"(?m)^ +" + key + r": .*\n", "", files["site.yaml"])
+                self.rejects("must set " + key, name, files)
+
+    def test_site_configmap_values_follow_the_patterns(self):
+        cases = [
+            ("siteId: site_ds9", "siteId: Site-DS9"),
+            ("keycloakClientId: site-west", "keycloakClientId: site_west"),
+            ("keycloakTokenUrl: https://sso.example.test", "keycloakTokenUrl: http://sso.example.test"),
+            ("keycloakTokenUrl: https://sso.example.test", "keycloakTokenUrl: https://user@sso.example.test"),
+            ("assetServiceUrl: https://assets.example.test", "assetServiceUrl: https://assets.example.test/?q=1"),
+            ("assetServiceUrl: https://assets.example.test", "assetServiceUrl: 'https://assets.example.test/$HOME'"),
+            ("kafkaBootstrapServers: kafka-0.example.test:9092", "kafkaBootstrapServers: kafka-0.example.test"),
+            ("otlpEndpoint: http://collector.example.test:4318", "otlpEndpoint: grpc://collector.example.test:4317"),
+        ]
+        for old, new in cases:
+            with self.subTest(value=new):
+                name, files = instance_bundle()
+                files = edit(files, "site.yaml", old, new)
+                self.rejects("does not match the #140 pattern", name, files)
+
+    def test_site_configmap_multiline_value_is_rejected(self):
+        name, files = instance_bundle()
+        files = edit(files, "site.yaml", "siteId: site_ds9", "siteId: |\n                site_ds9")
+        self.rejects("single-line scalars", name, files)
+
+    def test_site_configmap_optional_keys_may_be_omitted(self):
+        name, files = instance_bundle()
+        for key in ["assetServiceUrl", "kafkaBootstrapServers", "otlpEndpoint"]:
+            files["site.yaml"] = re.sub(r"(?m)^ +" + key + r": .*\n", "", files["site.yaml"])
+        self.assertEqual(self.check(name, files), "vm-instance")
+
+    def test_keycloak_token_url_key_is_not_a_credential_but_its_value_is_checked(self):
+        # #140 names the key keycloakTokenUrl; #139's key-name heuristic must not refuse it,
+        # and other ConfigMaps keep the heuristic.
+        name, files = instance_bundle(files={"other.yaml": """
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: site-west-other
+              namespace: site-west-dev
+            data:
+              keycloakTokenUrl: https://sso.example.test/token
+        """})
+        files["kustomization.yaml"] += "  - other.yaml\n"
+        self.rejects("ConfigMap site-west-other must not hold credentials; found keycloakTokenUrl", name, files)
 
     def test_virtual_machine_profile_ignores_instance_rules(self):
         # The existing profile is unchanged: no source annotation, cloud-init or allowlist needed.
@@ -950,9 +1094,36 @@ class TaskManifestsRender(unittest.TestCase):
 
     def test_tasks_kustomization_renders_both_tasks(self):
         rendered = subprocess.check_output([KUSTOMIZE, "kustomize", str(ROOT)], text=True)
-        for task in ["box1-gitops-validate", "box1-gitops-promote"]:
+        for task in ["box1-gitops-validate", "box1-gitops-promote", "box1-bootc-status"]:
             self.assertIn("  name: " + task + "\n", rendered)
         self.assertIn("- default: \"\"\n    description: vm-instance only.", rendered)
+
+
+class BootcStatusTask(unittest.TestCase):
+    """box1-bootc-status (box1-docs#138) reads the booted digest and changes nothing in the guest."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = (ROOT / "bootc-status.yaml").read_text()
+        start = cls.text.index("    script: |")
+        cls.script = "\n".join(line[6:] for line in cls.text[start:].splitlines()[1:])
+
+    def test_script_compiles(self):
+        compile(self.script, "bootc-status", "exec")
+
+    def test_the_only_guest_command_is_bootc_status(self):
+        self.assertEqual(re.findall(r"STATUS='([^']*)'", self.script), ["sudo /usr/bin/bootc status --format json"])
+        self.assertEqual(self.script.count("'--command'"), 1)
+        self.assertIn("'--command',STATUS,", self.script)
+
+    def test_it_never_upgrades_switches_or_reboots(self):
+        code = "\n".join(line for line in self.script.splitlines() if not line.lstrip().startswith("#"))
+        for word in ["upgrade", "switch", "rollback", "reboot", "systemctl", "kubectl", " oc "]:
+            self.assertNotIn(word, code)
+
+    def test_it_reports_the_booted_digest_as_a_result(self):
+        self.assertIn("- name: booted-digest", self.text)
+        self.assertIn("$(results.booted-digest.path)", self.script)
 
 
 def declared_profile(rendered):
