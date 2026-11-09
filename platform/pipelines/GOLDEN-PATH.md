@@ -196,7 +196,7 @@ with the root disk expected from `box1-ci/<source>-disk` instead of `<name>-disk
 | Exactly one `cloudInitNoCloud` volume | `VM instance needs exactly one cloudInitNoCloud volume with secretRef.name: <instance>-cloud-init` |
 | It references the Secret `<instance>-cloud-init` | `cloudInitNoCloud must use secretRef.name: <instance>-cloud-init` |
 | That Secret (and any `networkDataSecretRef`) is not rendered from Git | `Secret <name> must be created outside Git, not rendered from it: …` |
-| No ConfigMap (including `<instance>-site`) holds a credential-looking key or a PEM private key | `ConfigMap <name> must not hold credentials; found …` |
+| No ConfigMap (including `<instance>-site`) holds a credential-looking key, a PEM private key, or a value that assigns one (`PASSWORD=…`, `secret: …`) | `ConfigMap <name> must not hold credentials; found …` |
 | The DataVolume is named `<instance>-root` | `Root DataVolume must be named <instance>-root; found …` |
 | Promoted: one DataVolume from `docker://…/box1-ci/<source>-disk@sha256:<non-zero>` with `pullMethod: node`; a tag, the zero digest or another source's disk fails | `Root DataVolume must pull the digest-pinned <source>-disk image` |
 | Unbuilt (zero OS digest): `runStrategy: Halted` and no DataVolume | `Unbuilt virtual machines must stay Halted`, `Unbuilt virtual machines must not create their DataVolume yet` |
@@ -204,7 +204,9 @@ with the root disk expected from `box1-ci/<source>-disk` instead of `<name>-disk
 
 Credential-looking ConfigMap keys are split into words on camelCase, `-`, `_` and `.`;
 a key containing the word `secret`, `password`, `passwd`, `pwd`, `passphrase`,
-`token`, `key`, `apikey`, `privatekey` or `credential` (or a plural) fails. So
+`token`, `key`, `apikey`, `privatekey`, `credential` or `kubeconfig` (or a plural)
+fails, and so does any value containing `password`, `passwd`, `pwd`, `secret`, `token`,
+`api_key`/`apikey` or `credential` followed by `:` or `=` and a value. So
 `keycloakUrl` and `keycloakClientId` pass, and `clientSecret`, `admin_password`,
 `apiKey` and `sshKey` fail.
 
@@ -322,12 +324,16 @@ every `ci/*/kustomization.yaml` as well as `workloads/*/` (box1-docs#139). Contr
 - **Names:** exactly one Repository, named `<repo>`; at most one ImageStream, named
   `<repo>-bundle`; every ServiceAccount, Role and RoleBinding is named `<repo>-<purpose>`
   (suggested: `<repo>-release`, `<repo>-bundle-push`, `<repo>-release-observer`).
-- **Repository:** `spec.url: https://github.com/box1-org/<repo>`,
+- **Repository:** `spec` sets only `url`, `concurrency_limit` and `settings`, and
+  `settings` sets only `pipelinerun_provenance` and `github_app_token_scope_repos`
+  (no `params`, `git_provider` or `policy`, which could reference Secrets or other
+  hosts). `spec.url: https://github.com/box1-org/<repo>`,
   `settings.pipelinerun_provenance: default_branch`, and
   `github_app_token_scope_repos` lists only `box1-org/<name>` consumer repositories,
   never `box1-org/box1-gitops` or `box1-org/box1-workloads-dev`.
-- **Roles:** every rule names its resources (`resourceNames`), uses no `*`, and never
-  covers `secrets`. Verbs are `get`, `list` or `watch`, except a rule on exactly
+- **Roles:** every rule names its resources (`resourceNames`), uses no `*` anywhere
+  (including `*/status`), never covers `secrets`, and never covers the `exec`,
+  `attach`, `portforward`, `proxy` or `token` subresources. Verbs are `get`, `list` or `watch`, except a rule on exactly
   `imagestreams/layers` of exactly `<repo>-bundle`, which may also `update` (the
   registry push).
 - **RoleBindings:** `roleRef` is a `Role` declared in the same bundle; subjects are
@@ -349,4 +355,7 @@ They need `kubectl` (or `oc`) for `kustomize`, and run on Python 3.9 and 3.11.
 `ServiceProfileRegression` (only with `BOX1_WORKLOADS_DEV`) checks that every live
 workload validates under the profile its Namespace declares, and that every `ci/`
 bundle validates. The suites are not run by any pipeline yet; they are run by hand
-before changing either Task.
+before changing either Task. Wiring them into a `box1-gitops` PR pipeline is a
+follow-up: the only existing PR pipeline (`.tekton/onboarding-plugin-guard.yaml`)
+deliberately runs its guard from `main` and holds a GitHub token, so running PR-supplied
+test code there would need a separate token-free step and a trust decision.

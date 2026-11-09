@@ -555,6 +555,17 @@ class VmInstanceProfile(unittest.TestCase):
                      "siteId: site_ds9\n              bundle: |\n                -----BEGIN PRIVATE KEY-----\n                MIIE\n                -----END PRIVATE KEY-----")
         self.rejects("ConfigMap site-west-site must not hold credentials", name, files)
 
+    def test_site_configmap_values_must_not_embed_credentials(self):
+        # Review finding (box1-docs#139): credentials inside a file-shaped value.
+        for value in ["gateway.yaml: |\n                admin_password: hunter2",
+                      "settings.env: 'PASSWORD=hunter2'",
+                      "client.properties: 'quarkus.oidc.credentials.secret = s3cr3t'",
+                      "kubeconfig: placeholder"]:
+            with self.subTest(value=value):
+                name, files = instance_bundle()
+                files = edit(files, "site.yaml", "siteId: site_ds9", "siteId: site_ds9\n              " + value)
+                self.rejects("ConfigMap site-west-site must not hold credentials", name, files)
+
     def test_site_configmap_settings_are_accepted(self):
         # keycloakUrl and keycloakClientId contain "key" only inside the word "keycloak".
         name, files = instance_bundle()
@@ -772,6 +783,39 @@ class CiBundle(unittest.TestCase):
                 repo, files = ci_bundle()
                 files = edit(files, "repository.yaml", "- box1-org/site-gateway-os", "- " + scope)
                 self.rejects("github_app_token_scope_repos", repo, files)
+
+    def test_repository_settings_are_read_from_settings_only(self):
+        # Review finding (box1-docs#139): decoy keys under another map must not satisfy the check.
+        repo, files = ci_bundle()
+        files = edit(files, "repository.yaml", "              settings:\n",
+                     "              git_provider:\n                pipelinerun_provenance: default_branch\n              settings:\n")
+        files = edit(files, "repository.yaml", "pipelinerun_provenance: default_branch\n                github_app",
+                     "pipelinerun_provenance: source\n                github_app")
+        self.rejects("PaC Repository site-gateway spec may set only", repo, files)
+
+    def test_repository_spec_and_settings_keys_are_allowlisted(self):
+        for old, new, message in [
+            ("concurrency_limit: 1", "concurrency_limit: 1\n              params:\n              - name: x\n                secret_ref: {name: box1-gitops-token, key: token}", "spec may set only"),
+            ("concurrency_limit: 1", "concurrency_limit: 1\n              git_provider: {url: https://evil.example.com, secret: {name: box1-gitops-token}}", "spec may set only"),
+            ("pipelinerun_provenance: default_branch", "pipelinerun_provenance: default_branch\n                policy: {ok_to_test: [mallory]}", "settings may set only"),
+        ]:
+            with self.subTest(new=new):
+                repo, files = ci_bundle()
+                self.rejects(message, repo, edit(files, "repository.yaml", old, new))
+
+    def test_role_resources_exclude_wildcard_and_proxy_subresources(self):
+        for resource in ["'*/status'", "pods/exec", "pods/attach", "services/proxy", "pods/portforward", "serviceaccounts/token"]:
+            with self.subTest(resource=resource):
+                self.rejects("Role site-gateway-sub", *self.extra(f"""
+                    apiVersion: rbac.authorization.k8s.io/v1
+                    kind: Role
+                    metadata: {{name: site-gateway-sub, namespace: box1-ci}}
+                    rules:
+                      - apiGroups: ['']
+                        resources: [{resource}]
+                        resourceNames: [site-gateway]
+                        verbs: [get]
+                """))
 
     def test_imagestream_must_be_the_bundle_stream(self):
         repo, files = ci_bundle()
