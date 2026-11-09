@@ -1,0 +1,14 @@
+# Cluster-internal only (no Route). Maven clients use
+# http://reposilite.box1-maven.svc:8080/maven-central
+apiVersion: v1
+kind: Service
+metadata:
+  name: reposilite
+  namespace: box1-maven
+spec:
+  selector:
+    app.kubernetes.io/name: reposilite
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

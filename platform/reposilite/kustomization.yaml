@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: box1-maven
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: box1-maven
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+# The name gets a content hash, so a configuration change rolls the pod.
+configMapGenerator:
+  - name: reposilite-shared-configuration
+    files:
+      - shared-configuration.json
