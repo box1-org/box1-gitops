@@ -1,0 +1,120 @@
+# Box1 builder image: box1-org/box1-build, box1-org/box1-docs#113.
+#
+#   - Pull requests build the image only, as ci-builder-check (buildah SCC, no registry or API rights).
+#   - Pushes to main build and push box1-build/box1-builder:<sha12>, as ci-builder-release.
+#   - Tekton Task pods in box1-ci pull the image by digest. They may pull box1-builder only,
+#     not the other images in box1-build.
+# The image holds no credentials. Its base comes from
+# registry.access.redhat.com (no pull Secret), and its Maven dependencies come through
+# the in-cluster Reposilite proxy, which admits box1-ci.
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: box1-build
+  namespace: box1-ci
+spec:
+  url: https://github.com/box1-org/box1-build
+  concurrency_limit: 1
+  settings:
+    pipelinerun_provenance: default_branch
+---
+# box1-build already exists (created by hand for agent-workspace). Declaring it here
+# only adds the label that lets Argo CD manage objects in it; its other labels stay.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-build
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-builder-check
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-builder-release
+  namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-builder-buildah-scc
+  namespace: box1-ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pipelines-scc-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: ci-builder-check
+    namespace: box1-ci
+  - kind: ServiceAccount
+    name: ci-builder-release
+    namespace: box1-ci
+---
+# Declared so the release never needs rights to create image streams.
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: box1-builder
+  namespace: box1-build
+spec:
+  lookupPolicy:
+    local: false
+---
+# Push to this one ImageStream only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-builder-release-push
+  namespace: box1-build
+rules:
+  - apiGroups: ["", "image.openshift.io"]
+    resources: ["imagestreams/layers"]
+    resourceNames: ["box1-builder"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-builder-release-push
+  namespace: box1-build
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-builder-release-push
+subjects:
+  - kind: ServiceAccount
+    name: ci-builder-release
+    namespace: box1-ci
+---
+# Pull this one ImageStream only. Task pods run under several box1-ci service accounts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-builder-pull
+  namespace: box1-build
+rules:
+  - apiGroups: ["", "image.openshift.io"]
+    resources: ["imagestreams/layers"]
+    resourceNames: ["box1-builder"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-ci-builder-pull
+  namespace: box1-build
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-builder-pull
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:box1-ci
