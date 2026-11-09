@@ -76,7 +76,7 @@ metadata:
   description: >-
     vLLM OpenAI-compatible model endpoint (http://vllm-test-2.vllm.svc:8000/v1) used by
     agentic-operations. Its deployment is not declared in box1-gitops.
-  tags: [vllm, llm, openshift-ai]
+  tags: [vllm, llm]
 spec:
   type: llm-inference
   lifecycle: experimental

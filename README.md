@@ -16,13 +16,15 @@ registered by the `box1-root` app-of-apps when that root is installed.
   operator notices; web UI behind the OpenShift login, SMTP only from `notification-service-dev`.
 - [Reposilite](platform/reposilite/README.md): in-cluster caching proxy of Maven Central
   used by the Tekton Maven builds (box1-docs#113).
-- [OpenShift AI](platform/openshift-ai/README.md): lab-only AI 3.4.2 installation,
-  CPU workbench, NooBaa connection and KServe inference validation.
 - [Trusted Profile Analyzer](platform/trusted-profile-analyzer/README.md): RHTPA 3.1.1,
   dedicated PostgreSQL/NooBaa, Keycloak login and scoped SBOM ingestion.
 - [OpenShell](platform/openshell/README.md): validated Helm values and a staged
   Argo Application. The existing Helm release remains live owner; the staged
   Application is deliberately outside `applications/` and is not installed.
+
+OpenShift AI 3.4.2 was uninstalled on 2026-11-09 because no use case or profile
+needs it. Its lab configuration and validation notes remain in Git history at
+`7a1da45:platform/openshift-ai/` for a future reinstall.
 
 Credentials remain in Kubernetes Secrets, referenced by name. Do not commit live
 Secret exports, Helm backup manifests, tokens, private keys, or initial passwords.
