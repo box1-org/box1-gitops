@@ -165,9 +165,197 @@ Delivery uses central Tasks:
 
 The guest applies an approved OS image deliberately with `sudo bootc upgrade --apply`.
 
-Contract tests:
+## VM instance workload profile (`vm-instance`)
+
+Tracked in box1-docs#139 (sub-issue of #126). One bootc OS image repository (the
+*source*, for example `site-gateway-os`) boots many VM instances. Each instance has its
+own `workloads/<instance>/` directory, namespace, VirtualMachine and Argo Application,
+and pins its own approved digest. A workload opts in with the Namespace label
+`box1.org/workload-profile: vm-instance`. The `service` and `virtual-machine` rules
+above are unchanged.
+
+### Source allowlist
+
+The allowed sources are the tuple `VM_INSTANCE_SOURCES` near the top of the
+`box1-gitops-validate` script (`tasks/gitops-validate.yaml`). Each entry is a bare
+`box1-org` repository name; its disk image is `box1-ci/<source>-disk`. It currently
+holds `site-gateway-os`. Adding a source is a reviewed `box1-gitops` PR that edits the
+tuple, so the allowlist changes together with, and is reviewed like, the validator.
+
+### Validation rules
+
+`box1-gitops-validate` applies these checks, then every `virtual-machine` rule above,
+with the root disk expected from `box1-ci/<source>-disk` instead of `<name>-disk`:
+
+| Rule | Failure message (prefix) |
+| --- | --- |
+| Exactly one VirtualMachine, named after the instance directory | `Exactly one VirtualMachine must be named after the instance <instance>; found …` |
+| The VM records its source in the annotation `box1.org/source-image` | `VM instance must record its source OS image repository in box1.org/source-image exactly once` |
+| The source is on the allowlist | `Source image <source> is not on the vm-instance allowlist (VM_INSTANCE_SOURCES …)` |
+| No inline `userData`, `userDataBase64`, `networkData` or `networkDataBase64`, in any cloud-init volume | `VM instances must not inline <key>; reference the <instance>-cloud-init Secret with cloudInitNoCloud.secretRef` |
+| Exactly one `cloudInitNoCloud` volume | `VM instance needs exactly one cloudInitNoCloud volume with secretRef.name: <instance>-cloud-init` |
+| It references the Secret `<instance>-cloud-init` | `cloudInitNoCloud must use secretRef.name: <instance>-cloud-init` |
+| That Secret (and any `networkDataSecretRef`) is not rendered from Git | `Secret <name> must be created outside Git, not rendered from it: …` |
+| No ConfigMap (including `<instance>-site`) holds a credential-looking key, a PEM private key, or a value that assigns one (`PASSWORD=…`, `secret: …`) | `ConfigMap <name> must not hold credentials; found …` |
+| The DataVolume is named `<instance>-root` | `Root DataVolume must be named <instance>-root; found …` |
+| Promoted: one DataVolume from `docker://…/box1-ci/<source>-disk@sha256:<non-zero>` with `pullMethod: node`; a tag, the zero digest or another source's disk fails | `Root DataVolume must pull the digest-pinned <source>-disk image` |
+| Unbuilt (zero OS digest): `runStrategy: Halted` and no DataVolume | `Unbuilt virtual machines must stay Halted`, `Unbuilt virtual machines must not create their DataVolume yet` |
+| Secrets other than the updater token hold only SSH public keys (the `virtual-machine` rule) | `Only SSH public keys may be stored in Secrets` |
+
+Credential-looking ConfigMap keys are split into words on camelCase, `-`, `_` and `.`;
+a key containing the word `secret`, `password`, `passwd`, `pwd`, `passphrase`,
+`token`, `key`, `apikey`, `privatekey`, `credential` or `kubeconfig` (or a plural)
+fails, and so does any value containing `password`, `passwd`, `pwd`, `secret`, `token`,
+`api_key`/`apikey` or `credential` followed by `:` or `=` and a value. So
+`keycloakUrl` and `keycloakClientId` pass, and `clientSecret`, `admin_password`,
+`apiKey` and `sshKey` fail.
+
+The installed OpenShift Virtualization 5.0.0 `VirtualMachine` CRD (`kubevirt.io/v1`)
+has `cloudInitNoCloud.secretRef` and `networkDataSecretRef` (checked read-only on
+2026-11-08 for box1-docs#139).
+
+### Instance bundle contract (for #138 and #140)
+
+`workloads/<instance>/` holds the `virtual-machine` bundle files, with these
+differences:
+
+- `namespace.yaml`: the label `box1.org/workload-profile: vm-instance`.
+- `virtualmachine.yaml`: `metadata.name: <instance>`, the annotation
+  `box1.org/source-image: <source>` (a metadata annotation, beside
+  `box1.org/os-image-digest`), and a disk plus volume `cloudinitdisk` with
+  `cloudInitNoCloud.secretRef.name: <instance>-cloud-init`.
+- `datavolume.yaml`: `metadata.name: <instance>-root`, with the url
+  `docker://image-registry.openshift-image-registry.svc:5000/box1-ci/<source>-disk@sha256:000…`
+  until the first promotion. As for `virtual-machine`, the file exists from onboarding
+  but is not listed in `kustomization.yaml` until then.
+- An optional non-secret ConfigMap `<instance>-site` (siteId, endpoints). Use a plain
+  resource, or `generatorOptions.disableNameSuffixHash: true`, so its name is stable for
+  the #140 assembly script.
+- The `<instance>-cloud-init` Secret is never in Git. It must exist before the first
+  promotion starts the VM; otherwise the VM cannot start and `box1-vm-smoke` fails.
+
+### Promotion contract (for #138)
+
+`box1-gitops-promote` takes `workload-profile: vm-instance` and a new
+`instance-name` parameter (default empty; it must be empty for the other profiles):
+
+- `application-name` is the **source** repository. Its `main` must still equal
+  `revision`, both before the PR and before the merge, as for every profile.
+- `instance-name` is the workload directory, the VirtualMachine, the Argo Application
+  that is synced, and the name in the branch `promote/<instance>/…` and the PR title.
+- Edited files: `workloads/<instance>/virtualmachine.yaml` always; on the first
+  promotion also `datavolume.yaml` (zero digest to `disk-digest`, still from
+  `box1-ci/<source>-disk`) and `kustomization.yaml` (adds `datavolume.yaml`), and the
+  VM goes from `Halted` to `Always`. The VM must already carry
+  `box1.org/source-image: <application-name>`.
+- Day 2 changes only the instance's annotations (`os-image-digest`, `source-revision`,
+  `build-pipelinerun`), exactly like `virtual-machine`. **The DataVolume digest is not
+  swapped on day 2**, although the #139 prompt proposed it: CDI's DataVolume admission
+  webhook validates updates and DataVolume specs are treated as immutable here (see the
+  `virtual-machine` first-promotion comment), so a changed url would fail the Argo sync
+  without re-imaging the disk. Recorded as a decision in
+  `box1-docs/agent-runs/139-gitops-vm-instance/`; how an instance moves to a new digest
+  is #141.
+- Other instances of the same source are never read or changed. One release promotes
+  one instance; promoting several instances means one promote Task per instance.
+
+Example (inside a source repository's release Pipeline):
+
+```yaml
+    - name: promote-site-west
+      taskRef:
+        resolver: cluster
+        params:
+        - name: kind
+          value: task
+        - name: name
+          value: box1-gitops-promote
+        - name: namespace
+          value: box1-ci
+      params:
+      - name: revision
+        value: "$(params.revision)"
+      - name: image-digest
+        value: "$(tasks.build.results.image-digest)"
+      - name: git-auth-secret
+        value: "$(params.git-auth-secret)"
+      - name: environment
+        value: development
+      - name: pipeline-run
+        value: "$(context.pipelineRun.name)"
+      - name: application-name
+        value: site-gateway-os        # the source repository
+      - name: workload-profile
+        value: vm-instance
+      - name: instance-name
+        value: site-west              # workloads/site-west/
+      - name: disk-digest
+        value: "$(tasks.disk.results.disk-digest)"
+```
+
+`box1-vm-smoke` and `box1-bootc-apply` use `application-name` as both the Argo
+Application and the VM, so an instance release passes the **instance** name there
+(and `application-namespace: <instance>-dev`).
+
+### Channels
+
+`vm-instance` workloads pin digests only (owner decision on #139). `box1-bootc-channel`
+keeps moving the source image's shared `box1-ci/<source>:<channel>` tag, and no
+per-instance tag exists. Requirement for #141: `box1-bootc-disk` records
+`box1-ci/<source>:<channel>` as the installed system's update source, and the disk is
+shared by every instance, so an in-guest `bootc upgrade` (or the automatic update
+timer) would follow the shared tag rather than the instance's pinned digest. Instance
+upgrades therefore need a digest-pinned switch in the guest (for example
+`bootc switch …/box1-ci/<source>@sha256:<instance digest>`) and the automatic update
+timer disabled in instance images.
+
+## Code-only repository CI bundles (`ci/<repo>/`, `artifact` profile)
+
+Owner decision on box1-docs#137: the Pipelines-as-Code Repository of a code-only
+repository lives in `box1-workloads-dev/ci/<repo>/`, with an Application
+`applications/<repo>-ci.yaml` that targets `box1-ci`. `box1-gitops-validate` renders
+every `ci/*/kustomization.yaml` as well as `workloads/*/` (box1-docs#139). Contract:
+
+- **Kinds:** only `Repository` (`pipelinesascode.tekton.dev/v1alpha1`),
+  `ServiceAccount` (`v1`), `ImageStream` (`image.openshift.io/v1`), `Role` and
+  `RoleBinding` (`rbac.authorization.k8s.io/v1`). Anything else fails, including
+  Namespaces, Secrets (with or without data) and workloads.
+- **Namespace:** every resource is in `box1-ci`.
+- **Names:** exactly one Repository, named `<repo>`; at most one ImageStream, named
+  `<repo>-bundle`; every ServiceAccount, Role and RoleBinding is named `<repo>-<purpose>`
+  (suggested: `<repo>-release`, `<repo>-bundle-push`, `<repo>-release-observer`).
+- **Repository:** `spec` sets only `url`, `concurrency_limit` and `settings`, and
+  `settings` sets only `pipelinerun_provenance` and `github_app_token_scope_repos`
+  (no `params`, `git_provider` or `policy`, which could reference Secrets or other
+  hosts). `spec.url: https://github.com/box1-org/<repo>`,
+  `settings.pipelinerun_provenance: default_branch`, and
+  `github_app_token_scope_repos` lists only `box1-org/<name>` consumer repositories,
+  never `box1-org/box1-gitops` or `box1-org/box1-workloads-dev`.
+- **Roles:** every rule names its resources (`resourceNames`), uses no `*` anywhere
+  (including `*/status`), never covers `secrets`, and never covers the `exec`,
+  `attach`, `portforward`, `proxy` or `token` subresources. Verbs are `get`, `list` or `watch`, except a rule on exactly
+  `imagestreams/layers` of exactly `<repo>-bundle`, which may also `update` (the
+  registry push).
+- **RoleBindings:** `roleRef` is a `Role` declared in the same bundle; subjects are
+  ServiceAccounts in `box1-ci` declared in the bundle, or `ci-observe`.
+- `ci/<repo>` must not share a name with a `workloads/<repo>` directory.
+
+Cluster RBAC, or RBAC outside `box1-ci` (for example an Argo Application observer in
+`openshift-gitops`), cannot live in `ci/<repo>/`; it belongs in `box1-gitops`. The
+validator does not check `applications/*.yaml`.
+
+## Contract tests
 
 ```sh
 BOX1_WORKLOADS_DEV=/path/to/box1-workloads-dev python3 platform/pipelines/tasks/test-gitops-validate.py
 python3 platform/pipelines/tasks/test-gitops-promote.py
 ```
+
+They need `kubectl` (or `oc`) for `kustomize`, and run on Python 3.9 and 3.11.
+`ServiceProfileRegression` (only with `BOX1_WORKLOADS_DEV`) checks that every live
+workload validates under the profile its Namespace declares, and that every `ci/`
+bundle validates. The suites are not run by any pipeline yet; they are run by hand
+before changing either Task. Wiring them into a `box1-gitops` PR pipeline is a
+follow-up: the only existing PR pipeline (`.tekton/onboarding-plugin-guard.yaml`)
+deliberately runs its guard from `main` and holds a GitHub token, so running PR-supplied
+test code there would need a separate token-free step and a trust decision.

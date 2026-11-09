@@ -30,11 +30,15 @@ spec:
   - name: workload-profile
     type: string
     default: service
-    description: service (Deployment + kustomize image digest) or virtual-machine (VirtualMachine OS digest annotation; first promotion also starts the VM and adds its root DataVolume).
+    description: service (Deployment + kustomize image digest), virtual-machine (VirtualMachine OS digest annotation; first promotion also starts the VM and adds its root DataVolume) or vm-instance (the same for one instance of the source OS image named by application-name; needs instance-name).
   - name: disk-digest
     type: string
     default: ''
-    description: virtual-machine only. Digest of box1-ci/<name>-disk, used for the first promotion's root DataVolume.
+    description: virtual-machine and vm-instance only. Digest of box1-ci/<name>-disk (for vm-instance, box1-ci/<application-name>-disk), used for the first promotion's root DataVolume.
+  - name: instance-name
+    type: string
+    default: ''
+    description: vm-instance only. The instance to promote (workloads/<instance-name>/, its VirtualMachine and Argo Application). application-name stays the source OS image repository, whose main must still equal revision.
   steps:
   - name: promote
     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
@@ -62,6 +66,8 @@ spec:
       value: "$(params.workload-profile)"
     - name: DISK_DIGEST
       value: "$(params.disk-digest)"
+    - name: INSTANCE_NAME
+      value: "$(params.instance-name)"
     script: |
       #!/usr/bin/env python3
       import base64, datetime, json, os, re, ssl, time, urllib.request, urllib.error
@@ -87,6 +93,15 @@ spec:
       name=os.environ['APPLICATION_NAME']
       assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name), 'Invalid application name'
       application='/repos/box1-org/'+name
+      # vm-instance (box1-docs#139): application-name is the source OS image repository and
+      # gates supersession through `application`; from here on `name` is the instance, so
+      # the files, branch, PR and Argo sync below all target workloads/<instance>/ only.
+      instance=os.environ.get('INSTANCE_NAME','')
+      if os.environ['WORKLOAD_PROFILE']=='vm-instance':
+          assert re.fullmatch('[a-z][a-z0-9-]{2,39}',instance), 'vm-instance promotion requires a valid instance-name'
+          source_image,name=name,instance
+      else:
+          assert not instance, 'instance-name is only valid with workload-profile vm-instance'
       gitops='/repos/box1-org/box1-workloads-dev'
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
@@ -131,6 +146,36 @@ spec:
               assert count==1, 'Unbuilt virtual machine must be Halted'
               new[dv],count=re.subn(r'(?m)^(      url: docker://image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+re.escape(name)+r'-disk@)'+ZERO+'$',lambda m:m.group(1)+disk_digest,old[dv])
               assert count==1, 'Unbuilt root DataVolume must reference the zero disk digest'
+              assert not re.search(r'(?m)^  - datavolume\.yaml$',old[k]), 'Unbuilt virtual machine must not list its DataVolume'
+              new[k],count=re.subn(r'(?m)^  - virtualmachine\.yaml$','  - virtualmachine.yaml\n  - datavolume.yaml',old[k])
+              assert count==1, 'Kustomization must list virtualmachine.yaml once'
+          new[v]=vm
+          return new
+
+      def plan_instance_updates(name, source_image, old, source, digest, disk_digest, pipeline_run):
+          """vm-instance: return {path: new content} for one instance of source_image (box1-docs#139).
+
+          Instances pin digests only and never follow a channel tag. A day-2 promotion records
+          the approved OS digest on this instance alone; the root DataVolume keeps the disk it
+          was imported from, because CDI rejects DataVolume spec updates (see GOLDEN-PATH.md).
+          """
+          base='workloads/'+name+'/'
+          v,dv,k=base+'virtualmachine.yaml',base+'datavolume.yaml',base+'kustomization.yaml'
+          assert re.search(r'(?m)^    box1\.org/source-image: '+re.escape(source_image)+'$',old[v]), 'Instance '+name+' must record box1.org/source-image: '+source_image
+          new={}
+          vm,count=re.subn(r'(?m)^    box1\.org/os-image-digest: sha256:[a-f0-9]{64}$','    box1.org/os-image-digest: '+digest,old[v])
+          assert count==1, 'Exactly one box1.org/os-image-digest annotation required'
+          vm,count=re.subn(r'(?m)^    box1\.org/source-revision: [a-f0-9]{40}$','    box1.org/source-revision: '+source,vm)
+          assert count==1, 'Source revision annotation missing'
+          vm,count=re.subn(r'(?m)^    box1\.org/build-pipelinerun: .+$','    box1.org/build-pipelinerun: box1-ci/'+pipeline_run,vm)
+          assert count==1
+          if '    box1.org/os-image-digest: '+ZERO in old[v]:
+              # First promotion: import the root disk from the source image's disk and start the VM.
+              assert re.fullmatch('sha256:[a-f0-9]{64}',disk_digest) and disk_digest!=ZERO, 'First VM promotion requires the disk digest'
+              vm,count=re.subn(r'(?m)^  runStrategy: Halted$','  runStrategy: Always',vm)
+              assert count==1, 'Unbuilt virtual machine must be Halted'
+              new[dv],count=re.subn(r'(?m)^(      url: docker://image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+re.escape(source_image)+r'-disk@)'+ZERO+'$',lambda m:m.group(1)+disk_digest,old[dv])
+              assert count==1, 'Unbuilt root DataVolume must reference the zero '+source_image+'-disk digest'
               assert not re.search(r'(?m)^  - datavolume\.yaml$',old[k]), 'Unbuilt virtual machine must not list its DataVolume'
               new[k],count=re.subn(r'(?m)^  - virtualmachine\.yaml$','  - virtualmachine.yaml\n  - datavolume.yaml',old[k])
               assert count==1, 'Kustomization must list virtualmachine.yaml once'
@@ -269,10 +314,11 @@ spec:
       base=github(gitops+'/git/ref/heads/main')['object']['sha']
       base_commit=github(gitops+'/git/commits/'+base)
       profile=os.environ['WORKLOAD_PROFILE']
-      assert profile in ['service','virtual-machine'], 'Unsupported workload profile'
+      assert profile in ['service','virtual-machine','vm-instance'], 'Unsupported workload profile'
       candidates=candidate_paths(profile,name)
       old={path:base64.b64decode(github(gitops+'/contents/'+path+'?ref='+base)['content']).decode() for path in candidates}
-      new=plan_updates(profile,name,old,source,digest,os.environ['DISK_DIGEST'],os.environ['PIPELINE_RUN'])
+      new=(plan_instance_updates(name,source_image,old,source,digest,os.environ['DISK_DIGEST'],os.environ['PIPELINE_RUN'])
+           if profile=='vm-instance' else plan_updates(profile,name,old,source,digest,os.environ['DISK_DIGEST'],os.environ['PIPELINE_RUN']))
       paths=sorted(new)
       entries=[]
       for path in paths:
@@ -283,7 +329,7 @@ spec:
       branch='promote/'+name+'/' +source[:12]+'-'+os.environ['PIPELINE_RUN'][-5:]
       github(gitops+'/git/refs','POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
       pr=github(gitops+'/pulls','POST',{'title':'Promote '+name+' '+source[:12]+' to '+environment,'head':branch,'base':'main',
-          'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\n'+('Profile: virtual-machine (apply in the guest with `sudo bootc upgrade --apply`)\n' if profile=='virtual-machine' else '')+'Build: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
+          'body':'Automated Tekton promotion.\n\nEnvironment: '+environment+'\nSource: `'+source+'`\nImage digest: `'+digest+'`\n'+('Profile: virtual-machine (apply in the guest with `sudo bootc upgrade --apply`)\n' if profile=='virtual-machine' else '')+('Profile: vm-instance of source image `'+source_image+'` (digest pinned for this instance only; it does not follow a channel tag)\n' if profile=='vm-instance' else '')+'Build: `'+os.environ['PIPELINE_RUN']+'`\n\nDevelopment may merge only after required checks pass on this exact head commit. Other environments require approval.'})
       result('pr-url',pr['html_url']); print('Created GitOps PR: '+pr['html_url'])
       if environment != 'development':
           print('Approval policy selected; PR left open for a reviewer.')
