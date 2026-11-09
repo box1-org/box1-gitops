@@ -23,7 +23,9 @@ spec:
     default: quarkus-reference
   steps:
   - name: fetch
-    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    # box1-org/box1-build builder image: Maven 3.9.16, Python 3.11, Maven settings
+    # (mirror: in-cluster Reposilite) and a baked Maven cache at /opt/box1/m2 (box1-docs#113).
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
     env:
     - name: HOME
       value: "/tekton/home"
@@ -56,26 +58,9 @@ spec:
       archive.extractall(unpack)
       folders=list(unpack.iterdir()); assert len(folders)==1
       shutil.move(str(folders[0]),str(root/'application'))
-      # In-cluster Reposilite cache of Maven Central (platform/reposilite, box1-docs#113).
-      # Maven itself and every build dependency come through it, so a Central
-      # outage or 429 only matters for artifacts the cluster has never fetched.
-      mirror='http://reposilite.box1-maven.svc:8080/maven-central'
-      url=mirror+'/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip'
-      # Platform-owned checksum, independent of untrusted PR wrapper properties.
-      expected='5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce'
-      with urllib.request.urlopen(url,timeout=120) as response: data=response.read()
-      assert hashlib.sha256(data).hexdigest()==expected, 'Maven checksum mismatch'
-      tools=root/'tools'; zipfile.ZipFile(io.BytesIO(data)).extractall(tools)
-      (tools/'apache-maven-3.9.16/bin/mvn').chmod(0o755)
-      # Platform-owned settings outside the source tree: every repository,
-      # including any a project declares, resolves through the mirror.
-      (root/'settings.xml').write_text(
-          '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><mirrors><mirror>'
-          '<id>box1-maven</id><mirrorOf>*</mirrorOf><url>'+mirror+'</url>'
-          '</mirror></mirrors></settings>\n')
-      print('Fetched '+repo+' at '+revision+'; checksum-verified Maven 3.9.16 via '+mirror)
+      print('Fetched '+repo+' at '+revision+'; builder '+open('/opt/box1/release').read().replace('\n',' '))
   - name: verify-and-publish
-    image: registry.access.redhat.com/ubi9/openjdk-21@sha256:bd995811a45eb587f97a105796f8f43df466a4269411a2a1642f0f9799f885db
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
     workingDir: "/workspace"
     computeResources:
       requests:
@@ -102,14 +87,17 @@ spec:
       #!/bin/sh
       set -eu
       cd /workspace/application
-      /workspace/tools/apache-maven-3.9.16/bin/mvn -B -ntp -s /workspace/settings.xml -Dmaven.repo.local=/workspace/m2 verify -DskipITs=false
-      # -ntp hides per-artifact transfers; record how much this build resolved.
-      printf 'Resolved dependencies: '; du -sh /workspace/m2 | cut -f1
+      # The image's baked cache is a read-only tail: cached artifacts are read
+      # from it, anything new is fetched through Reposilite into /workspace/m2.
+      mvn -B -ntp -s "$BOX1_MAVEN_SETTINGS" -Dmaven.repo.local=/workspace/m2 -Dmaven.repo.local.tail="$BOX1_MAVEN_TAIL" verify -DskipITs=false
+      # -ntp hides per-artifact transfers; record what the baked cache did not cover.
+      printf 'Fetched beyond the baked cache: %s jars, ' "$(find /workspace/m2 -name '*.jar' 2>/dev/null | wc -l)"
+      du -sh /workspace/m2 2>/dev/null | cut -f1 || echo 0
       # The PR service account has no API token. Only trusted main builds publish.
       if [ "$PUSH_IMAGE" = true ]; then
         export QUARKUS_CONTAINER_IMAGE_USERNAME=serviceaccount
         export QUARKUS_CONTAINER_IMAGE_PASSWORD="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
-        /workspace/tools/apache-maven-3.9.16/bin/mvn -B -ntp -s /workspace/settings.xml -Dmaven.repo.local=/workspace/m2 package -DskipTests \
+        mvn -B -ntp -s "$BOX1_MAVEN_SETTINGS" -Dmaven.repo.local=/workspace/m2 -Dmaven.repo.local.tail="$BOX1_MAVEN_TAIL" package -DskipTests \
           -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true \
           -Dquarkus.container-image.registry=registry.apps.ocp.box1.org \
           -Dquarkus.container-image.group=box1-ci -Dquarkus.container-image.name="$IMAGE_NAME" \

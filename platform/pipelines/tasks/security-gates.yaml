@@ -89,7 +89,9 @@ spec:
       optional: true
   steps:
   - name: sbom-and-rhtpa
-    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    # box1-org/box1-build builder image: syft 1.55.0, roxctl 4.11.6 and Python 3.11 baked in,
+    # so no GitHub Releases or mirror.openshift.com download at run time (box1-docs#113).
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
     env:
     - name: HOME
       value: /tekton/home
@@ -135,18 +137,14 @@ spec:
       if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest): raise SystemExit('Exact image digest is required')
       if not re.fullmatch(r'[a-f0-9]{40}', revision): raise SystemExit('Full source revision is required')
       if not os.environ['IMAGE_REFERENCE'].endswith('@'+digest): raise SystemExit('Image reference is not digest-bound')
-      url='https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.0_linux_amd64.tar.gz'
-      expected='bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d'
-      with urllib.request.urlopen(url, timeout=120) as response: data=response.read()
-      if hashlib.sha256(data).hexdigest()!=expected: raise SystemExit('Syft checksum mismatch')
-      with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
-          member=archive.getmember('syft'); member.name='syft'; archive.extract(member, '/tmp')
-      pathlib.Path('/tmp/syft').chmod(0o755)
+      # Platform-owned checksum of the syft 1.55.0 linux_amd64 binary in the builder image.
+      syft='/usr/local/bin/syft'
+      if hashlib.sha256(pathlib.Path(syft).read_bytes()).hexdigest()!='64c9631c3560336c55c549df0de08cd577d02399c9de807ac390960a4ed5c351': raise SystemExit('Syft checksum mismatch')
       sbom=pathlib.Path('/reports/sbom.cdx.json')
       import subprocess
       registry_token=pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text().strip()
-      subprocess.run(['/tmp/syft', 'login', 'image-registry.openshift-image-registry.svc:5000', '-u', 'serviceaccount', '-p', registry_token], check=True, timeout=60)
-      subprocess.run(['/tmp/syft', 'scan', 'registry:'+os.environ['IMAGE_REFERENCE'], '-o', 'cyclonedx-json@1.5='+str(sbom)], check=True, timeout=900)
+      subprocess.run([syft, 'login', 'image-registry.openshift-image-registry.svc:5000', '-u', 'serviceaccount', '-p', registry_token], check=True, timeout=60)
+      subprocess.run([syft, 'scan', 'registry:'+os.environ['IMAGE_REFERENCE'], '-o', 'cyclonedx-json@1.5='+str(sbom)], check=True, timeout=900)
       document=json.loads(sbom.read_text())
       if document.get('bomFormat')!='CycloneDX' or document.get('specVersion')!='1.5': raise SystemExit('Syft did not produce CycloneDX 1.5')
       labels={'labels.image-digest':digest,'labels.source-revision':revision,'labels.service':os.environ['APPLICATION_NAME'],'labels.source-repository':os.environ['SOURCE_REPOSITORY'],'labels.pipeline-run':os.environ['PIPELINE_RUN']}
@@ -165,7 +163,9 @@ spec:
       print('RHTPA SBOM: '+sbom_url)
       print('SBOM accepted by RHTPA: '+sbom_id+' digest='+digest+' revision='+revision)
   - name: rhacs-scan-and-check
-    image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+    # box1-org/box1-build builder image: syft 1.55.0, roxctl 4.11.6 and Python 3.11 baked in,
+    # so no GitHub Releases or mirror.openshift.com download at run time (box1-docs#113).
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
     env:
     - name: HOME
       value: /tekton/home
@@ -203,10 +203,9 @@ spec:
           pathlib.Path('/tekton/results/SCAN_OUTPUT').write_text('disabled')
           print('Security gate disabled by explicit pipeline parameter')
           raise SystemExit(0)
-      url='https://mirror.openshift.com/pub/rhacs/assets/4.11.6/bin/Linux/roxctl'
-      expected='975fea98a30d2b4e55444366e9202297b4ff0b2a1f5c783994f5af5788b5f983'
-      binary=pathlib.Path('/tmp/roxctl'); binary.write_bytes(urllib.request.urlopen(url, timeout=120).read()); binary.chmod(0o755)
-      if hashlib.sha256(binary.read_bytes()).hexdigest()!=expected: raise SystemExit('roxctl checksum mismatch')
+      # Platform-owned checksum of the roxctl 4.11.6 binary in the builder image.
+      binary=pathlib.Path('/usr/local/bin/roxctl')
+      if hashlib.sha256(binary.read_bytes()).hexdigest()!='975fea98a30d2b4e55444366e9202297b4ff0b2a1f5c783994f5af5788b5f983': raise SystemExit('roxctl checksum mismatch')
       env=os.environ.copy(); env['ROX_API_TOKEN']=env['ROX_API_TOKEN']
       scan=subprocess.run([str(binary),'image','scan','--endpoint',env['RHACS_ENDPOINT'],'--image',env['IMAGE_REFERENCE'],'--output','json'], env=env, text=True, capture_output=True, timeout=900)
       pathlib.Path('/reports/rhacs-scan.json').write_text(scan.stdout)
