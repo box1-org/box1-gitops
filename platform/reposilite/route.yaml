@@ -1,0 +1,16 @@
+# Browse the cache in the Reposilite dashboard, behind the OpenShift login.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: reposilite
+  namespace: box1-maven
+spec:
+  host: reposilite.apps.ocp.box1.org
+  to:
+    kind: Service
+    name: reposilite-web
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
