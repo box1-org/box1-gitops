@@ -17,11 +17,27 @@ spec:
       labels:
         app.kubernetes.io/name: reposilite
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: reposilite
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # A random cookie secret per pod start, so no secret lives in Git. Restarting the pod logs browsers out.
+        - name: cookie-secret
+          image: docker.io/dzikoysk/reposilite@sha256:2438ab2a01392ea53d62ba83cdca1afe963603518f4282af4712076d39e1dd22
+          command: [/bin/sh, -c, 'printf "%s" "$(head -c 24 /dev/urandom | base64)" > /cookie/secret']
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: cookie
+              mountPath: /cookie
       containers:
         - name: reposilite
           # dzikoysk/reposilite 3.6.6, pinned by multi-arch index digest.
@@ -79,7 +95,58 @@ spec:
               mountPath: /var/log/reposilite
             - name: tmp
               mountPath: /tmp
+        - name: oauth-proxy
+          # The same Red Hat ose-oauth-proxy image MailHog and openshift-storage already run.
+          image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9@sha256:01aff928e344429dd8edf807716594c2a60719c629a6e8277ec9be81c5c019a7
+          args:
+            - --https-address=:8443
+            - --provider=openshift
+            - --openshift-service-account=reposilite
+            - --upstream=http://127.0.0.1:8080
+            - --tls-cert=/etc/tls/private/tls.crt
+            - --tls-key=/etc/tls/private/tls.key
+            - --cookie-secret-file=/cookie/secret
+            - --cookie-secure=true
+            # Browser login: users who may get the reposilite-web Service (cluster admins and anyone granted it).
+            - '--openshift-sar={"namespace":"box1-maven","resource":"services","resourceName":"reposilite-web","verb":"get"}'
+          ports:
+            - name: https
+              containerPort: 8443
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          readinessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/tls/private
+              readOnly: true
+            - name: cookie
+              mountPath: /cookie
+              readOnly: true
       volumes:
+        - name: tls
+          secret:
+            secretName: reposilite-web-tls
+        - name: cookie
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
         - name: data
           persistentVolumeClaim:
             claimName: reposilite-data

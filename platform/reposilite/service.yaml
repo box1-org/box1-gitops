@@ -12,3 +12,19 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+---
+# Dashboard, always through the OAuth proxy (TLS from the service CA). Used only by the Route.
+apiVersion: v1
+kind: Service
+metadata:
+  name: reposilite-web
+  namespace: box1-maven
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: reposilite-web-tls
+spec:
+  selector:
+    app.kubernetes.io/name: reposilite
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https

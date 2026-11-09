@@ -6,8 +6,14 @@ pods are throwaway and keep no local Maven repository, so before this proxy ever
 Quarkus build downloaded about 180–270 MB from Maven Central. When Central
 rate-limited the cluster (HTTP 429) on 2026-11-08, releases failed for hours.
 
-- **Endpoint:** `http://reposilite.box1-maven.svc:8080/maven-central`. It is
-  cluster-internal: there is no Route, and the NetworkPolicy admits only `box1-ci`.
+- **Maven endpoint:** `http://reposilite.box1-maven.svc:8080/maven-central`. It is
+  cluster-internal and needs no login; the NetworkPolicy admits port 8080 only
+  from `box1-ci`.
+- **Dashboard:** <https://reposilite.apps.ocp.box1.org>, behind the OpenShift
+  login. An OAuth proxy sidecar (the same pattern as MailHog) admits users who
+  can `get` the `reposilite-web` Service in `box1-maven`, which includes cluster
+  admins. Use it to browse cached artifacts. It is read-only, because no
+  Reposilite access tokens exist.
 - **Repository:** one repository, `maven-central`, proxying
   `https://repo.maven.apache.org/maven2` with `store: true`. Each artifact is
   fetched from Central once, then served from the 5 Gi PVC `reposilite-data`.
