@@ -1,0 +1,31 @@
+# OpenShift cluster OAuth server (console and `oc login --web`). Confidential client: authorization code flow only.
+# The operator generates the client secret into Secret keycloak-client-secret-openshift (namespace keycloak).
+# It is copied, outside Git, into Secret keycloak-openshift-client (namespace openshift-config, key clientSecret),
+# which the `keycloak` OpenID identity provider in OAuth/cluster references alongside htpasswd (and kubeadmin).
+# The redirect URI's last path segment must equal the identity provider name in OAuth/cluster.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: openshift
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: openshift
+    name: OpenShift
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    redirectUris:
+      - https://oauth-openshift.apps.ocp.box1.org/oauth2callback/keycloak
+    defaultClientScopes:
+      - profile
+      - email

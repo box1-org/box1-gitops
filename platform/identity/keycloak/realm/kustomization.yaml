@@ -14,3 +14,4 @@ resources:
   - scenario-controller-cli-client.yaml
   - agentic-operations-client.yaml
   - agentic-operations-cli-client.yaml
+  - openshift-client.yaml
