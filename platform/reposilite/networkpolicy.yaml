@@ -1,0 +1,20 @@
+# Deny all ingress except Maven clients in box1-ci (Tekton build pods).
+# Egress is unrestricted so Reposilite can reach repo.maven.apache.org.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: reposilite
+  namespace: box1-maven
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: reposilite
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: box1-ci
+      ports:
+        - protocol: TCP
+          port: 8080

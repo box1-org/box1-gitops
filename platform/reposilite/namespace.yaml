@@ -1,0 +1,8 @@
+# Reposilite: the in-cluster caching proxy of Maven Central for Box1 CI (box1-docs#113).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-maven
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    pod-security.kubernetes.io/enforce: restricted

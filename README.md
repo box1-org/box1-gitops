@@ -14,6 +14,8 @@ registered by the `box1-root` app-of-apps when that root is installed.
   scoped GitHub App credentials, and [automated CI/CD](platform/pipelines/AUTOMATION.md).
 - [MailHog](platform/mailhog/README.md): in-cluster SMTP sink for notification-service
   operator notices; web UI behind the OpenShift login, SMTP only from `notification-service-dev`.
+- [Reposilite](platform/reposilite/README.md): in-cluster caching proxy of Maven Central
+  used by the Tekton Maven builds (box1-docs#113).
 - [OpenShift AI](platform/openshift-ai/README.md): lab-only AI 3.4.2 installation,
   CPU workbench, NooBaa connection and KServe inference validation.
 - [Trusted Profile Analyzer](platform/trusted-profile-analyzer/README.md): RHTPA 3.1.1,

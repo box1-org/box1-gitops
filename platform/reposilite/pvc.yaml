@@ -1,0 +1,13 @@
+# Cached artifacts and the embedded SQLite database. All ten Quarkus services
+# together need about 425 MB (measured 2026-11-08); 5 Gi leaves room for
+# several Quarkus platform versions side by side.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: reposilite-data
+  namespace: box1-maven
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi

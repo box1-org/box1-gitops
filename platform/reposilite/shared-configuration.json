@@ -1,0 +1,77 @@
+{
+  "authentication": {
+    "bruteForceProtection": {
+      "enabled": true,
+      "maxAttempts": 10,
+      "banDurationSeconds": 300
+    },
+    "ldap": {
+      "enabled": false,
+      "ssl": false,
+      "hostname": "",
+      "port": 389,
+      "baseDn": "",
+      "searchUserDn": "",
+      "searchUserPassword": "",
+      "typeAttribute": "person",
+      "userAttribute": "cn",
+      "userFilter": "",
+      "userType": "PERSISTENT"
+    }
+  },
+  "frontend": {
+    "id": "box1-maven",
+    "title": "Box1 Maven proxy",
+    "description": "In-cluster cache of Maven Central for Box1 CI",
+    "organizationWebsite": "",
+    "organizationLogo": "logo.png",
+    "privacyPolicy": "",
+    "icpLicense": ""
+  },
+  "maven": {
+    "repositories": [
+      {
+        "id": "maven-central",
+        "visibility": "PUBLIC",
+        "redeployment": false,
+        "preserveSnapshots": false,
+        "storageProvider": {
+          "type": "fs",
+          "quota": "90%",
+          "mount": "",
+          "filePermissions": "600"
+        },
+        "storagePolicy": "PRIORITIZE_UPSTREAM_METADATA",
+        "metadataMaxAge": 3600,
+        "resolutionCacheMaxEntries": 0,
+        "proxied": [
+          {
+            "reference": "https://repo.maven.apache.org/maven2",
+            "store": true,
+            "connectTimeout": 5,
+            "readTimeout": 30,
+            "allowedGroups": [],
+            "allowedExtensions": []
+          }
+        ],
+        "parallelMetadataLookup": false,
+        "resolutionCacheLevel": "NEGATIVE_CACHING"
+      }
+    ]
+  },
+  "javadoc": {
+    "enabled": false,
+    "suffixes": [
+      "-javadoc.jar",
+      "-groovydoc.jar"
+    ]
+  },
+  "statistics": {
+    "enabled": true,
+    "resolvedRequestsInterval": "MONTHLY"
+  },
+  "web": {
+    "forwardedIp": "X-Forwarded-For",
+    "forwardedPrefix": ""
+  }
+}
