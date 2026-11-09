@@ -1,0 +1,277 @@
+# Code-only multi-module Maven repositories (`artifact` onboarding profile, box1-docs#137).
+#
+# Runs the multi-module `mvn verify`, then packages every module's Quarkus fast-jar
+# directory into a deterministic one-layer FROM-scratch OCI image:
+#
+#   /<module>/quarkus-app/...   one directory per <module> of the root pom.xml
+#   /SHA256SUMS                 sha256 of every file above, sorted
+#
+# The image is not meant to run. A consumer (a bootc OS image repository) copies it in
+# by digest: COPY --from=<registry>/box1-ci/<repo>-bundle@sha256:<digest> / <path>
+#
+# push-image 'false' (pull requests, ci-test): verify and package only; nothing is
+# published and image-digest is "not-published". push-image 'true' (release, run as
+# <repo>-release): the layout is pushed UNPRIVILEGED with skopeo to
+# box1-ci/<image-name>:<revision>, and the pushed digest must equal the digest of the
+# layout built here. Pushing needs `update` on imagestreams/layers of that one
+# ImageStream (declared in box1-workloads-dev/ci/<repo>/, see GOLDEN-PATH.md).
+#
+# box1-quarkus-maven is deliberately left unchanged for services: it reads
+# target/jib-image.digest at the repository root, which a multi-module build has not.
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: box1-maven-bundle
+  namespace: box1-ci
+spec:
+  params:
+  - name: revision
+    type: string
+  - name: source-repo
+    type: string
+  - name: git-auth-secret
+    type: string
+  - name: push-image
+    type: string
+    default: 'false'
+  - name: image-name
+    type: string
+    description: The bundle ImageStream in box1-ci, <repo>-bundle.
+  results:
+  - name: image-digest
+    type: string
+    description: Digest of the pushed bundle, or "not-published" when push-image is not 'true'.
+  - name: modules
+    type: string
+    description: Comma-separated module directories in the bundle, in pom.xml order.
+  steps:
+  - name: fetch
+    # box1-org/box1-build builder image: Maven 3.9.16, Python 3.11, Maven settings
+    # (mirror: in-cluster Reposilite) and a baked Maven cache at /opt/box1/m2 (box1-docs#113).
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: SOURCE_REPO
+      value: "$(params.source-repo)"
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: "$(params.git-auth-secret)"
+          key: git-provider-token
+    volumeMounts:
+    - name: source
+      mountPath: "/workspace"
+    script: |
+      #!/usr/bin/env python3
+      import io, os, pathlib, re, shutil, urllib.request, zipfile
+      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
+      assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
+      req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
+          headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
+      with urllib.request.urlopen(req,timeout=60) as response:
+          archive=zipfile.ZipFile(io.BytesIO(response.read()))
+      root=pathlib.Path('/workspace'); unpack=root/'unpack'
+      for entry in archive.infolist():
+          path=pathlib.PurePosixPath(entry.filename)
+          assert not path.is_absolute() and '..' not in path.parts, 'Unsafe source archive'
+      archive.extractall(unpack)
+      folders=list(unpack.iterdir()); assert len(folders)==1
+      shutil.move(str(folders[0]),str(root/'application'))
+      print('Fetched '+repo+' at '+revision+'; builder '+open('/opt/box1/release').read().replace('\n',' '))
+  - name: verify-and-package
+    image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+    workingDir: "/workspace"
+    computeResources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '2'
+        memory: 3Gi
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: MAVEN_OPTS
+      value: "-Xmx1024m -Duser.home=/tekton/home"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: SOURCE_REPO
+      value: "$(params.source-repo)"
+    - name: PUSH_IMAGE
+      value: "$(params.push-image)"
+    - name: IMAGE_NAME
+      value: "$(params.image-name)"
+    volumeMounts:
+    - name: source
+      mountPath: "/workspace"
+    script: |
+      #!/usr/bin/env python3
+      """Multi-module mvn verify, then a deterministic one-layer OCI layout of the fast-jars.
+
+      The layout code follows box1-ops-erp-simulator scripts/make-oci-layout.py: standard
+      library only, fixed timestamps, owners and file order, symlinks refused, so the same
+      build output gives the same digest.
+      """
+      import gzip, hashlib, io, json, os, pathlib, re, shutil, subprocess, tarfile
+      import xml.etree.ElementTree as ET
+
+      EPOCH=315532800  # 1980-01-01, as for reproducible wheels and jars
+      POM='{http://maven.apache.org/POM/4.0.0}'
+      MODULE=re.compile(r'[a-z][a-z0-9]{1,19}')
+
+      def modules_of(pom_text):
+          """The bundle modules: the <modules> of the root pom.xml, in order."""
+          root=ET.fromstring(pom_text)
+          if (root.findtext(POM+'packaging') or '').strip()!='pom':
+              raise SystemExit('The root pom.xml must be a parent POM (<packaging>pom</packaging>) listing one <module> per bundle module')
+          modules=[(m.text or '').strip() for m in root.findall(POM+'modules/'+POM+'module')]
+          if not modules: raise SystemExit('The root pom.xml declares no <modules>')
+          for module in modules:
+              if not MODULE.fullmatch(module):
+                  raise SystemExit('Module %r must be a directory name matching %s (no paths, no nesting)' % (module,MODULE.pattern))
+          if len(set(modules))!=len(modules): raise SystemExit('The root pom.xml lists a module twice')
+          return modules
+
+      def refuse_links(top):
+          for folder,dirs,files in os.walk(top):
+              for entry in dirs+files:
+                  if os.path.islink(os.path.join(folder,entry)):
+                      raise SystemExit('Refusing symlink in build output: '+os.path.relpath(os.path.join(folder,entry),top))
+
+      def stage(application, modules, bundle):
+          """Copy <module>/target/quarkus-app/ to <bundle>/<module>/quarkus-app/ and write SHA256SUMS."""
+          application,bundle=pathlib.Path(application),pathlib.Path(bundle)
+          if bundle.exists(): shutil.rmtree(bundle)
+          bundle.mkdir(parents=True)
+          for module in modules:
+              built=application/module/'target'/'quarkus-app'
+              if not (built/'quarkus-run.jar').is_file():
+                  raise SystemExit('Module %s has no Quarkus fast-jar (%s/target/quarkus-app/quarkus-run.jar); every bundle module must build one' % (module,module))
+              refuse_links(built)
+              shutil.copytree(built,bundle/module/'quarkus-app',symlinks=True)
+          sums=[]
+          for path in sorted(p for p in bundle.rglob('*') if p.is_file()):
+              sums.append(hashlib.sha256(path.read_bytes()).hexdigest()+'  ./'+path.relative_to(bundle).as_posix())
+          (bundle/'SHA256SUMS').write_text('\n'.join(sums)+'\n')
+
+      def layer_tar(bundle):
+          buf=io.BytesIO()
+          with tarfile.open(fileobj=buf,mode='w',format=tarfile.PAX_FORMAT) as tar:
+              for path in sorted(pathlib.Path(bundle).rglob('*')):
+                  rel=path.relative_to(bundle).as_posix()
+                  info=tarfile.TarInfo(rel)
+                  info.mtime,info.uid,info.gid,info.uname,info.gname=EPOCH,0,0,'',''
+                  if path.is_symlink(): raise SystemExit('Refusing symlink in bundle: '+rel)
+                  if path.is_dir():
+                      info.type,info.mode=tarfile.DIRTYPE,0o755
+                      tar.addfile(info)
+                  else:
+                      data=path.read_bytes()
+                      info.size,info.mode=len(data),0o755 if os.access(path,os.X_OK) else 0o644
+                      tar.addfile(info,io.BytesIO(data))
+          return buf.getvalue()
+
+      def blob(layout, data):
+          digest=hashlib.sha256(data).hexdigest()
+          (layout/'blobs'/'sha256').mkdir(parents=True,exist_ok=True)
+          (layout/'blobs'/'sha256'/digest).write_bytes(data)
+          return 'sha256:'+digest,len(data)
+
+      def compact(value):
+          return json.dumps(value,sort_keys=True,separators=(',',':')).encode()
+
+      def make_layout(bundle, layout, revision, source, modules):
+          """Write an OCI image layout (tag latest) and return its manifest digest."""
+          layout=pathlib.Path(layout)
+          if layout.exists(): shutil.rmtree(layout)
+          raw=layer_tar(bundle)
+          layer_digest,layer_size=blob(layout,gzip.compress(raw,compresslevel=9,mtime=0))
+          labels={'org.opencontainers.image.revision':revision,
+                  'org.opencontainers.image.source':'https://github.com/'+source,
+                  'org.opencontainers.image.title':source.split('/')[-1]+' module bundle',
+                  'org.box1.bundle.modules':','.join(modules),
+                  'org.box1.bundle.layout':'/<module>/quarkus-app/'}
+          config={'architecture':'amd64','os':'linux','config':{'Labels':labels},
+                  'rootfs':{'type':'layers','diff_ids':['sha256:'+hashlib.sha256(raw).hexdigest()]},
+                  'history':[{'created_by':'box1-maven-bundle'}]}
+          config_digest,config_size=blob(layout,compact(config))
+          manifest={'schemaVersion':2,'mediaType':'application/vnd.oci.image.manifest.v1+json',
+                    'config':{'mediaType':'application/vnd.oci.image.config.v1+json','digest':config_digest,'size':config_size},
+                    'layers':[{'mediaType':'application/vnd.oci.image.layer.v1.tar+gzip','digest':layer_digest,'size':layer_size}],
+                    'annotations':labels}
+          manifest_digest,manifest_size=blob(layout,compact(manifest))
+          (layout/'oci-layout').write_text('{"imageLayoutVersion":"1.0.0"}')
+          index={'schemaVersion':2,'manifests':[{'mediaType':'application/vnd.oci.image.manifest.v1+json',
+                 'digest':manifest_digest,'size':manifest_size,'annotations':{'org.opencontainers.image.ref.name':'latest'}}]}
+          (layout/'index.json').write_bytes(compact(index))
+          return manifest_digest
+
+      def result(name, value):
+          pathlib.Path('/tekton/results/'+name).write_text(value)
+
+      if __name__=='__main__':
+          revision,source=os.environ['REVISION'],os.environ['SOURCE_REPO']
+          assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+          assert re.fullmatch('box1-org/[a-z0-9-]+',source), 'Source repository outside box1-org'
+          application=pathlib.Path('/workspace/application')
+          modules=modules_of((application/'pom.xml').read_text())
+          print('Bundle modules (pom.xml order): '+', '.join(modules))
+          # The image's baked cache is a read-only tail: cached artifacts are read
+          # from it, anything new is fetched through Reposilite into /workspace/m2.
+          subprocess.run(['mvn','-B','-ntp','-s',os.environ['BOX1_MAVEN_SETTINGS'],'-Dmaven.repo.local=/workspace/m2',
+                          '-Dmaven.repo.local.tail='+os.environ['BOX1_MAVEN_TAIL'],'verify','-DskipITs=false'],cwd=application,check=True)
+          stage(application,modules,'/workspace/bundle')
+          digest=make_layout('/workspace/bundle','/workspace/oci',revision,source,modules)
+          pathlib.Path('/workspace/expected-digest').write_text(digest)
+          result('modules',','.join(modules))
+          if os.environ['PUSH_IMAGE']=='true':
+              print('Bundle layout digest '+digest+'; publishing in the next step')
+          else:
+              # The PR service account has no API token. Only trusted main builds publish.
+              result('image-digest','not-published')
+              print('Bundle layout digest '+digest+' (verified, not published)')
+  - name: push
+    # Unprivileged: the image is assembled as an OCI layout in Python; skopeo only copies it.
+    image: registry.access.redhat.com/ubi9/skopeo@sha256:fd3d5c37f5d204af77d02e2743a10e538a9d1e8b67d8736eff86b9be4c564e1f
+    workingDir: "/workspace"
+    env:
+    - name: HOME
+      value: "/tekton/home"
+    - name: TMPDIR
+      value: "/workspace"
+    - name: REVISION
+      value: "$(params.revision)"
+    - name: PUSH_IMAGE
+      value: "$(params.push-image)"
+    - name: IMAGE_NAME
+      value: "$(params.image-name)"
+    volumeMounts:
+    - name: source
+      mountPath: "/workspace"
+    script: |
+      #!/bin/sh
+      set -eu
+      if [ "$PUSH_IMAGE" != true ]; then
+        echo 'push-image is not true: bundle verified, nothing published'
+        exit 0
+      fi
+      echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
+      echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}-bundle$'
+      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      # --preserve-digests: fail rather than rewrite the manifest, so the pushed digest is the built one.
+      skopeo copy --retry-times 3 --preserve-digests --dest-creds "serviceaccount:$token" \
+        --digestfile /workspace/pushed-digest oci:/workspace/oci:latest "docker://$image:$REVISION"
+      digest=$(cat /workspace/pushed-digest)
+      echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+      test "$digest" = "$(cat /workspace/expected-digest)" || { echo "Pushed digest $digest differs from the built layout"; exit 1; }
+      printf '%s' "$digest" > "$(results.image-digest.path)"
+      printf 'Published %s@%s\n' "$image" "$digest"
+  volumes:
+  - name: source
+    emptyDir: {}

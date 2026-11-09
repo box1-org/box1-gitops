@@ -344,6 +344,31 @@ Cluster RBAC, or RBAC outside `box1-ci` (for example an Argo Application observe
 `openshift-gitops`), cannot live in `ci/<repo>/`; it belongs in `box1-gitops`. The
 validator does not check `applications/*.yaml`.
 
+### Bundle build and consumer PR (`artifact` profile, box1-docs#137)
+
+The `quarkus-monorepo` template (box1-templates) generates `ci/<repo>/` with exactly:
+the Repository `<repo>` (token scope: the one consumer repository), the ServiceAccount
+`<repo>-release`, the ImageStream `<repo>-bundle`, and the Role and RoleBinding
+`<repo>-bundle-push` (`get` and `update` on `imagestreams/layers` of `<repo>-bundle`,
+bound to `<repo>-release`). There is no observer Role: nothing in the release observes a
+workload. Two central Tasks run the release:
+
+| Task | Runs as | Does |
+| --- | --- | --- |
+| `box1-maven-bundle` (`tasks/maven-bundle.yaml`) | `ci-test` on PRs (`push-image: 'false'`), `<repo>-release` on `main` | Fetches the revision, runs the multi-module `mvn verify -DskipITs=false` on the builder image, then copies each `<module>/target/quarkus-app/` of the root POM's `<modules>` to `/<module>/quarkus-app/`, writes `/SHA256SUMS`, and builds a deterministic one-layer `FROM scratch` OCI layout (fixed timestamps and owners, sorted entries, symlinks refused; the layout code follows `box1-ops-erp-simulator/scripts/make-oci-layout.py`). On `main` it pushes unprivileged with `skopeo copy --preserve-digests --digestfile` to `registry.apps.ocp.box1.org/box1-ci/<image-name>:<revision>` and fails unless the pushed digest equals the built layout's. Result `image-digest` (`not-published` on PRs). |
+| `box1-bundle-consumer-pr` (`tasks/bundle-consumer-pr.yaml`) | `<repo>-release`, after `box1-security-gates` in `gate` mode | Refuses any `gate-policy` other than `pass`. If the source `main` moved past `revision`, does nothing (`superseded`). Otherwise rewrites the digest on the single `COPY --from=…/box1-ci/<repo>-bundle@sha256:<digest>` line of `consumer-path` in `box1-org/<consumer-repository>` and opens one PR from branch `bundle/<repo>`, or updates the open one (the PR body carries a `box1-bundle-source` marker; a PR without it is never touched). Zero or several such lines, a tag instead of a digest, or a `FROM … AS` alias fail with the line numbers. Already pinned: closes an obsolete bump PR, outcome `current`. Same proposal already open: `unchanged`, no write. Never merges. Results `pr-url`, `outcome`. |
+
+`box1-quarkus-maven` is unchanged for services: it reads `target/jib-image.digest` at the
+repository root, which a multi-module build does not produce. The Hub's
+`developer-hub-onboarding-build` Role gains `get` on `imagestreams` in `box1-ci`, which
+the onboarding plugin's `artifact` verify uses to confirm the published digest.
+
+Contract tests (no cluster, GitHub or registry access; Python 3.9 and 3.11):
+
+```sh
+python3 platform/pipelines/tasks/test-maven-bundle.py
+```
+
 ## Contract tests
 
 ```sh
