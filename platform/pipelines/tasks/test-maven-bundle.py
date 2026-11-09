@@ -161,6 +161,9 @@ class MavenBundleTask(unittest.TestCase):
         self.assertIn('image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"', self.push)
         self.assertIn('"$(cat /workspace/expected-digest)"', self.push)
         self.assertNotIn("tls-verify=false", self.push)
+        push_env = BUNDLE_TASK.read_text().split("  - name: push\n", 1)[1]
+        for line in ['value: "/tmp/push-home"', 'name: REGISTRY_AUTH_FILE', 'name: CONTAINERS_REGISTRIES_CONF']:
+            self.assertIn(line, push_env, "the push step must not read configuration the mvn step could write")
         self.assertRegex(self.push, r"\^\[a-z\]\[a-z0-9-\]\{2,39\}-bundle\$")
         task = BUNDLE_TASK.read_text()
         self.assertNotRegex(task, r"privileged:\s*true|allowPrivilegeEscalation:\s*true|runAsUser:\s*0\b")
@@ -181,10 +184,10 @@ BUNDLE_SHA = "e" * 40
 class FakeGitHub:
     """Recorded GitHub API for one consumer and source repository."""
 
-    def __init__(self, files=None, source_main=SOURCE_SHA, open_prs=None, branch_exists=False, consumer_exists=True):
+    def __init__(self, files=None, source_main=SOURCE_SHA, open_prs=None, branch_exists=False, consumer_exists=True, branch_tip="Bump site-gateway-bundle to sha256:0000"):
         self.files = {("main-sha", "Containerfile"): CONTAINERFILE, **(files or {})}
         self.source_main, self.prs, self.branch_exists, self.consumer_exists = source_main, open_prs or [], branch_exists, consumer_exists
-        self.calls, self.writes = [], []
+        self.calls, self.writes, self.branch_tip = [], [], branch_tip
 
     def __call__(self, path, method="GET", body=None, missing=False):
         self.calls.append((method, path))
@@ -205,10 +208,12 @@ class FakeGitHub:
             import base64
             return {"type": "file", "content": base64.b64encode(text.encode()).decode()}
         if path.startswith(consumer + "/pulls?state=open"):
-            assert "head=box1-org%3Abundle/site-gateway" in path, path
+            assert "head=box1-org%3Abundle/site-gateway" in path and "base=" not in path, path
             return self.prs
         if path == consumer + "/git/ref/heads/bundle/site-gateway":
             return {"object": {"sha": "old"}} if self.branch_exists else None
+        if path == consumer + "/git/commits/old":
+            return {"message": self.branch_tip}
         if path == consumer + "/git/commits/main-sha":
             return {"tree": {"sha": "tree-main"}}
         if path.endswith("/merge"):
@@ -237,7 +242,7 @@ def env(**overrides):
 
 
 def our_pr(head_sha="pr-head"):
-    return {"number": 5, "html_url": "https://github.com/box1-org/site-gateway-os/pull/5", "head": {"sha": head_sha, "repo": {"full_name": "box1-org/site-gateway-os"}},
+    return {"number": 5, "html_url": "https://github.com/box1-org/site-gateway-os/pull/5", "base": {"ref": "main"}, "head": {"sha": head_sha, "repo": {"full_name": "box1-org/site-gateway-os"}},
             "body": "old\n<!-- box1-bundle-source: box1-org/site-gateway -->\n"}
 
 
@@ -279,6 +284,28 @@ class ConsumerPullRequestTask(unittest.TestCase):
         with self.assertRaises(SystemExit) as tag:
             rewrite("COPY --from=r/box1-ci/site-gateway-bundle:latest / /x/\n", "site-gateway-bundle", NEW)
         self.assertIn("must pin box1-ci/site-gateway-bundle by digest", str(tag.exception))
+
+    def test_another_reference_to_the_bundle_fails_even_with_one_copy_line(self):
+        text = CONTAINERFILE + "FROM r/box1-ci/site-gateway-bundle@sha256:%s AS old\n" % ("0" * 64)
+        with self.assertRaises(SystemExit) as raised:
+            self.ns["rewrite"](text, "site-gateway-bundle", NEW)
+        self.assertIn("found 1 (lines 3); other references on lines 6", str(raised.exception))
+
+    def test_a_leftover_branch_is_reused_only_if_its_tip_is_a_bump_commit(self):
+        api = FakeGitHub(branch_exists=True)
+        self.assertEqual(self.run_propose(api)[0], "opened")
+        self.assertIn(("PATCH", "/repos/box1-org/site-gateway-os/git/refs/heads/bundle/site-gateway", {"sha": "commit-1", "force": True}), api.writes)
+        foreign = FakeGitHub(branch_exists=True, branch_tip="my manual work")
+        with self.assertRaises(SystemExit) as raised:
+            self.run_propose(foreign)
+        self.assertIn("its tip is not a bump commit of this automation", str(raised.exception))
+        self.assertFalse(any("/git/refs" in w[1] or w[1].endswith("/pulls") for w in foreign.writes))
+
+    def test_an_open_bump_pr_against_another_base_is_refused(self):
+        other = our_pr()
+        other["base"] = {"ref": "release"}
+        with self.assertRaises(SystemExit):
+            self.run_propose(FakeGitHub(open_prs=[other], branch_exists=True))
 
     def test_a_bad_consumer_file_writes_nothing(self):
         api = FakeGitHub(files={("main-sha", "Containerfile"): "FROM x\n"})

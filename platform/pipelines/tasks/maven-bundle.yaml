@@ -240,10 +240,16 @@ spec:
     image: registry.access.redhat.com/ubi9/skopeo@sha256:fd3d5c37f5d204af77d02e2743a10e538a9d1e8b67d8736eff86b9be4c564e1f
     workingDir: "/workspace"
     env:
+    # Own HOME, registry and auth configuration in the step's private /tmp: the shared
+    # /tekton/home and /workspace were writable by the repository code run by mvn.
     - name: HOME
-      value: "/tekton/home"
+      value: "/tmp/push-home"
     - name: TMPDIR
-      value: "/workspace"
+      value: "/tmp"
+    - name: REGISTRY_AUTH_FILE
+      value: "/tmp/push-home/auth.json"
+    - name: CONTAINERS_REGISTRIES_CONF
+      value: "/tmp/push-home/registries.conf"
     - name: REVISION
       value: "$(params.revision)"
     - name: PUSH_IMAGE
@@ -263,6 +269,7 @@ spec:
       echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
       echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}-bundle$'
       image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"
+      mkdir -p "$HOME" && : > "$CONTAINERS_REGISTRIES_CONF"
       token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
       # --preserve-digests: fail rather than rewrite the manifest, so the pushed digest is the built one.
       skopeo copy --retry-times 3 --preserve-digests --dest-creds "serviceaccount:$token" \

@@ -127,8 +127,10 @@ spec:
           reference=bundle_reference(bundle)
           lines=text.split('\n')
           hits=[i for i,line in enumerate(lines) if re.match(r'\s*COPY\s',line,re.I) and reference.search(line)]
-          if len(hits)!=1:
-              other=[str(i+1) for i,line in enumerate(lines) if i not in hits and ('/box1-ci/'+bundle) in line]
+          named=re.compile(r'/box1-ci/'+re.escape(bundle)+r'(?=[@:\s,"\']|$)')
+          other=[str(i+1) for i,line in enumerate(lines) if i not in hits and named.search(line)]
+          if len(hits)!=1 or other:
+              # Any other reference (FROM ... AS, RUN --mount from=...) would keep the old digest.
               raise SystemExit('%s must contain exactly one COPY --from=.../box1-ci/%s@sha256:<digest> line; found %d%s%s. Nothing was proposed.' % (
                   path,bundle,len(hits),' (lines '+', '.join(str(i+1) for i in hits)+')' if hits else '',
                   '; other references on lines '+', '.join(other)+' (FROM stage aliases are not supported)' if other else ''))
@@ -173,10 +175,11 @@ spec:
           except Missing: raise SystemExit('%s has no file %s on %s' % (CONSUMER,path,base_branch))
           updated,previous=rewrite(current,bundle,digest,CONSUMER+'/'+path)
           branch='bundle/'+repo
-          open_prs=api('/repos/%s/pulls?state=open&base=%s&head=%s' % (CONSUMER,base_branch,urllib.parse.quote(ORG+':'+branch)))
+          # Every open PR from the branch, whatever its base.
+          open_prs=api('/repos/%s/pulls?state=open&head=%s' % (CONSUMER,urllib.parse.quote(ORG+':'+branch)))
           if len(open_prs)>1: raise SystemExit('More than one open PR from %s; resolve them by hand' % branch)
           pr=open_prs[0] if open_prs else None
-          if pr and ((pr['head']['repo'] or {}).get('full_name')!=CONSUMER or MARKER+source not in (pr.get('body') or '')):
+          if pr and ((pr['head']['repo'] or {}).get('full_name')!=CONSUMER or MARKER+source not in (pr.get('body') or '') or pr['base']['ref']!=base_branch):
               raise SystemExit('Open PR %s from %s was not opened by this automation for %s; refusing to change it' % (pr['html_url'],branch,source))
           if previous==digest:
               if pr:
@@ -201,10 +204,17 @@ spec:
           tree_base=api('/repos/%s/git/commits/%s' % (CONSUMER,base))['tree']['sha']
           tree=api('/repos/%s/git/trees' % CONSUMER,'POST',{'base_tree':tree_base,'tree':[{'path':path,'mode':'100644','type':'blob','sha':blob['sha']}]})
           commit=api('/repos/%s/git/commits' % CONSUMER,'POST',{'message':title,'tree':tree['sha'],'parents':[base]})
-          if api('/repos/%s/git/ref/heads/%s' % (CONSUMER,branch),missing=True) is None:
+          existing=api('/repos/%s/git/ref/heads/%s' % (CONSUMER,branch),missing=True)
+          if existing is None:
               api('/repos/%s/git/refs' % CONSUMER,'POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
           else:
-              # bundle/<repo> belongs to this automation; it is always rebuilt on the default branch.
+              # bundle/<repo> belongs to this automation and is always rebuilt on the default
+              # branch; commits pushed to it by hand are discarded. Without our open PR, its tip
+              # must still be one of our bump commits.
+              if not pr:
+                  tip=api('/repos/%s/git/commits/%s' % (CONSUMER,existing['object']['sha']))
+                  if not tip.get('message','').startswith('Bump %s to ' % bundle):
+                      raise SystemExit('Branch %s exists in %s but its tip is not a bump commit of this automation; delete or rename it' % (branch,CONSUMER))
               api('/repos/%s/git/refs/heads/%s' % (CONSUMER,branch),'PATCH',{'sha':commit['sha'],'force':True})
           if pr:
               pr=api('/repos/%s/pulls/%d' % (CONSUMER,pr['number']),'PATCH',{'title':title,'body':body})
