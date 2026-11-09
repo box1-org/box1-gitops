@@ -46,6 +46,20 @@ spec:
       import hashlib, io, pathlib, subprocess, zipfile
       ZERO='sha256:'+'0'*64
       PROFILE_LABEL='box1.org/workload-profile'
+      # vm-instance source OS image repositories (box1-docs#139). An instance's VirtualMachine
+      # names its source in box1.org/source-image and boots box1-ci/<source>-disk@sha256.
+      # Adding a source is a reviewed box1-gitops PR that edits this tuple.
+      VM_INSTANCE_SOURCES=('site-gateway-os',)
+      INLINE_CLOUD_INIT=['userData','userDataBase64','networkData','networkDataBase64']
+      CREDENTIAL_WORDS={'secret','secrets','password','passwords','passwd','pwd','passphrase',
+                        'token','tokens','key','keys','apikey','privatekey','credential','credentials'}
+      # ci/<repo>/ bundles (box1-docs#137): the PaC Repository of a code-only repository and
+      # its box1-ci RBAC. Kind -> required apiVersion.
+      CI_KINDS={'Repository':'pipelinesascode.tekton.dev/v1alpha1','ServiceAccount':'v1',
+                'ImageStream':'image.openshift.io/v1','Role':'rbac.authorization.k8s.io/v1',
+                'RoleBinding':'rbac.authorization.k8s.io/v1'}
+      CI_NAMESPACE='box1-ci'
+      CI_OBSERVER='ci-observe'
 
       def documents(rendered):
           """Split rendered Kustomize output into (kind, name, text) documents."""
@@ -56,11 +70,34 @@ spec:
               if kind: docs.append((kind.group(1),name.group(1) if name else '',text))
           return docs
 
+      def unquote(value):
+          value=value.strip()
+          return value[1:-1] if len(value)>=2 and value[0]==value[-1] and value[0] in '"\'' else value
+
+      def section(text, key):
+          """Lines nested under a top-level key of one kustomize-rendered (normalised) document."""
+          found=re.search(r'(?m)^'+re.escape(key)+r':\n((?:[ -].*(?:\n|$))*)',text)
+          return found.group(1) if found else ''
+
+      def scalar(text, key):
+          """A two-space-indented scalar, e.g. scalar(section(t,'metadata'),'namespace')."""
+          found=re.search(r'(?m)^  '+re.escape(key)+r': (.+)$',text)
+          return unquote(found.group(1)) if found else None
+
+      def sequence(text, key):
+          """A two-space-indented block list of scalars, as kustomize renders it."""
+          found=re.search(r'(?m)^  '+re.escape(key)+r':\n((?:  - .*(?:\n|$))*)',text)
+          return [unquote(v) for v in re.findall(r'(?m)^  - (.*)$',found.group(1))] if found else []
+
+      def entries(text):
+          """Split a top-level block list (rules:, subjects:) into items with two-space keys."""
+          return ['  '+item for item in re.split(r'(?m)^- ',text)[1:]]
+
       def profile_of(rendered):
           namespaces=[t for k,_,t in documents(rendered) if k=='Namespace']
           labels=[m.group(1) for t in namespaces for m in [re.search(r'(?m)^    '+re.escape(PROFILE_LABEL)+r': (\S+)$',t)] if m]
           profile=labels[0] if labels else 'service'
-          assert profile in ['service','virtual-machine'], 'Unknown workload profile '+profile
+          assert profile in PROFILE_CHECKS, 'Unknown workload profile '+profile
           return profile
 
       def check_service(name, rendered):
@@ -75,7 +112,7 @@ spec:
           if runtime_images[0].endswith('@sha256:'+'0'*64):
               assert re.search(r'^  replicas: 0$',rendered,re.M), 'Unbuilt onboarding workloads must stay at zero replicas'
 
-      def check_vm(name, rendered):
+      def check_vm(name, rendered, disk_image=None):
           docs=documents(rendered)
           kinds=[k for k,_,_ in docs]
           for kind in ['Namespace','ServiceAccount','Secret','VirtualMachine']:
@@ -103,21 +140,125 @@ spec:
               values=re.findall(r'(?m)^  [A-Za-z0-9_.-]+: (.+)$',t.split('stringData:',1)[1]) if 'stringData:' in t else []
               assert 'stringData:' in t and not re.search(r'(?m)^data:',t) and values and all(re.fullmatch(r'"?(ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|ssh-rsa) [A-Za-z0-9+/=]+( [^"]*)?"?',v) for v in values), 'Only SSH public keys may be stored in Secrets'
           dvs=[t for k,_,t in docs if k=='DataVolume']
-          disk=r'docker://image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+re.escape(name)+r'-disk@(sha256:[a-f0-9]{64})'
+          disk_image=disk_image or name
+          disk=r'docker://image-registry\.openshift-image-registry\.svc:5000/box1-ci/'+re.escape(disk_image)+r'-disk@(sha256:[a-f0-9]{64})'
           if os_digest[0]==ZERO:
               assert strategy[0]=='Halted', 'Unbuilt virtual machines must stay Halted'
               assert not dvs, 'Unbuilt virtual machines must not create their DataVolume yet'
           else:
               assert len(dvs)==1, 'Promoted virtual machines need exactly one root DataVolume'
               urls=re.findall(r'(?m)^ +url: (\S+)$',dvs[0])
-              assert len(urls)==1 and re.fullmatch(disk,urls[0]) and not urls[0].endswith(ZERO), 'Root DataVolume must pull the digest-pinned '+name+'-disk image'
+              assert len(urls)==1 and re.fullmatch(disk,urls[0]) and not urls[0].endswith(ZERO), 'Root DataVolume must pull the digest-pinned '+disk_image+'-disk image'
               assert re.search(r'(?m)^ +pullMethod: node$',dvs[0]), 'Root DataVolume must use pullMethod: node'
+
+      def credential_keys(text):
+          """ConfigMap data keys that look like credentials (clientSecret, admin_password, apiKey...).
+
+          Keys are split into words (camelCase, -, _, .), so keycloakUrl is not a key.
+          """
+          found=[]
+          for key in re.findall(r'(?m)^  [\'"]?([-._A-Za-z0-9]+)[\'"]?:',section(text,'data')+section(text,'binaryData')):
+              words=re.split(r'[-_.]+',re.sub(r'([a-z0-9])([A-Z])',r'\1_\2',key).lower())
+              if CREDENTIAL_WORDS.intersection(words) or 'apikey' in key.lower(): found.append(key)
+          if re.search(r'-----BEGIN [A-Z ]*PRIVATE KEY-----',text): found.append('a PEM private key value')
+          return found
+
+      def check_vm_instance(name, rendered):
+          """One instance of a shared bootc OS image (box1-docs#139), identity by cloud-init (#140)."""
+          docs=documents(rendered)
+          names=[n for k,n,_ in docs if k=='VirtualMachine']
+          assert names==[name], 'Exactly one VirtualMachine must be named after the instance %s; found %s' % (name,', '.join(names) or 'none')
+          vm=[t for k,_,t in docs if k=='VirtualMachine'][0]
+          sources=[unquote(v) for v in re.findall(r'(?m)^    box1\.org/source-image: (.+)$',vm)]
+          assert len(sources)==1, 'VM instance must record its source OS image repository in box1.org/source-image exactly once'
+          source=sources[0]
+          assert source in VM_INSTANCE_SOURCES, 'Source image %s is not on the vm-instance allowlist (VM_INSTANCE_SOURCES in box1-gitops gitops-validate.yaml): %s' % (source,', '.join(VM_INSTANCE_SOURCES))
+          for key in INLINE_CLOUD_INIT:
+              assert not re.search(r'(?m)^ +(- )?'+key+r':',vm), 'VM instances must not inline '+key+'; reference the '+name+'-cloud-init Secret with cloudInitNoCloud.secretRef'
+          volumes=list(re.finditer(r'(?m)^( +)(- )?cloudInitNoCloud:\n',vm))
+          assert len(volumes)==1, 'VM instance needs exactly one cloudInitNoCloud volume with secretRef.name: '+name+'-cloud-init'
+          column=len(volumes[0].group(1))+len(volumes[0].group(2) or '')
+          nested=re.match(r'((?:'+' '*(column+1)+r' *\S.*(?:\n|$))*)',vm[volumes[0].end():]).group(1)
+          refs=dict(re.findall(r'(?m)^ +(secretRef|networkDataSecretRef):\n +name: (\S+)$',nested))
+          assert refs.get('secretRef')==name+'-cloud-init', 'cloudInitNoCloud must use secretRef.name: '+name+'-cloud-init'
+          rendered_secrets={n for k,n,_ in docs if k=='Secret'}
+          for ref in refs.values():
+              assert ref not in rendered_secrets, 'Secret '+ref+' must be created outside Git, not rendered from it: cloud-init userData carries the instance credential'
+          for _,n,t in [d for d in docs if d[0]=='ConfigMap']:
+              leaked=credential_keys(t)
+              assert not leaked, 'ConfigMap '+n+' must not hold credentials; found '+', '.join(leaked)+'. Put credentials in the '+name+'-cloud-init Secret, created outside Git'
+          dvs=[n for k,n,_ in docs if k=='DataVolume']
+          assert all(n==name+'-root' for n in dvs), 'Root DataVolume must be named '+name+'-root; found '+', '.join(dvs)
+          check_vm(name, rendered, disk_image=source)
+
+      def check_ci_role(repo, role, text):
+          rules=entries(section(text,'rules'))
+          assert rules, 'Role %s must declare rules' % role
+          for rule in rules:
+              groups,resources,names,verbs=[sequence(rule,key) for key in ['apiGroups','resources','resourceNames','verbs']]
+              assert '*' not in groups+resources+names+verbs, 'Role %s must not use wildcards' % role
+              assert not any(r.split('/')[0]=='secrets' for r in resources), 'Role %s must not grant access to Secrets' % role
+              assert names, 'Role %s must name its resources (resourceNames) in every rule' % role
+              push=resources==['imagestreams/layers'] and names==[repo+'-bundle'] and set(verbs)<={'get','update'}
+              assert verbs and (set(verbs)<={'get','list','watch'} or push), ('Role %s grants %s on %s; CI bundle Roles may only get, list or watch '
+                  'named resources, and get or update imagestreams/layers of %s-bundle' % (role,', '.join(verbs) or 'nothing',', '.join(resources),repo))
+
+      def check_ci(repo, rendered):
+          """ci/<repo>/: the PaC Repository of a code-only repository and its scoped box1-ci RBAC (box1-docs#137)."""
+          assert re.fullmatch('[a-z][a-z0-9-]{2,39}',repo), 'Invalid CI bundle name '+repo
+          where='ci/'+repo
+          docs=documents(rendered)
+          for kind,n,t in docs:
+              assert kind in CI_KINDS, 'CI bundle %s may contain only %s; found %s %s' % (where,', '.join(sorted(CI_KINDS)),kind,n)
+              api=re.search(r'(?m)^apiVersion: (\S+)$',t)
+              assert api and api.group(1)==CI_KINDS[kind], '%s %s in %s must use apiVersion %s' % (kind,n,where,CI_KINDS[kind])
+              assert scalar(section(t,'metadata'),'namespace')==CI_NAMESPACE, 'CI bundle resources must be in namespace box1-ci: %s/%s' % (kind,n)
+          repositories=[t for k,_,t in docs if k=='Repository']
+          assert [n for k,n,_ in docs if k=='Repository']==[repo], 'CI bundle %s must declare exactly one PaC Repository named %s' % (where,repo)
+          assert scalar(section(repositories[0],'spec'),'url')=='https://github.com/box1-org/'+repo, 'PaC Repository %s must point at https://github.com/box1-org/%s' % (repo,repo)
+          spec=section(repositories[0],'spec')
+          assert re.search(r'(?m)^    pipelinerun_provenance: default_branch$',spec), 'PaC Repository %s must set settings.pipelinerun_provenance: default_branch' % repo
+          scopes=re.search(r'(?m)^    github_app_token_scope_repos:\n((?:    - .*(?:\n|$))*)',spec)
+          for scope in re.findall(r'(?m)^    - (.*)$',scopes.group(1)) if scopes else []:
+              scope=unquote(scope)
+              assert re.fullmatch('box1-org/[a-z][a-z0-9-]{2,39}',scope) and scope not in ['box1-org/box1-gitops','box1-org/box1-workloads-dev'], (
+                  'PaC Repository %s github_app_token_scope_repos may list only box1-org consumer repositories, not %s: a code-only repository deploys nothing' % (repo,scope))
+          for kind,n,_ in docs:
+              if kind=='ImageStream': assert n==repo+'-bundle', 'ImageStream must be named %s-bundle; found %s' % (repo,n)
+              elif kind!='Repository': assert n.startswith(repo+'-'), '%s %s in %s must be named %s-<purpose>' % (kind,n,where,repo)
+          accounts={n for k,n,_ in docs if k=='ServiceAccount'}|{CI_OBSERVER}
+          roles={n for k,n,_ in docs if k=='Role'}
+          for kind,n,t in docs:
+              if kind=='Role': check_ci_role(repo,n,t)
+              if kind!='RoleBinding': continue
+              ref=section(t,'roleRef')
+              assert scalar(ref,'kind')=='Role' and scalar(ref,'name') in roles and scalar(ref,'apiGroup')=='rbac.authorization.k8s.io', 'RoleBinding %s must reference a Role declared in %s' % (n,where)
+              subjects=entries(section(t,'subjects'))
+              assert subjects, 'RoleBinding %s must name its subjects' % n
+              for subject in subjects:
+                  assert scalar(subject,'kind')=='ServiceAccount' and scalar(subject,'namespace')==CI_NAMESPACE and scalar(subject,'name') in accounts, (
+                      'RoleBinding %s may bind only ServiceAccounts declared in %s or box1-ci/%s; found %s %s' % (n,where,CI_OBSERVER,scalar(subject,'kind'),scalar(subject,'name')))
+
+      PROFILE_CHECKS={'service':check_service,'virtual-machine':check_vm,'vm-instance':check_vm_instance}
+      PASS_MESSAGES={'service':'PASS: Kustomize, resources, probes, immutable image: ',
+                     'virtual-machine':'PASS: Kustomize, VirtualMachine, pinned OS and disk digests, update disks: ',
+                     'vm-instance':'PASS: Kustomize, VM instance of an allowlisted source, pinned OS and disk digests, cloud-init by reference: '}
 
       def validate(name, rendered):
           assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name)
           profile=profile_of(rendered)
-          (check_vm if profile=='virtual-machine' else check_service)(name, rendered)
+          PROFILE_CHECKS[profile](name, rendered)
           return profile
+
+      def validation_targets(checkout):
+          """Kustomizations to validate: every workloads/*/ and every ci/*/ (box1-docs#137)."""
+          workloads=sorted((checkout/'workloads').glob('*/kustomization.yaml'))
+          assert workloads, 'No workload targets found'
+          ci=sorted((checkout/'ci').glob('*/kustomization.yaml'))
+          for target in ci:
+              repo=target.parent.name
+              assert not (checkout/'workloads'/repo).exists(), 'ci/%s collides with workloads/%s: a repository has one PaC Repository' % (repo,repo)
+          return workloads, ci
 
       if __name__=='__main__':
           sha=os.environ['REVISION']; assert re.fullmatch('[a-f0-9]{40}',sha)
@@ -135,14 +276,15 @@ spec:
           with urllib.request.urlopen(url+'.sha256',timeout=30) as response: expected=response.read().decode().strip()
           assert hashlib.sha256(binary).hexdigest()==expected
           kubectl=root/'kubectl'; kubectl.write_bytes(binary); kubectl.chmod(0o755)
-          targets=sorted((checkout/'workloads').glob('*/kustomization.yaml'))
-          assert targets, 'No workload targets found'
+          targets,ci_targets=validation_targets(checkout)
           for target in targets:
               name=target.parent.name
               rendered=subprocess.check_output([str(kubectl),'kustomize',str(target.parent)],text=True)
               profile=validate(name, rendered)
-              if profile=='virtual-machine':
-                  print('PASS: Kustomize, VirtualMachine, pinned OS and disk digests, update disks: '+name)
-              else:
-                  print('PASS: Kustomize, resources, probes, immutable image: '+name)
+              print(PASS_MESSAGES[profile]+name)
+          for target in ci_targets:
+              repo=target.parent.name
+              check_ci(repo, subprocess.check_output([str(kubectl),'kustomize',str(target.parent)],text=True))
+              print('PASS: Kustomize, PaC Repository and scoped box1-ci RBAC only: ci/'+repo)
           print('Validated '+str(len(targets))+' workloads at '+sha)
+          if ci_targets: print('Validated '+str(len(ci_targets))+' CI bundles at '+sha)

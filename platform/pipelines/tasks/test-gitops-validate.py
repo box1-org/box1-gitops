@@ -467,7 +467,7 @@ class VmInstanceProfile(unittest.TestCase):
 
     def test_source_annotation_is_required(self):
         name, files = instance_bundle()
-        files = edit(files, "virtualmachine.yaml", f"    box1.org/source-image: {SOURCE_IMAGE}\n", "")
+        files = edit(files, "virtualmachine.yaml", "box1.org/source-image:", "box1.org/other-image:")
         self.rejects("box1.org/source-image", name, files)
 
     def test_zero_digest_while_always_is_rejected(self):
@@ -761,6 +761,18 @@ class CiBundle(unittest.TestCase):
         files = edit(files, "repository.yaml", "url: https://github.com/box1-org/site-gateway", "url: https://github.com/evil/site-gateway")
         self.rejects("must point at https://github.com/box1-org/site-gateway", repo, files)
 
+    def test_repository_must_use_default_branch_provenance(self):
+        repo, files = ci_bundle()
+        files = edit(files, "repository.yaml", "pipelinerun_provenance: default_branch", "pipelinerun_provenance: source")
+        self.rejects("pipelinerun_provenance: default_branch", repo, files)
+
+    def test_repository_token_scope_excludes_the_gitops_repositories(self):
+        for scope in ["box1-org/box1-gitops", "box1-org/box1-workloads-dev", "other-org/site-gateway-os"]:
+            with self.subTest(scope=scope):
+                repo, files = ci_bundle()
+                files = edit(files, "repository.yaml", "- box1-org/site-gateway-os", "- " + scope)
+                self.rejects("github_app_token_scope_repos", repo, files)
+
     def test_imagestream_must_be_the_bundle_stream(self):
         repo, files = ci_bundle()
         files = edit(files, "release.yaml", "  name: site-gateway-bundle\n", "  name: box1-ops-erp-simulator\n")
@@ -886,6 +898,17 @@ class ValidationTargets(unittest.TestCase):
     def test_no_workloads_is_still_an_error(self):
         with self.assertRaisesRegex(AssertionError, "No workload targets found"):
             self.v["validation_targets"](self.tree([], ["site-gateway"]))
+
+
+@unittest.skipUnless(KUSTOMIZE, "kubectl or oc is required to render the Tasks")
+class TaskManifestsRender(unittest.TestCase):
+    """The tests read the scripts as text; this catches YAML that Argo could not apply."""
+
+    def test_tasks_kustomization_renders_both_tasks(self):
+        rendered = subprocess.check_output([KUSTOMIZE, "kustomize", str(ROOT)], text=True)
+        for task in ["box1-gitops-validate", "box1-gitops-promote"]:
+            self.assertIn("  name: " + task + "\n", rendered)
+        self.assertIn("- default: \"\"\n    description: vm-instance only.", rendered)
 
 
 def declared_profile(rendered):
