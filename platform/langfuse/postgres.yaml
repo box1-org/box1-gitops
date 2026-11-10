@@ -7,7 +7,7 @@ metadata:
   name: langfuse-postgres-data
   namespace: langfuse
   annotations:
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "1"  # same wave as the Deployment: lvms-vg1 binds on first consumer
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes: [ReadWriteOnce]
