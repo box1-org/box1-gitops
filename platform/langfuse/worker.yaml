@@ -1,0 +1,129 @@
+# Langfuse worker: processes the ingestion queue (Redis) into ClickHouse and runs evaluations and exports.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-worker
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-worker
+        app.kubernetes.io/component: worker
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: worker
+          image: docker.io/langfuse/langfuse-worker@sha256:1bc3597ff4c953e98ff9ee474a7d634e97664e4df298fdf20f13ecc834c89438  # 4.77.0
+          ports:
+            - containerPort: 3030
+          envFrom:
+            - configMapRef:
+                name: langfuse-config
+          env:
+            - name: HOSTNAME
+              value: 0.0.0.0
+            # OpenShift runs the image under an arbitrary UID with no home directory; Prisma and Node need a writable one.
+            - name: HOME
+              value: /tmp
+            - name: PORT
+              value: "3030"
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: DATABASE_PASSWORD
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: CLICKHOUSE_PASSWORD
+            - name: REDIS_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: REDIS_AUTH
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: SALT
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: ENCRYPTION_KEY
+            - name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-bucket
+                  key: BUCKET_NAME
+            - name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-bucket
+                  key: AWS_ACCESS_KEY_ID
+            - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-bucket
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-bucket
+                  key: BUCKET_NAME
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-bucket
+                  key: AWS_ACCESS_KEY_ID
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-bucket
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: LANGFUSE_S3_BATCH_EXPORT_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: langfuse-bucket
+                  key: BUCKET_NAME
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 3030
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3030
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: service-ca
+              mountPath: /etc/langfuse/service-ca
+              readOnly: true
+      volumes:
+        - name: service-ca
+          configMap:
+            name: langfuse-service-ca

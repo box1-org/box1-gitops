@@ -1,0 +1,93 @@
+# Redis 7 for Langfuse's cache and BullMQ job queues. OpenShift catalog image (imagestream openshift/redis:7-el9),
+# pinned by digest. Langfuse requires maxmemory-policy noeviction (queued jobs must never be evicted). The append-only
+# file on the PVC keeps queued ingestion jobs across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: langfuse-redis-data
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: lvms-vg1
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-redis
+  namespace: langfuse
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-redis
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-redis
+        app.kubernetes.io/component: queue
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: redis
+          image: registry.redhat.io/rhel9/redis-7@sha256:0c66ac8bfa335747557c4ddfa589f5d7d16a1319d2c72b27dc513b82e6bbee81
+          args: [run-redis, --maxmemory-policy, noeviction, --appendonly, "yes"]
+          ports:
+            - containerPort: 6379
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: REDIS_AUTH
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redis/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: langfuse-redis-data

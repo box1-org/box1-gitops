@@ -15,3 +15,4 @@ resources:
   - agentic-operations-client.yaml
   - agentic-operations-cli-client.yaml
   - openshift-client.yaml
+  - langfuse-client.yaml

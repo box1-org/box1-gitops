@@ -1,0 +1,34 @@
+# Non-secret settings shared by langfuse-web and langfuse-worker (envFrom). Credentials come from Secrets
+# langfuse-secrets, langfuse-keycloak and langfuse-bucket in each Deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langfuse-config
+  namespace: langfuse
+data:
+  NEXTAUTH_URL: https://langfuse.apps.ocp.box1.org
+  TELEMETRY_ENABLED: "false"
+  NODE_EXTRA_CA_CERTS: /etc/langfuse/service-ca/service-ca.crt
+  # PostgreSQL (the entrypoints build DATABASE_URL from these and DATABASE_PASSWORD).
+  DATABASE_HOST: langfuse-postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: langfuse
+  DATABASE_USERNAME: langfuse
+  # ClickHouse, single node.
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  # Redis.
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  # S3 (NooBaa, in-cluster endpoint signed by the service CA). The bucket name and keys come from langfuse-bucket.
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: https://s3.openshift-storage.svc
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: https://s3.openshift-storage.svc
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"

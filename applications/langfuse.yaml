@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langfuse
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/box1-org/box1-gitops.git
+    targetRevision: main
+    path: platform/langfuse
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: langfuse
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    # The bootstrap Job waits for the Keycloak client Secret, which the keycloak Application creates.
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

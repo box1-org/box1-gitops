@@ -1,0 +1,115 @@
+# ClickHouse for Langfuse's observability data (traces, observations, scores). Single node, so Langfuse runs with
+# CLICKHOUSE_CLUSTER_ENABLED=false and no ZooKeeper/Keeper. Version 26.3.62.3 is the one Langfuse 4.77.0's reference
+# docker-compose uses; upstream image pinned by digest (no Red Hat build exists). Kept on Application delete.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: langfuse-clickhouse-data
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: lvms-vg1
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-clickhouse
+  namespace: langfuse
+spec:
+  selector:
+    app.kubernetes.io/name: langfuse-clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+    - name: native
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-clickhouse
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: langfuse-clickhouse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: langfuse-clickhouse
+        app.kubernetes.io/component: analytics-database
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: clickhouse
+          image: docker.io/clickhouse/clickhouse-server@sha256:de3e47c64078aa196dae2349e048fc98ba81947f651f5c20e06e46baea8ae40a
+          ports:
+            - containerPort: 8123
+            - containerPort: 9000
+          env:
+            - name: CLICKHOUSE_DB
+              value: default
+            - name: CLICKHOUSE_USER
+              value: langfuse
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langfuse-secrets
+                  key: CLICKHOUSE_PASSWORD
+            # The pod runs under an arbitrary OpenShift UID; the entrypoint must not try to chown the volumes.
+            - name: CLICKHOUSE_DO_NOT_CHOWN
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: logs
+              mountPath: /var/log/clickhouse-server
+            # The entrypoint writes the CLICKHOUSE_USER definition here at start.
+            - name: users-d
+              mountPath: /etc/clickhouse-server/users.d
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: langfuse-clickhouse-data
+        - name: logs
+          emptyDir: {}
+        - name: users-d
+          emptyDir: {}

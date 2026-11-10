@@ -1,0 +1,25 @@
+# NooBaa bucket for Langfuse event payloads (events/) and media attachments (media/).
+# NooBaa writes Secret and ConfigMap "langfuse-bucket" (credentials, bucket name), which web and worker read directly,
+# so no S3 credential is stored in Git. Kept on Application delete so stored events are not lost by accident.
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: langfuse-bucket
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  generateBucketName: box1-langfuse
+  storageClassName: openshift-storage.noobaa.io
+---
+# The OpenShift service CA signs NooBaa's in-cluster S3 endpoint (s3.openshift-storage.svc). The service-ca operator
+# injects the CA into this ConfigMap; web and worker trust it through NODE_EXTRA_CA_CERTS.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langfuse-service-ca
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    service.beta.openshift.io/inject-cabundle: "true"

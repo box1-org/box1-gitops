@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: box1-langfuse
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - bootstrap.yaml
+  - bucket.yaml
+  - config.yaml
+  - postgres.yaml
+  - redis.yaml
+  - clickhouse.yaml
+  - web.yaml
+  - worker.yaml
+  - route.yaml
+  - networkpolicy.yaml
