@@ -1058,6 +1058,7 @@ class CiBundle(unittest.TestCase):
             subjects:
               - {kind: ServiceAccount, name: ci-bootc-release, namespace: box1-ci}
               - {kind: ServiceAccount, name: ci-bootc-check, namespace: box1-ci}
+              - {kind: ServiceAccount, name: ci-bundle-pull, namespace: box1-ci}
         """
 
     def test_consumer_build_accounts_may_pull_the_bundle(self):
@@ -1071,6 +1072,14 @@ class CiBundle(unittest.TestCase):
 
     def test_consumer_build_accounts_may_pull_only_this_bundle(self):
         self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("other-bundle", "get", "site-gateway-bundle-pull")))
+
+    def test_pr_pull_account_may_not_push(self):
+        text = (self.CONSUMER_PULL % ("site-gateway-bundle", "get, update", "site-gateway-bundle-pull"))
+        text = text.replace("              - {kind: ServiceAccount, name: ci-bootc-release, namespace: box1-ci}\n", "").replace(
+            "              - {kind: ServiceAccount, name: ci-bootc-check, namespace: box1-ci}\n", "")
+        self.assertIn("ci-bundle-pull", text)
+        self.assertNotIn("ci-bootc-release", text)
+        self.rejects("consumer build account box1-ci/ci-bundle-pull only to a pull-only Role", *self.extra(text))
 
     def test_other_shared_accounts_still_rejected(self):
         self.rejects("may bind only ServiceAccounts declared in", *self.extra(
