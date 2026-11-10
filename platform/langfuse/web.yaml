@@ -55,9 +55,11 @@ spec:
               value: https://s3-openshift-storage.apps.ocp.box1.org
             - name: LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT
               value: https://s3.openshift-storage.svc
-            # Keycloak SSO (realm box1). New users join org box1 and its project as Viewer; only the local owner may
-            # create organisations. Local self-signup is closed at the Route (route.yaml), not here, because
-            # AUTH_DISABLE_SIGNUP would also refuse first-time SSO users.
+            # Keycloak SSO (realm box1). New users join org box1 as Viewer, which applies to every project in it
+            # (per-project roles, LANGFUSE_DEFAULT_PROJECT_*, need Langfuse's enterprise rbac-project-roles
+            # entitlement and are not set). Only the local owner may create organisations. Local self-signup is
+            # closed at the Route (route.yaml), not here, because AUTH_DISABLE_SIGNUP would also refuse first-time
+            # SSO users.
             - name: AUTH_KEYCLOAK_ISSUER
               value: https://keycloak.apps.ocp.box1.org/auth/realms/box1
             - name: AUTH_KEYCLOAK_CLIENT_ID
@@ -73,10 +75,6 @@ spec:
             - name: LANGFUSE_DEFAULT_ORG_ID
               value: box1
             - name: LANGFUSE_DEFAULT_ORG_ROLE
-              value: VIEWER
-            - name: LANGFUSE_DEFAULT_PROJECT_ID
-              value: box1-default
-            - name: LANGFUSE_DEFAULT_PROJECT_ROLE
               value: VIEWER
             - name: LANGFUSE_ALLOWED_ORGANIZATION_CREATORS
               value: langfuse-admin@box1.local
