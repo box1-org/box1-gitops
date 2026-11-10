@@ -1041,49 +1041,25 @@ class CiBundle(unittest.TestCase):
                         verbs: [get]
                 """))
 
-    CONSUMER_PULL = """
+    def test_shared_build_accounts_are_not_bound_in_ci(self):
+        # They already pull through system:image-pullers; a ci/ bundle binds only its own accounts.
+        self.rejects("may bind only ServiceAccounts declared in", *self.extra("""
             apiVersion: rbac.authorization.k8s.io/v1
             kind: Role
             metadata: {name: site-gateway-bundle-pull, namespace: box1-ci}
             rules:
               - apiGroups: ["", "image.openshift.io"]
                 resources: ["imagestreams/layers"]
-                resourceNames: ["%s"]
-                verbs: [%s]
+                resourceNames: ["site-gateway-bundle"]
+                verbs: [get]
             ---
             apiVersion: rbac.authorization.k8s.io/v1
             kind: RoleBinding
             metadata: {name: site-gateway-bundle-pull, namespace: box1-ci}
-            roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: %s}
+            roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: site-gateway-bundle-pull}
             subjects:
-              - {kind: ServiceAccount, name: ci-bootc-release, namespace: box1-ci}
-              - {kind: ServiceAccount, name: ci-bootc-check, namespace: box1-ci}
               - {kind: ServiceAccount, name: ci-bundle-pull, namespace: box1-ci}
-        """
-
-    def test_consumer_build_accounts_may_pull_the_bundle(self):
-        self.check(*self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-pull")))
-
-    def test_consumer_build_accounts_may_not_push(self):
-        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get, update", "site-gateway-bundle-pull")))
-
-    def test_consumer_build_accounts_may_not_use_the_release_push_role(self):
-        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-push")))
-
-    def test_consumer_build_accounts_may_pull_only_this_bundle(self):
-        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("other-bundle", "get", "site-gateway-bundle-pull")))
-
-    def test_pr_pull_account_may_not_push(self):
-        text = (self.CONSUMER_PULL % ("site-gateway-bundle", "get, update", "site-gateway-bundle-pull"))
-        text = text.replace("              - {kind: ServiceAccount, name: ci-bootc-release, namespace: box1-ci}\n", "").replace(
-            "              - {kind: ServiceAccount, name: ci-bootc-check, namespace: box1-ci}\n", "")
-        self.assertIn("ci-bundle-pull", text)
-        self.assertNotIn("ci-bootc-release", text)
-        self.rejects("consumer build account box1-ci/ci-bundle-pull only to a pull-only Role", *self.extra(text))
-
-    def test_other_shared_accounts_still_rejected(self):
-        self.rejects("may bind only ServiceAccounts declared in", *self.extra(
-            (self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-pull")).replace("ci-bootc-check", "ci-gitops")))
+        """))
 
     def test_imagestream_must_be_the_bundle_stream(self):
         repo, files = ci_bundle()

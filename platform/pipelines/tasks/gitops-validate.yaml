@@ -79,10 +79,6 @@ spec:
                 'RoleBinding':'rbac.authorization.k8s.io/v1'}
       CI_NAMESPACE='box1-ci'
       CI_OBSERVER='ci-observe'
-      # Build accounts of a bundle's consumer (a bootc OS image repository): releases pull as
-      # ci-bootc-release, PR builds as ci-bundle-pull (ci-bootc-check has no token).
-      # ci/<repo>/ may bind them only to a pull-only Role: get on imagestreams/layers of <repo>-bundle.
-      CI_CONSUMER_BUILDERS=('ci-bootc-release','ci-bootc-check','ci-bundle-pull')
 
       def documents(rendered):
           """Split rendered Kustomize output into (kind, name, text) documents."""
@@ -368,7 +364,6 @@ spec:
               elif kind!='Repository': assert n.startswith(repo+'-'), '%s %s in %s must be named %s-<purpose>' % (kind,n,where,repo)
           accounts={n for k,n,_ in docs if k=='ServiceAccount'}|{CI_OBSERVER}
           roles={n for k,n,_ in docs if k=='Role'}
-          role_text={n:t for k,n,t in docs if k=='Role'}
           for kind,n,t in docs:
               if kind=='Role': check_ci_role(repo,n,t)
               if kind!='RoleBinding': continue
@@ -377,14 +372,8 @@ spec:
               subjects=entries(section(t,'subjects'))
               assert subjects, 'RoleBinding %s must name its subjects' % n
               for subject in subjects:
-                  account=scalar(subject,'name')
-                  if scalar(subject,'kind')=='ServiceAccount' and scalar(subject,'namespace')==CI_NAMESPACE and account in CI_CONSUMER_BUILDERS:
-                      pull=[([sequence(rule,key) for key in ['resources','resourceNames']],sorted(sequence(rule,'verbs'))) for rule in entries(section(role_text[scalar(ref,'name')],'rules'))]
-                      assert pull and all(rule==([['imagestreams/layers'],[repo+'-bundle']],['get']) for rule in pull), (
-                          'RoleBinding %s may bind the consumer build account box1-ci/%s only to a pull-only Role (get imagestreams/layers of %s-bundle)' % (n,account,repo))
-                      continue
-                  assert scalar(subject,'kind')=='ServiceAccount' and scalar(subject,'namespace')==CI_NAMESPACE and account in accounts, (
-                      'RoleBinding %s may bind only ServiceAccounts declared in %s, box1-ci/%s, or a consumer build account (%s) for pulling; found %s %s' % (n,where,CI_OBSERVER,', '.join(CI_CONSUMER_BUILDERS),scalar(subject,'kind'),account))
+                  assert scalar(subject,'kind')=='ServiceAccount' and scalar(subject,'namespace')==CI_NAMESPACE and scalar(subject,'name') in accounts, (
+                      'RoleBinding %s may bind only ServiceAccounts declared in %s or box1-ci/%s; found %s %s' % (n,where,CI_OBSERVER,scalar(subject,'kind'),scalar(subject,'name')))
 
       PROFILE_CHECKS={'service':check_service,'virtual-machine':check_vm,'vm-instance':check_vm_instance}
       PASS_MESSAGES={'service':'PASS: Kustomize, resources, probes, immutable image: ',

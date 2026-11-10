@@ -431,10 +431,11 @@ the build has neither credentials nor a CA for it. Releases (`ci-bootc-release`)
 their own token. PR builds run as `ci-bootc-check`, which has no token by design, and log in
 with `box1-ci/ci-bundle-pull` instead: an account with no Role, no SCC and no API use, whose
 token Secret `ci-bundle-pull-token` is mounted only in the build step and never used to push.
-Neither account can pull from `box1-ci` by default, so `ci/<repo>/` grants them a pull-only
-Role, `<repo>-bundle-pull` (`get` on `imagestreams/layers` of `<repo>-bundle`, nothing else).
-`box1-gitops-validate` accepts the consumer build accounts (`ci-bootc-release`,
-`ci-bootc-check`, `ci-bundle-pull`) in a `ci/` bundle only when bound to such a Role.
+No extra RBAC is needed for the pull: OpenShift's default `system:image-pullers` RoleBinding
+lets every ServiceAccount in `box1-ci` pull any image there, so `ci-bundle-pull` can read all
+of `box1-ci`, not only bundles. (An earlier version of this section said the build accounts
+could not pull by default and added a `<repo>-bundle-pull` Role; that came from a malformed
+`oc auth can-i` query; the Role and its validator exception were removed.)
 
 `box1-quarkus-maven` is unchanged for services: it reads `target/jib-image.digest` at the
 repository root, which a multi-module build does not produce. The Hub's

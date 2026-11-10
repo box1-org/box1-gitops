@@ -150,8 +150,8 @@ spec:
       # COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:... line) use this
       # task's ServiceAccount; the Red Hat registry entry is kept. The file stays in the step.
       # PR builds run as ci-bootc-check, which has no token by design (no API or registry
-      # rights); they pull with box1-ci/ci-bundle-pull instead, which can read only the
-      # bundles a ci/<repo>/ grants it. Pushing always needs this task's own token.
+      # rights); they log in as box1-ci/ci-bundle-pull instead, which can only pull from
+      # box1-ci (default system:image-pullers). Pushing always needs this task's own token.
       token_file=/var/run/secrets/kubernetes.io/serviceaccount/token
       pull_token_file=/etc/box1-bundle-pull/token
       token=
