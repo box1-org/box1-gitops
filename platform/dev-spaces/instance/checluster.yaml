@@ -15,6 +15,14 @@ spec:
   devEnvironments:
     maxNumberOfWorkspacesPerUser: -1
     maxNumberOfRunningWorkspacesPerUser: 3
+    # All of a user's workspaces share one per-user PVC (claim-devworkspace).
+    # The 10Gi operator default filled up with a few Java workspaces (Maven
+    # ~/.m2, target/), which crashes project-clone and postStart on the next
+    # workspace start. lvms-vg1 allows expansion; PVCs can grow but not shrink.
+    storage:
+      pvcStrategy: per-user
+      perUserStrategyPvcConfig:
+        claimSize: 30Gi
     # Nested containers (podman run with networking, Testcontainers) in workspaces
     # (box1-docs#114). Uses the built-in OpenShift nested-container SCC: every
     # workspace pod then runs in its own user namespace (hostUsers: false), so the
