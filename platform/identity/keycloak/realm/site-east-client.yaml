@@ -1,0 +1,53 @@
+# Edge site site-east (fixture site site_spacedock), box1-docs#131 and #126. Confidential client used only for
+# the site VM's own service account (client credentials); no person logs in to it. Its access tokens carry
+# audience asset-service and the claim site_id: site_spacedock, which asset-service checks so a site can
+# write only its own status (#130). No asset-service role is mapped yet (fullScopeAllowed false): the write
+# role is granted together with the site status endpoints.
+# The operator generates the client secret into Secret keycloak-client-secret-site-east (namespace keycloak).
+# It reaches the VM only through the out-of-Git site-east-dev/site-east-cloud-init Secret, assembled with
+# box1-docs scripts/vm-cloud-init/assemble_cloud_init_secret.py (approval-gated, #140); the value is never
+# committed. Rotate by regenerating the secret in Keycloak, re-running that script and restarting the VM.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: site-east
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: site-east
+    name: box1 edge site East (site_spacedock)
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+    fullScopeAllowed: false
+    defaultClientScopes:
+      - roles
+    optionalClientScopes: []
+    protocolMappers:
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: "true"
+          id.token.claim: "false"
+      - name: site-id
+        protocol: openid-connect
+        protocolMapper: oidc-hardcoded-claim-mapper
+        consentRequired: false
+        config:
+          claim.name: site_id
+          claim.value: site_spacedock
+          jsonType.label: String
+          access.token.claim: "true"
+          id.token.claim: "false"
+          userinfo.token.claim: "false"

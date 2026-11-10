@@ -81,6 +81,22 @@ holds the session, and tokens never reach the browser.
   scope mapping, and set the console's `CONSOLE_ASSET_FORWARD_TOKEN` to `false`.
 - **Redirect URI:** exactly `/callback`.
 
+## Edge site clients
+
+`realm/site-west-client.yaml` and `realm/site-east-client.yaml` are confidential client-credentials clients for the
+edge site VMs (box1-docs#131, #126): `site-west` is fixture site `site_ds9`, `site-east` is `site_spacedock`.
+
+- **Tokens:** audience `asset-service`, plus the hard-coded claim `site_id` (`site_ds9` or `site_spacedock`), which
+  asset-service checks so that a site can write only its own status (#130). `fullScopeAllowed` is false and no
+  asset-service role is mapped yet; the write role is added together with the site status endpoints.
+- **No login:** standard flow, implicit flow and direct access grants are off.
+- **Secret:** the operator writes it to `keycloak-client-secret-<site>` in this namespace. It reaches the VM only
+  through the out-of-Git `<site>-dev/<site>-cloud-init` Secret, assembled with box1-docs
+  `scripts/vm-cloud-init/assemble_cloud_init_secret.py` (#140). That step needs approval, and the value is never
+  committed or printed.
+- **Rotation:** regenerate the client secret in the admin console (Credentials tab), wait for the operator to update
+  `keycloak-client-secret-<site>`, re-run the assembly script with `--apply`, then restart the VM.
+
 ## Repository layout and ownership
 
 - `operator/`: namespace, OperatorGroup and Subscription; owned by the existing
