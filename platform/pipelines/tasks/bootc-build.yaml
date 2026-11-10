@@ -58,6 +58,13 @@ spec:
   - name: entitlement
     secret:
       secretName: etc-pki-entitlement
+  - name: bundle-pull
+    secret:
+      secretName: ci-bundle-pull-token
+      optional: true
+      items:
+      - key: token
+        path: token
   stepTemplate:
     image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
     workingDir: /workspace/source
@@ -131,6 +138,10 @@ spec:
         printf 'Fetched %s at %s into %s/\n' "$EXTRA_SOURCE_REPO" "$EXTRA_SOURCE_REVISION" "$EXTRA_SOURCE_PATH"
       fi
   - name: build
+    volumeMounts:
+    - name: bundle-pull
+      mountPath: /etc/box1-bundle-pull
+      readOnly: true
     script: |
       #!/bin/sh
       set -eu
@@ -139,16 +150,25 @@ spec:
       # COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:... line) use this
       # task's ServiceAccount; the Red Hat registry entry is kept. The file stays in the step.
       # PR builds run as ci-bootc-check, which has no token by design (no API or registry
-      # rights): they log in nowhere, so they cannot pull box1-ci images.
+      # rights); they pull with box1-ci/ci-bundle-pull instead, which can read only the
+      # bundles a ci/<repo>/ grants it. Pushing always needs this task's own token.
       token_file=/var/run/secrets/kubernetes.io/serviceaccount/token
+      pull_token_file=/etc/box1-bundle-pull/token
       token=
+      login=
       if [ -r "$token_file" ]; then
         token=$(cat "$token_file")
-        cp /etc/redhat-registry/.dockerconfigjson /tmp/box1-auth.json
-        printf '%s' "$token" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin registry.apps.ocp.box1.org >/dev/null
-        export REGISTRY_AUTH_FILE=/tmp/box1-auth.json
+        login=$token
+      elif [ -s "$pull_token_file" ]; then
+        login=$(cat "$pull_token_file")
       elif grep -Eiq '^[[:space:]]*COPY[[:space:]].*--from=[^[:space:]]*/box1-ci/' Containerfile; then
-        echo "Containerfile copies from box1-ci, but this build's ServiceAccount has no token (PR builds run as ci-bootc-check without registry rights); see box1-org/box1-gitops platform/pipelines/GOLDEN-PATH.md" >&2
+        echo "Containerfile copies from box1-ci, but neither this build's ServiceAccount token nor box1-ci/ci-bundle-pull-token is available; see box1-org/box1-gitops platform/pipelines/GOLDEN-PATH.md" >&2
+      fi
+      if [ -n "$login" ]; then
+        cp /etc/redhat-registry/.dockerconfigjson /tmp/box1-auth.json
+        printf '%s' "$login" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin registry.apps.ocp.box1.org >/dev/null
+        export REGISTRY_AUTH_FILE=/tmp/box1-auth.json
+        login=
       fi
       # bootc container lint runs inside the Containerfile.
       buildah build --layers=false --build-arg SOURCE_REVISION="$REVISION" \

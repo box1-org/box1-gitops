@@ -24,6 +24,28 @@ metadata:
   namespace: box1-ci
 automountServiceAccountToken: false
 ---
+# Registry pull identity for PR builds (box1-org/box1-gitops#141): ci-bootc-check has no
+# token, so box1-bootc-build logs in with this one to pull code-only bundles named in a
+# Containerfile COPY --from line. It has no Role here: it can pull only the
+# <repo>-bundle ImageStreams whose box1-workloads-dev ci/<repo>/ binds it to a
+# pull-only <repo>-bundle-pull Role. No API rights, no SCC, not used as a pod identity.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-bundle-pull
+  namespace: box1-ci
+automountServiceAccountToken: false
+---
+# Token controller populates this Secret; no credential values in Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ci-bundle-pull-token
+  namespace: box1-ci
+  annotations:
+    kubernetes.io/service-account.name: ci-bundle-pull
+type: kubernetes.io/service-account-token
+---
 # Releases: build, disk and channel tag moves; pushes to box1-ci.
 apiVersion: v1
 kind: ServiceAccount

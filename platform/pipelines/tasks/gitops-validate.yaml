@@ -79,9 +79,10 @@ spec:
                 'RoleBinding':'rbac.authorization.k8s.io/v1'}
       CI_NAMESPACE='box1-ci'
       CI_OBSERVER='ci-observe'
-      # Build accounts of a bundle's consumer (a bootc OS image repository). ci/<repo>/ may bind
-      # them only to a pull-only Role: get on imagestreams/layers of <repo>-bundle.
-      CI_CONSUMER_BUILDERS=('ci-bootc-release','ci-bootc-check')
+      # Build accounts of a bundle's consumer (a bootc OS image repository): releases pull as
+      # ci-bootc-release, PR builds as ci-bundle-pull (ci-bootc-check has no token).
+      # ci/<repo>/ may bind them only to a pull-only Role: get on imagestreams/layers of <repo>-bundle.
+      CI_CONSUMER_BUILDERS=('ci-bootc-release','ci-bootc-check','ci-bundle-pull')
 
       def documents(rendered):
           """Split rendered Kustomize output into (kind, name, text) documents."""
