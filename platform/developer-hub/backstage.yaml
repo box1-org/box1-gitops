@@ -53,9 +53,6 @@ spec:
               - name: extensions-bootstrap
                 configMap:
                   name: developer-hub-extensions-seed
-              - name: platform-kubernetes
-                secret:
-                  secretName: developer-hub-kubernetes-token
               - name: platform-trust
                 configMap:
                   name: developer-hub-platform-trust
@@ -81,9 +78,6 @@ spec:
                         name: developer-hub-kubernetes-token
                         key: token
                 volumeMounts:
-                  - name: platform-kubernetes
-                    mountPath: /platform/kubernetes
-                    readOnly: true
                   - name: platform-trust
                     mountPath: /platform/trust
                     readOnly: true
