@@ -16,3 +16,5 @@ resources:
   - topics/telemetry-dlq.yaml
   - topics/notification.yaml
   - topics/notification-dlq.yaml
+  - topics/site.yaml
+  - topics/site-dlq.yaml
