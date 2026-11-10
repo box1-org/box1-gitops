@@ -1,8 +1,8 @@
 # Edge site site-west (fixture site site_ds9), box1-docs#131 and #126. Confidential client used only for
 # the site VM's own service account (client credentials); no person logs in to it. Its access tokens carry
-# audience asset-service and the claim site_id: site_ds9, which asset-service checks so a site can
-# write only its own status (#130). No asset-service role is mapped yet (fullScopeAllowed false): the write
-# role is granted together with the site status endpoints.
+# audience asset-service, the asset-service client role site-reporter and nothing else (fullScopeAllowed false),
+# and the hard-coded claim siteId: site_ds9. asset-service accepts a site status write only when that claim
+# equals the path siteId (box1-ops-contracts SITE.md, box1-docs#130).
 # The operator generates the client secret into Secret keycloak-client-secret-site-west (namespace keycloak).
 # It reaches the VM only through the out-of-Git site-west-dev/site-west-cloud-init Secret, assembled with
 # box1-docs scripts/vm-cloud-init/assemble_cloud_init_secret.py (approval-gated, #140); the value is never
@@ -18,6 +18,9 @@ spec:
     matchLabels:
       realm: box1
   client:
+    # Pinned to the internal ID Keycloak generated on first creation (read from the live KeycloakClient), like
+    # the other clients, so the operator keeps updating the same client.
+    id: a55e74fe-e1e9-44af-b828-5a51a072b564
     clientId: site-west
     name: box1 edge site West (site_ds9)
     enabled: true
@@ -28,6 +31,7 @@ spec:
     directAccessGrantsEnabled: false
     serviceAccountsEnabled: true
     fullScopeAllowed: false
+    # The roles scope carries client roles into resource_access (see scenario-controller-client.yaml).
     defaultClientScopes:
       - roles
     optionalClientScopes: []
@@ -45,9 +49,20 @@ spec:
         protocolMapper: oidc-hardcoded-claim-mapper
         consentRequired: false
         config:
-          claim.name: site_id
+          claim.name: siteId
           claim.value: site_ds9
           jsonType.label: String
           access.token.claim: "true"
           id.token.claim: "false"
           userinfo.token.claim: "false"
+  scopeMappings:
+    clientMappings:
+      asset-service:
+        id: 0b509c04-6761-4cc3-af7d-be7ac1c7c743  # asset-service's pinned internal ID
+        client: asset-service
+        mappings:
+          - name: site-reporter
+            clientRole: true
+  serviceAccountClientRoles:
+    asset-service:
+      - site-reporter
