@@ -1,13 +1,16 @@
 # OpenShift Lightspeed on Box1
 
 OpenShift Lightspeed Operator **2.0.0** (`redhat-operators`, channel `stable`)
-with the console assistant backed by the in-cluster vLLM server.
+with the console assistant backed by OpenAI by default and the in-cluster vLLM
+server as a secondary provider.
 
 | Item | Value |
 | --- | --- |
 | Namespace | `openshift-lightspeed` |
 | Operator | `lightspeed-operator.v2.0.0`, manual InstallPlan approval |
-| LLM provider | `box1-vllm`, type `rhoai_vllm` |
+| Default provider | `openai`, type `openai`, `https://api.openai.com/v1` |
+| Default model | `gpt-5.5` (context window: operator default; response 4096 tokens) |
+| Secondary provider | `box1-vllm`, type `rhoai_vllm` |
 | Endpoint | `http://vllm-test-2.vllm.svc.cluster.local:8000/v1` (internal Service only) |
 | Model | `box1-coder` (vLLM `--served-model-name`; checkpoint `nvidia/Qwen3.8-27B-NVFP4`) |
 | Context / response | 98304 tokens (matches vLLM `--max-model-len`) / 4096 tokens |
@@ -26,11 +29,24 @@ Lab-only on OpenShift 5.0.0-rc.7; vendor support for this combination is
   (Argo CD RBAC for `olsconfigs`, and the `OLSConfig/cluster`).
 - Both Applications are manual-sync, discovered by `box1-root`.
 
-## Out-of-band prerequisite: credentials Secret
+## Out-of-band prerequisite: credentials Secrets
 
-`OLSConfig` requires a provider credentials Secret with an `apitoken` key.
-The vLLM server does not currently enforce an API key, so the value is a
-placeholder. It is not stored in Git:
+`OLSConfig` requires a credentials Secret with an `apitoken` key for each
+provider. Neither is stored in Git.
+
+OpenAI: the API key lives in `lightspeed-openai-token`:
+
+```bash
+oc -n openshift-lightspeed create secret generic lightspeed-openai-token \
+  --from-literal=apitoken=<openai-api-key>
+```
+
+Requests from the console assistant go to api.openai.com and are billed to
+that key's OpenAI account. To go back to vLLM only, set `defaultProvider:
+box1-vllm` / `defaultModel: box1-coder` and remove the `openai` provider.
+
+vLLM: the server does not currently enforce an API key, so the value is a
+placeholder:
 
 ```bash
 oc -n openshift-lightspeed create secret generic box1-vllm-credentials \
