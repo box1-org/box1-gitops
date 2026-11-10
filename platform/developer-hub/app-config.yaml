@@ -99,7 +99,11 @@ data:
               skipTLSVerify: false
               skipMetricsLookup: true
               serviceAccountToken: ${K8S_SERVICE_ACCOUNT_TOKEN}
-              caFile: /platform/kubernetes/ca.crt
+              # No caFile/caData: the API serves a Let's Encrypt certificate
+              # (APIServer namedCertificates). A caFile replaces Node's root
+              # store, and the token's ca.crt lacks ISRG Root X1, so the chain
+              # failed with UNABLE_TO_GET_ISSUER_CERT. Node's public roots
+              # (plus NODE_EXTRA_CA_CERTS) validate it; TLS stays strict.
       customResources:
         - group: route.openshift.io
           apiVersion: v1

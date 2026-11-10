@@ -307,7 +307,13 @@ all-repositories installation. See [the golden-path guide](../pipelines/GOLDEN-P
 The Hub connects to `https://api.ocp.box1.org:6443` as cluster `box1` using
 `rhdh/developer-hub-reader`. The token controller populates the Git-managed
 `developer-hub-kubernetes-token` Secret; its `token` is injected through the
-Deployment patch, and `ca.crt` is mounted for strict API TLS validation.
+Deployment patch. The API serves a public Let's Encrypt certificate (APIServer
+`namedCertificates`), so the cluster entry sets no `caFile`: a `caFile` replaces
+Node's root store, and the token's `ca.crt` lacks ISRG Root X1, which broke the
+proxy and Pod logs with `UNABLE_TO_GET_ISSUER_CERT`. TLS verification stays
+enabled against Node's public roots plus `NODE_EXTRA_CA_CERTS`. If the API
+named certificate is ever removed, the API serves an internal-signer cert again;
+then restore a `caFile` that contains the internal signers.
 The read-only ClusterRole covers application resources, Routes, Pod logs and
 Tekton v1 objects. It cannot read Secrets, execute in Pods, or mutate workloads.
 Reads span namespaces because workloads and CI runs live in different namespaces.
