@@ -16,3 +16,5 @@ resources:
   - agentic-operations-cli-client.yaml
   - openshift-client.yaml
   - langfuse-client.yaml
+  - site-west-client.yaml
+  - site-east-client.yaml
