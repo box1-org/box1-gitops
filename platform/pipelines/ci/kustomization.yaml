@@ -16,6 +16,7 @@ resources:
   - box1-build.yaml
   - bootc-build.yaml
   - box1-ops-erp-simulator.yaml
+  - site-images.yaml
   - observe-rbac.yaml
   - argo-sync-rbac.yaml
   - ../tasks
