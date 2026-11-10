@@ -1,0 +1,37 @@
+# Langfuse (box1-docs#155). Confidential client, authorization code flow only. The operator generates the client
+# secret into Secret keycloak-client-secret-langfuse (namespace keycloak); the langfuse bootstrap Job copies it into
+# the langfuse namespace (platform/langfuse/bootstrap.yaml). Langfuse needs the email claim: users without an email
+# address in the realm cannot sign in. Their Langfuse role is set in Langfuse (default Viewer), not by realm roles.
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  realmSelector:
+    matchLabels:
+      realm: box1
+  client:
+    clientId: langfuse
+    name: Langfuse
+    enabled: true
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    fullScopeAllowed: false
+    redirectUris:
+      - https://langfuse.apps.ocp.box1.org/api/auth/callback/keycloak
+    webOrigins:
+      - https://langfuse.apps.ocp.box1.org
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://langfuse.apps.ocp.box1.org/auth/sign-in
+    defaultClientScopes:
+      - profile
+      - email
+      - web-origins
+    optionalClientScopes: []

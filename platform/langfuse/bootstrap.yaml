@@ -1,0 +1,154 @@
+# Creates the credentials Langfuse needs, so none is stored in Git. Runs on every sync and is idempotent:
+#  - Secret langfuse-secrets: generated once, never overwritten (database, ClickHouse and Redis passwords,
+#    NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY, the local owner's password and the initial project's API keys).
+#    Deleting it after first start locks Langfuse out of its own data; see README.md.
+#  - Secret langfuse-keycloak: copied from keycloak-client-secret-langfuse, which the RH-SSO operator generates for
+#    the "langfuse" KeycloakClient (platform/identity/keycloak/realm/langfuse-client.yaml). Refreshed on every sync.
+# Both Secrets are created by this Job, not by Argo CD, so Argo never prunes them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: langfuse-bootstrap
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: langfuse-bootstrap
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [langfuse-secrets, langfuse-keycloak]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: langfuse-bootstrap
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: langfuse-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: langfuse-bootstrap
+    namespace: langfuse
+---
+# Read access to exactly one operator-generated client Secret in the keycloak namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: langfuse-client-secret-reader
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [keycloak-client-secret-langfuse]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: langfuse-client-secret-reader
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: langfuse-client-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: langfuse-bootstrap
+    namespace: langfuse
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: langfuse-bootstrap
+  namespace: langfuse
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      serviceAccountName: langfuse-bootstrap
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          # OpenShift 5.0.0-rc.7 release "cli" image (imagestream openshift/cli), as in
+          # platform/observability/logging/s3-secret-job.yaml. Update after a cluster upgrade.
+          image: quay.io/openshift-release-dev/ocp-v5.0-art-dev@sha256:bba4bacab7b9329df039b41327093b5d157992bd87c8256e66be11648c912d90
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          command: [/bin/bash, -ec]
+          args:
+            - |
+              hex() { od -An -tx1 -N"$1" /dev/urandom | tr -d ' \n'; }
+              b64() { head -c "$1" /dev/urandom | base64 | tr -d '\n'; }
+              uuid() { cat /proc/sys/kernel/random/uuid; }
+              keys="DATABASE_PASSWORD CLICKHOUSE_PASSWORD REDIS_AUTH NEXTAUTH_SECRET SALT ENCRYPTION_KEY
+                    LANGFUSE_INIT_USER_PASSWORD LANGFUSE_INIT_PROJECT_PUBLIC_KEY LANGFUSE_INIT_PROJECT_SECRET_KEY"
+
+              if oc get secret langfuse-secrets -o name >/dev/null 2>&1; then
+                echo "Secret langfuse-secrets exists; leaving it unchanged"
+              else
+                # Hex passwords need no URL encoding in the Postgres and ClickHouse connection URLs.
+                oc create secret generic langfuse-secrets \
+                  --from-literal=DATABASE_PASSWORD="$(hex 24)" \
+                  --from-literal=CLICKHOUSE_PASSWORD="$(hex 24)" \
+                  --from-literal=REDIS_AUTH="$(hex 24)" \
+                  --from-literal=NEXTAUTH_SECRET="$(b64 32)" \
+                  --from-literal=SALT="$(b64 32)" \
+                  --from-literal=ENCRYPTION_KEY="$(hex 32)" \
+                  --from-literal=LANGFUSE_INIT_USER_PASSWORD="Lf-$(hex 12)-$(hex 4)!" \
+                  --from-literal=LANGFUSE_INIT_PROJECT_PUBLIC_KEY="pk-lf-$(uuid)" \
+                  --from-literal=LANGFUSE_INIT_PROJECT_SECRET_KEY="sk-lf-$(uuid)"
+                echo "Created Secret langfuse-secrets"
+              fi
+              for k in $keys; do
+                test -n "$(oc get secret langfuse-secrets -o "jsonpath={.data.$k}")" || {
+                  echo "Secret langfuse-secrets lacks key $k; restore it from backup (see README.md)"; exit 1; }
+              done
+
+              for i in $(seq 1 60); do
+                oc get secret keycloak-client-secret-langfuse -n keycloak -o name >/dev/null 2>&1 && break
+                echo "waiting for keycloak/keycloak-client-secret-langfuse ($i)"; sleep 5
+              done
+              secret="$(oc get secret keycloak-client-secret-langfuse -n keycloak -o jsonpath='{.data.CLIENT_SECRET}' | base64 -d)"
+              test -n "$secret"
+              oc create secret generic langfuse-keycloak \
+                --from-literal=CLIENT_ID=langfuse \
+                --from-literal=CLIENT_SECRET="$secret" \
+                --dry-run=client -o yaml | oc apply -f -
+              echo "Secret langfuse-keycloak is up to date"
