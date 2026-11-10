@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - rbac.yaml
   - rbac-traces.yaml
+  - rbac-logs.yaml
   - tempo.yaml
   - collector.yaml
   - networkpolicy.yaml

@@ -10,7 +10,7 @@ uses object storage (a NooBaa bucket); tracing and metrics do not.
 |---|---|---|
 | `observability-operators` (0) | `operators/` | Red Hat build of Tempo, Red Hat build of OpenTelemetry and Cluster Observability Operator (`stable`), Loki Operator (`stable-6.7`) and Red Hat OpenShift Logging (`stable-6.7`), all with manual InstallPlan approval |
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
-| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1`, per-tenant trace ClusterRoles, NetworkPolicies |
+| `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1` (traces; edge-site logs and metrics), per-tenant trace ClusterRoles, the collector's Loki application-write ClusterRole, NetworkPolicies |
 | `observability-logging` (1) | `logging/` | In `openshift-logging`: ObjectBucketClaim `logging-loki`, a sync Job that builds Secret `logging-loki-s3` from it, LokiStack `logging-loki` (`1x.demo`, 3-day retention), Vector `ClusterLogForwarder` `box1` |
 | `observability-dashboards` (2) | `dashboards/` | Perses datasource `box1-thanos-querier` (default) and dashboard `box1-order-flow`, shown under Observe → Dashboards |
 | `observability-console` (2) | `console/` | `UIPlugin`s `distributed-tracing` (Observe → Traces), `logging` (Observe → Logs), `troubleshooting-panel` (korrel8r), and Argo CD access to UIPlugins |
@@ -50,6 +50,33 @@ Switching to multitenancy hid traces written earlier in single-tenant mode;
 they expire with the 72 h retention. Rolling back means reverting the Tempo,
 collector and NetworkPolicy changes together, which hides traces written as
 `dev` until they expire.
+
+## Edge-site logs and metrics (box1-docs#132)
+
+The edge site VMs (`site-west` = `site_ds9`, `site-east` = `site_spacedock`) send OTLP logs and metrics to the same
+collector, with resource attribute `site.id` (or `siteId`). Two pipelines in `tracing/collector.yaml` handle them; the
+traces pipeline is unchanged.
+
+- **Scope:** both pipelines drop every record whose `site.id` is not a known site, so services cannot use them by
+  accident. Adding a site means adding it to `filter/site` and `transform/site-logs`.
+- **Logs:** exported over OTLP/HTTP to the LokiStack gateway, application tenant
+  (`/api/logs/v1/application/otlp`), with the service CA and the collector's token. ClusterRole
+  `box1-collector-logs-write-application` (`tracing/rbac-logs.yaml`) grants the write. The collector sets the
+  namespace from `site.id` (`site-west-dev`, `site-east-dev`) and `log_type: application`, so the openshift-logging
+  tenancy applies: people who can view a site's namespace see its logs. Other resource attributes and the OTLP trace
+  ID are stored as structured metadata, for example:
+
+  ```logql
+  {k8s_namespace_name="site-west-dev"} | site_id="site_ds9"
+  {log_type="application"} | trace_id="<traceId>"
+  ```
+
+  Lines that look like they carry a credential are dropped (same pattern as `drop-credentials`).
+- **Metrics:** a Prometheus exporter on port 8889. The operator adds port `prometheus` to Service `box1-collector`, a
+  ServiceMonitor `box1-collector` for it, and the port to its own NetworkPolicy. Only `site.id`, `service.name` and
+  `host.name` are kept as labels (`site_id`, `job`, `host_name`); series stop 5 minutes after a site stops sending.
+  The metrics carry `namespace="box1-observability"`.
+- **Not authenticated:** like traces, anyone who can reach port 4317/4318 can send records that claim a site.
 
 ## Metrics, alerts and dashboards
 
