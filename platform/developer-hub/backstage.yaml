@@ -40,8 +40,8 @@ spec:
         template:
           metadata:
             annotations:
-              box1.org/onboarding-plugin-digest: sha256:f2dd0e1e4002658d3f49a6daf6910fc67dee4959ca0b204c6afee08e2e70f4f8
-              box1.org/onboarding-plugin-revision: d4e236440aea85f73d4f3052bd07b3a7740b2a4b
+              box1.org/onboarding-plugin-digest: sha256:6e8a05083873e3960cd26519f1b80aa15ad69948d77481cc77a7a6207df7d6ff
+              box1.org/onboarding-plugin-revision: 498afc3a553c88f7b0573a5898d6d2f8c5beaa57
           spec:
             serviceAccountName: developer-hub-onboarding
             automountServiceAccountToken: true
