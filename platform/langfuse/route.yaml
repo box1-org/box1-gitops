@@ -17,9 +17,12 @@ spec:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
 ---
-# Closes local email/password self-signup. The router sends the longest matching path to this Route, whose Service
-# has no endpoints, so /api/auth/signup and /api/auth/signup-verify answer 503 and never reach Langfuse.
-# Keycloak users are still created on first SSO sign-in (NextAuth callback, not this path). Langfuse's own
+# Closes local email/password self-signup. These Routes send Langfuse's two signup endpoints to a Service with no
+# endpoints, so they answer 503 and never reach Langfuse. The router matches a Route path by whole segments
+# (/api/auth/signup covers /api/auth/signup/x but not /api/auth/signup-verify, observed 2026-11-09), so each
+# endpoint needs its own Route. signup-verify only acts when AUTH_EMAIL_VERIFICATION_REQUIRED and SMTP are set
+# (neither is today); it is closed too so that enabling mail later does not open signup.
+# Keycloak users are still created on first SSO sign-in (NextAuth callback, not these paths). Langfuse's own
 # AUTH_DISABLE_SIGNUP cannot be used: it refuses first-time SSO users too.
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -29,6 +32,23 @@ metadata:
 spec:
   host: langfuse.apps.ocp.box1.org
   path: /api/auth/signup
+  to:
+    kind: Service
+    name: langfuse-signup-disabled
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: langfuse-signup-verify-disabled
+  namespace: langfuse
+spec:
+  host: langfuse.apps.ocp.box1.org
+  path: /api/auth/signup-verify
   to:
     kind: Service
     name: langfuse-signup-disabled

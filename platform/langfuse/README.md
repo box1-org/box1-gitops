@@ -34,8 +34,9 @@ route `https://s3-openshift-storage.apps.ocp.box1.org`.
 
 - **Keycloak SSO** (realm `box1`, confidential client `langfuse`,
   `platform/identity/keycloak/realm/langfuse-client.yaml`). A realm user's first sign-in creates their Langfuse user
-  and adds them to org `box1` and project `box1-default` as **Viewer**. Users need an email address in the realm.
-  Raise a person's role in Langfuse (*Organization settings → Members*); realm roles are not mapped.
+  and adds them to org `box1` as **Viewer**, which applies to every project in it (per-project roles need
+  Langfuse's enterprise `rbac-project-roles` entitlement). Users need an email address in the realm. Raise a
+  person's role in Langfuse (*Organization settings → Members*); realm roles are not mapped.
 - **Local owner** `langfuse-admin@box1.local`: created at first start as Owner of org `box1`; the only account
   allowed to create organisations. For administration and break-glass when Keycloak is unavailable. Read its
   password from the cluster only when needed:
@@ -44,9 +45,10 @@ route `https://s3-openshift-storage.apps.ocp.box1.org`.
   oc get secret langfuse-secrets -n langfuse -o jsonpath='{.data.LANGFUSE_INIT_USER_PASSWORD}' | base64 -d
   ```
 
-- **Local self-signup is closed** by the `langfuse-signup-disabled` Route, which sends `/api/auth/signup*` to a
-  Service without endpoints (503). Langfuse's `AUTH_DISABLE_SIGNUP` is not used because it also refuses first-time
-  SSO users. Invite additional local accounts only if SSO is unsuitable.
+- **Local self-signup is closed** by the `langfuse-signup-disabled` and `langfuse-signup-verify-disabled` Routes,
+  which send `/api/auth/signup` and `/api/auth/signup-verify` to a Service without endpoints (503). The router
+  matches Route paths by whole segments, so each endpoint has its own Route. Langfuse's `AUTH_DISABLE_SIGNUP` is
+  not used because it also refuses first-time SSO users. Invite additional local accounts only if SSO is unsuitable.
 
 ## Sending traces
 
@@ -59,9 +61,12 @@ export LANGFUSE_PUBLIC_KEY=pk-lf-...   # from the UI or langfuse-secrets
 export LANGFUSE_SECRET_KEY=sk-lf-...
 ```
 
-OpenTelemetry exporters use `https://langfuse.apps.ocp.box1.org/api/public/otel` with HTTP basic auth
-(public key : secret key). In-cluster callers also use the public route: the NetworkPolicies admit only the router
-to `langfuse-web`, and only the Langfuse pods to the databases.
+Langfuse 4 accepts traces **only over OpenTelemetry**: current Langfuse SDKs (which send OTLP), or any OTLP/HTTP
+exporter pointed at `https://langfuse.apps.ocp.box1.org/api/public/otel` (traces at `/v1/traces`) with HTTP basic
+auth (public key : secret key). The legacy `/api/public/ingestion` endpoint accepts score events only (older SDKs
+get HTTP 400 "Event type not accepted"), and the legacy read API `/api/public/traces/{id}` answers 404; read
+through the UI or `/api/public/v2/observations?traceId=…`. In-cluster callers also use the public route: the
+NetworkPolicies admit only the router to `langfuse-web`, and only the Langfuse pods to the databases.
 
 ## Credentials
 
@@ -84,6 +89,10 @@ Back it up before any destructive operation; do not commit an export.
   (worker, port 3030, in-cluster only).
 - **Upgrade:** change the web and worker digests together (same release); Langfuse applies its migrations on web
   start. Read the release notes for ClickHouse or PostgreSQL version requirements first.
+- **First start or new ClickHouse migrations:** the worker can start before web has finished migrating and log
+  `Table default.events_full does not exist` / `Failed to detect ClickHouse event-size DEFAULT; using legacy
+  estimates`. It checks only at start, so delete the worker pod once web is Ready (seen on the first install,
+  2026-11-09).
 - **Rotate the Keycloak client secret:** regenerate it in Keycloak, then sync `langfuse` (the Job copies it) and
   restart `langfuse-web`.
 - **Restart order after an outage:** the datastores first; web and worker retry until they are reachable.
