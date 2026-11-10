@@ -1041,6 +1041,41 @@ class CiBundle(unittest.TestCase):
                         verbs: [get]
                 """))
 
+    CONSUMER_PULL = """
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata: {name: site-gateway-bundle-pull, namespace: box1-ci}
+            rules:
+              - apiGroups: ["", "image.openshift.io"]
+                resources: ["imagestreams/layers"]
+                resourceNames: ["%s"]
+                verbs: [%s]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata: {name: site-gateway-bundle-pull, namespace: box1-ci}
+            roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: %s}
+            subjects:
+              - {kind: ServiceAccount, name: ci-bootc-release, namespace: box1-ci}
+              - {kind: ServiceAccount, name: ci-bootc-check, namespace: box1-ci}
+        """
+
+    def test_consumer_build_accounts_may_pull_the_bundle(self):
+        self.check(*self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-pull")))
+
+    def test_consumer_build_accounts_may_not_push(self):
+        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get, update", "site-gateway-bundle-pull")))
+
+    def test_consumer_build_accounts_may_not_use_the_release_push_role(self):
+        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-push")))
+
+    def test_consumer_build_accounts_may_pull_only_this_bundle(self):
+        self.rejects("only to a pull-only Role", *self.extra(self.CONSUMER_PULL % ("other-bundle", "get", "site-gateway-bundle-pull")))
+
+    def test_other_shared_accounts_still_rejected(self):
+        self.rejects("may bind only ServiceAccounts declared in", *self.extra(
+            (self.CONSUMER_PULL % ("site-gateway-bundle", "get", "site-gateway-bundle-pull")).replace("ci-bootc-check", "ci-gitops")))
+
     def test_imagestream_must_be_the_bundle_stream(self):
         repo, files = ci_bundle()
         files = edit(files, "release.yaml", "  name: site-gateway-bundle\n", "  name: box1-ops-erp-simulator\n")
