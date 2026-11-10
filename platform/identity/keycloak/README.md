@@ -86,9 +86,16 @@ holds the session, and tokens never reach the browser.
 `realm/site-west-client.yaml` and `realm/site-east-client.yaml` are confidential client-credentials clients for the
 edge site VMs (box1-docs#131, #126): `site-west` is fixture site `site_ds9`, `site-east` is `site_spacedock`.
 
-- **Tokens:** audience `asset-service`, plus the hard-coded claim `site_id` (`site_ds9` or `site_spacedock`), which
-  asset-service checks so that a site can write only its own status (#130). `fullScopeAllowed` is false and no
-  asset-service role is mapped yet; the write role is added together with the site status endpoints.
+- **Tokens:** audience `asset-service`, the hard-coded claim `siteId` (`site_ds9` or `site_spacedock`) and the
+  `asset-service` client role `site-reporter`, which is declared on `asset-service-client.yaml` and reaches the site
+  tokens through a scope mapping plus a service-account client role (`fullScopeAllowed` is false). asset-service
+  accepts `PUT /api/v1/sites/{siteId}/status` only when the claim equals the path `siteId` (box1-ops-contracts
+  `SITE.md`, #130). The claim was named `site_id` until box1-docs#131 aligned it with the contract.
+- **Pinned IDs:** `client.id` is the internal ID Keycloak generated when box1-gitops#146 first created each client,
+  read from the live KeycloakClient.
+- **After a sync,** check a decoded service-account token (never the token or secret itself): `azp` is the site
+  client, `aud` contains `asset-service`, `siteId` is the site's, `resource_access.asset-service.roles` is exactly
+  `[site-reporter]`, and there is no `site_id` claim.
 - **No login:** standard flow, implicit flow and direct access grants are off.
 - **Secret:** the operator writes it to `keycloak-client-secret-<site>` in this namespace. It reaches the VM only
   through the out-of-Git `<site>-dev/<site>-cloud-init` Secret, assembled with box1-docs

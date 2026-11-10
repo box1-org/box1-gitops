@@ -1,6 +1,7 @@
 # Asset telemetry service console and API (box1-docs#15, decision D-013).
 # Public client: authorization code + PKCE only, so no client secret exists anywhere.
-# Client roles: chaos-operator (console and control API), telemetry-writer (ingestion API), telemetry-reader (read API).
+# Client roles: chaos-operator (console and control API), telemetry-writer (ingestion API), telemetry-reader (read API),
+# site-reporter (an edge site writes its own status; held only by the site-west and site-east service accounts).
 # Assigning a role to a person is done in the Keycloak admin console; this file assigns none.
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakClient
@@ -56,4 +57,7 @@ spec:
       clientRole: true
     - name: telemetry-reader
       description: Read readings and alerts from the asset telemetry API
+      clientRole: true
+    - name: site-reporter
+      description: Write the site's own status (PUT /api/v1/sites/{siteId}/status); edge site clients only
       clientRole: true
