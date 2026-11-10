@@ -135,6 +135,13 @@ spec:
       #!/bin/sh
       set -eu
       image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME:$REVISION"
+      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+      # Pulls from box1-ci (for example a code-only repository's bundle, named in a
+      # COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:... line) use this
+      # task's ServiceAccount; the Red Hat registry entry is kept. The file stays in the step.
+      cp /etc/redhat-registry/.dockerconfigjson /tmp/box1-auth.json
+      printf '%s' "$token" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin registry.apps.ocp.box1.org >/dev/null
+      export REGISTRY_AUTH_FILE=/tmp/box1-auth.json
       # bootc container lint runs inside the Containerfile.
       buildah build --layers=false --build-arg SOURCE_REVISION="$REVISION" \
         --build-arg EXTRA_SOURCE_REVISION="${EXTRA_SOURCE_REVISION:-none}" \
@@ -146,7 +153,6 @@ spec:
         printf 'Built and linted %s (not pushed)\n' "$image"
         exit 0
       fi
-      token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
       buildah push --creds "serviceaccount:$token" --digestfile /workspace/digest "$image"
       digest=$(cat /workspace/digest)
       echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'

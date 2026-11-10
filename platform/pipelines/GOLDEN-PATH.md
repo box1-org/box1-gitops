@@ -418,6 +418,21 @@ repository; the onboarding build itself uses a Hub-minted token and does not dep
 The `push` step keeps its HOME, registry and auth configuration in its private `/tmp`,
 not in the volumes the `mvn` step (repository code) can write.
 
+**Consuming the bundle.** The consumer's `Containerfile` names the bundle on the route host,
+which `box1-bootc-build` logs in to with its own ServiceAccount token (the Red Hat registry
+entry is kept):
+
+```dockerfile
+COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:<digest> / /usr/lib/box1/<repo>/
+```
+
+The service hostname `image-registry.openshift-image-registry.svc:5000` does not work here:
+the build has neither credentials nor a CA for it. The bootc build accounts
+(`ci-bootc-release`, `ci-bootc-check`) cannot pull from `box1-ci` by default, so
+`ci/<repo>/` grants them a pull-only Role, `<repo>-bundle-pull` (`get` on
+`imagestreams/layers` of `<repo>-bundle`, nothing else). `box1-gitops-validate` accepts those
+two accounts in a `ci/` bundle only when bound to such a Role.
+
 `box1-quarkus-maven` is unchanged for services: it reads `target/jib-image.digest` at the
 repository root, which a multi-module build does not produce. The Hub's
 `developer-hub-onboarding-build` Role gains `get` on `imagestreams` in `box1-ci`, which
