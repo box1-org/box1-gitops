@@ -26,9 +26,9 @@ automountServiceAccountToken: false
 ---
 # Registry pull identity for PR builds (box1-org/box1-gitops#141): ci-bootc-check has no
 # token, so box1-bootc-build logs in with this one to pull code-only bundles named in a
-# Containerfile COPY --from line. It has no Role here: it can pull only the
-# <repo>-bundle ImageStreams whose box1-workloads-dev ci/<repo>/ binds it to a
-# pull-only <repo>-bundle-pull Role. No API rights, no SCC, not used as a pod identity.
+# Containerfile COPY --from line. It has no Role and no SCC and is never a pod identity.
+# Like every ServiceAccount in box1-ci, it can pull any image in box1-ci through the
+# default system:image-pullers RoleBinding (system:serviceaccounts:box1-ci); it cannot push.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
