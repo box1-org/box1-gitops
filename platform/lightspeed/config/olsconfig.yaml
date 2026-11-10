@@ -1,5 +1,6 @@
-# OpenShift Lightspeed 2.0.0 backed by the in-cluster vLLM server (vllm/vllm-test).
-# The credentials Secret is created out-of-band (see README); vLLM currently has
+# OpenShift Lightspeed 2.0.0. Default provider is OpenAI (gpt-5.5); the in-cluster
+# vLLM server (vllm/vllm-test) stays available as a secondary provider.
+# Both credentials Secrets are created out-of-band (see README). vLLM currently has
 # no API-key enforcement, so its apitoken value is a placeholder.
 apiVersion: ols.openshift.io/v1alpha1
 kind: OLSConfig
@@ -8,6 +9,16 @@ metadata:
 spec:
   llm:
     providers:
+      - name: openai
+        type: openai
+        url: https://api.openai.com/v1
+        credentialsSecretRef:
+          name: lightspeed-openai-token
+        # contextWindowSize is left at the operator default.
+        models:
+          - name: gpt-5.5
+            parameters:
+              maxTokensForResponse: 4096
       - name: box1-vllm
         type: rhoai_vllm
         url: http://vllm-test-2.vllm.svc.cluster.local:8000/v1
@@ -19,8 +30,8 @@ spec:
             parameters:
               maxTokensForResponse: 4096        
   ols:
-    defaultProvider: box1-vllm
-    defaultModel: box1-coder
+    defaultProvider: openai
+    defaultModel: gpt-5.5
     logLevel: INFO
     guardrails:
       toolResultInspection:
