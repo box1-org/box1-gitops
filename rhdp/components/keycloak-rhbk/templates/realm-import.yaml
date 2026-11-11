@@ -6,7 +6,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: '1'
 spec:
-  keycloakCRName: {{ .Values.keycloak.instanceName | quote }}
+  keycloakCRName: "{{ .Values.keycloak.instanceName }}"
   realm:
     id: box1
     realm: box1
@@ -20,6 +20,67 @@ spec:
         description: OpenShell standard user
       - name: openshell-admin
         description: OpenShell administrator
+      client:
+        agentic-operations:
+        - name: aiops-viewer
+          description: Read evidence and analyses through REST and MCP
+          clientRole: true
+        - name: aiops-analyst
+          description: aiops-viewer, plus start analyses (which propose actions only
+            and never execute them)
+          clientRole: true
+        asset-service:
+        - name: chaos-operator
+          description: Use the asset telemetry load and chaos console and its control
+            API
+          clientRole: true
+        - name: telemetry-writer
+          description: Post readings to the asset telemetry ingestion API
+          clientRole: true
+        - name: telemetry-reader
+          description: Read readings and alerts from the asset telemetry API
+          clientRole: true
+        - name: site-reporter
+          description: Write the site's own status (PUT /api/v1/sites/{siteId}/status);
+            edge site clients only
+          clientRole: true
+        fulfillment-adapter:
+        - name: fulfillment-writer
+          description: Create fulfillment requests and run operator reconcile on the
+            fulfillment adapter
+          clientRole: true
+        inventory-service:
+        - name: inventory-admin
+          description: Restock, release reservations, and create sites and stock records
+            (create once)
+          clientRole: true
+        notification-service:
+        - name: notification-reader
+          description: Read operator notifications, their attempts and receipts, and
+            the stub provider state
+          clientRole: true
+        - name: notification-fault-operator
+          description: Switch the stub delivery provider's fault modes in an allowlisted
+            demo namespace
+          clientRole: true
+        operations-console:
+        - name: console-viewer
+          description: Read every box1 Operations console page
+          clientRole: true
+        - name: console-operator
+          description: Console viewer, plus place orders through the console
+          clientRole: true
+        - name: console-developer
+          description: Console viewer, plus deployed source revisions
+          clientRole: true
+        scenario-controller:
+        - name: scenario-viewer
+          description: Read the scenario catalog, runs and audit trail
+          clientRole: true
+        - name: scenario-operator
+          description: Scenario viewer, plus start, stop and reset scenarios and seed
+            the demo fixtures
+          clientRole: true
     clients:
     - clientId: agentic-operations-cli
       name: box1 agentic operations CLI and MCP
@@ -64,14 +125,6 @@ spec:
       fullScopeAllowed: false
       defaultClientScopes: []
       optionalClientScopes: []
-      roles:
-      - name: aiops-viewer
-        description: Read evidence and analyses through REST and MCP
-        clientRole: true
-      - name: aiops-analyst
-        description: aiops-viewer, plus start analyses (which propose actions only
-          and never execute them)
-        clientRole: true
     - id: 0b509c04-6761-4cc3-af7d-be7ac1c7c743
       clientId: asset-service
       name: Asset telemetry service
@@ -104,21 +157,6 @@ spec:
           included.client.audience: asset-service
           access.token.claim: 'true'
           id.token.claim: 'false'
-      roles:
-      - name: chaos-operator
-        description: Use the asset telemetry load and chaos console and its control
-          API
-        clientRole: true
-      - name: telemetry-writer
-        description: Post readings to the asset telemetry ingestion API
-        clientRole: true
-      - name: telemetry-reader
-        description: Read readings and alerts from the asset telemetry API
-        clientRole: true
-      - name: site-reporter
-        description: Write the site's own status (PUT /api/v1/sites/{siteId}/status);
-          edge site clients only
-        clientRole: true
     - clientId: developer-hub
       name: Red Hat Developer Hub
       enabled: true
@@ -168,11 +206,6 @@ spec:
           included.client.audience: fulfillment-adapter
           access.token.claim: 'true'
           id.token.claim: 'false'
-      roles:
-      - name: fulfillment-writer
-        description: Create fulfillment requests and run operator reconcile on the
-          fulfillment adapter
-        clientRole: true
     - id: e9b8158d-c5a6-4003-94ec-158e883bc9d5
       clientId: inventory-service
       name: box1 inventory service
@@ -184,11 +217,6 @@ spec:
       directAccessGrantsEnabled: false
       serviceAccountsEnabled: false
       fullScopeAllowed: false
-      roles:
-      - name: inventory-admin
-        description: Restock, release reservations, and create sites and stock records
-          (create once)
-        clientRole: true
     - clientId: langfuse
       name: Langfuse
       enabled: true
@@ -239,15 +267,6 @@ spec:
           included.client.audience: notification-service
           access.token.claim: 'true'
           id.token.claim: 'false'
-      roles:
-      - name: notification-reader
-        description: Read operator notifications, their attempts and receipts, and
-          the stub provider state
-        clientRole: true
-      - name: notification-fault-operator
-        description: Switch the stub delivery provider's fault modes in an allowlisted
-          demo namespace
-        clientRole: true
     - clientId: openshell-cli
       name: OpenShell CLI
       enabled: true
@@ -350,16 +369,6 @@ spec:
           included.client.audience: agentic-operations
           access.token.claim: 'true'
           id.token.claim: 'false'
-      roles:
-      - name: console-viewer
-        description: Read every box1 Operations console page
-        clientRole: true
-      - name: console-operator
-        description: Console viewer, plus place orders through the console
-        clientRole: true
-      - name: console-developer
-        description: Console viewer, plus deployed source revisions
-        clientRole: true
     - clientId: scenario-controller-cli
       name: box1 scenario controller CLI
       enabled: true
@@ -411,14 +420,6 @@ spec:
           included.client.audience: inventory-service
           access.token.claim: 'true'
           id.token.claim: 'false'
-      roles:
-      - name: scenario-viewer
-        description: Read the scenario catalog, runs and audit trail
-        clientRole: true
-      - name: scenario-operator
-        description: Scenario viewer, plus start, stop and reset scenarios and seed
-          the demo fixtures
-        clientRole: true
     - id: d87f42c0-7dfc-4536-a5a2-7326761bb73a
       clientId: site-east
       name: box1 edge site East (site_spacedock)
@@ -522,5 +523,4 @@ spec:
       - client: asset-service
         roles:
         - site-reporter
-
 
