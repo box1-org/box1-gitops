@@ -1,29 +1,27 @@
-# Kiali operator provided by Red Hat. AllNamespaces install mode.
-# box1-docs#23, decision 002/003.
+# Red Hat build of OpenTelemetry operator. AllNamespaces install mode.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: openshift-kiali-operator
+  name: openshift-opentelemetry-operator
   labels:
     openshift.io/cluster-monitoring: "true"
 ---
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  name: openshift-kiali-operator
-  namespace: openshift-kiali-operator
+  name: openshift-opentelemetry-operator
+  namespace: openshift-opentelemetry-operator
 spec:
   upgradeStrategy: Default
 ---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: kiali-ossm
-  namespace: openshift-kiali-operator
+  name: opentelemetry-product
+  namespace: openshift-opentelemetry-operator
 spec:
   channel: stable
   installPlanApproval: Manual
-  name: kiali-ossm
+  name: opentelemetry-product
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-

@@ -26,4 +26,3 @@ spec:
   name: loki-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-

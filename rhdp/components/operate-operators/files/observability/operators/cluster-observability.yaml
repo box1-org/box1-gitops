@@ -26,4 +26,3 @@ spec:
   name: cluster-observability-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-

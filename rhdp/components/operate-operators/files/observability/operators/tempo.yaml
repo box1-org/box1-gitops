@@ -1,28 +1,27 @@
-# Red Hat build of OpenTelemetry operator. AllNamespaces install mode.
+# Red Hat build of Tempo operator. AllNamespaces install mode only.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: openshift-opentelemetry-operator
+  name: openshift-tempo-operator
   labels:
     openshift.io/cluster-monitoring: "true"
 ---
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  name: openshift-opentelemetry-operator
-  namespace: openshift-opentelemetry-operator
+  name: openshift-tempo-operator
+  namespace: openshift-tempo-operator
 spec:
   upgradeStrategy: Default
 ---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: opentelemetry-product
-  namespace: openshift-opentelemetry-operator
+  name: tempo-product
+  namespace: openshift-tempo-operator
 spec:
   channel: stable
   installPlanApproval: Manual
-  name: opentelemetry-product
+  name: tempo-product
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-

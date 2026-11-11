@@ -27,4 +27,3 @@ spec:
   name: cluster-logging
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-

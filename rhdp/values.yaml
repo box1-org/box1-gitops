@@ -231,5 +231,20 @@ components:
     name: box1-operate
     path: rhdp/components/operate
     namespace: openshift-gitops
+    syncWave: "2"
+    helm: true
+  operateOperators:
+    enabled: false
+    profiles: [operate]
+    name: box1-operate-operators
+    path: rhdp/components/operate-operators
+    namespace: openshift-gitops
     syncWave: "0"
     helm: true
+  operateNetwork:
+    enabled: false
+    profiles: [operate]
+    name: box1-operate-network
+    path: platform/service-mesh/network
+    namespace: openshift-gitops
+    syncWave: "0"
