@@ -17,7 +17,7 @@ metadata:
     argocd.argoproj.io/sync-wave: {{ $component.syncWave | quote }}
   labels:
     app.kubernetes.io/part-of: box1-rhdp
-    box1.org/profile: {{ join "+" $component.profiles | quote }}
+    box1.org/profile: {{ join "-" $component.profiles | quote }}
 spec:
   project: default
   source:
