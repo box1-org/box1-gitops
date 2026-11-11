@@ -24,10 +24,10 @@ Developer Hub until `components.developerHubOperator.enabled` and
   instance uses the existing `keycloak-pgsql-user` database Secret and
   `keycloak-initial-admin` bootstrap-admin Secret in the `keycloak` namespace.
   The chart creates only the one-time `box1` realm import against that instance.
-- RHBK creates service-account users automatically during realm import. Their
-  role grants are therefore intentionally excluded from the bootstrap import
-  and must be applied by a later, idempotent post-import configuration step
-  before enabling dependent profiles.
+- RHBK creates service-account users automatically during realm import. The
+  wave-2 `box1-service-account-roles` Job waits for that import, then applies
+  the Developer Hub, scenario-controller, and edge-site role grants using
+  `keycloak-initial-admin`. It does not print any Secret value.
 - Select a storage class and object-bucket class before enabling stateful
   profiles. `storage.rwoClass` is consumed by the RHBK chart; the remaining
   platform manifests still need their hostname/storage overlay migration
