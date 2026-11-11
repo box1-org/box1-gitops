@@ -18,6 +18,6 @@ helm template box1-rhbk "$root/rhdp/components/keycloak-rhbk" \
   --set deployer.domain=apps.cluster.example.com \
   --set keycloak.instanceName=keycloak >"$rendered"
 
-rg -q 'keycloak.apps.cluster.example.com' "$rendered"
+rg -q 'developer-hub.apps.cluster.example.com' "$rendered"
 rg -q 'keycloakCRName: "keycloak"' "$rendered"
 ! rg -q 'apps.ocp.box1.org' "$rendered"
