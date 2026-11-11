@@ -1,0 +1,227 @@
+# These are supplied automatically by ocp4_workload_field_content. They are
+# intentionally blank here so this chart cannot be mistaken for a homelab
+# bootstrap entry point.
+deployer:
+  domain: ""
+  apiUrl: ""
+gitops:
+  repoURL: ""
+  revision: main
+  path: ""
+
+# Start a new RHDP cluster with core + rhbk. The other profiles are opt-in
+# because they need additional operators, credentials, and capacity.
+profiles:
+  core: true
+  rhbk: true
+  developer: false
+  operate: false
+  security: false
+  ai: false
+
+storage:
+  rwoClass: ""
+  objectBucketClass: ""
+
+endpoints:
+  registryHost: ""
+  objectStorageEndpoint: ""
+
+keycloak:
+  # RHBK instance supplied by the RHDP cluster. It is backed by the existing
+  # keycloak-pgsql-user and keycloak-initial-admin Secrets.
+  instanceName: keycloak
+
+# A child Application reads the same repo/revision as this chart. Components
+# are profile-gated; setting one to false is the supported way to omit it.
+components:
+  keycloakRhbK:
+    enabled: true
+    profiles: [core, rhbk]
+    name: keycloak-rhbk
+    path: rhdp/components/keycloak-rhbk
+    helm: true
+    namespace: keycloak
+    syncWave: "1"
+  kafkaOperator:
+    enabled: false
+    profiles: [core]
+    name: kafka-operator
+    path: platform/kafka/operator
+    namespace: openshift-operators
+    syncWave: "0"
+  kafka:
+    enabled: false
+    profiles: [core]
+    name: box1-kafka
+    path: platform/kafka
+    namespace: box1-kafka
+    syncWave: "1"
+  pipelinesOperator:
+    enabled: false
+    profiles: [developer]
+    name: pipelines-operator
+    path: platform/pipelines/operator
+    namespace: openshift-operators
+    syncWave: "0"
+  pipelinesConfig:
+    enabled: false
+    profiles: [developer]
+    name: pipelines-config
+    path: platform/pipelines/config
+    namespace: openshift-pipelines
+    syncWave: "1"
+  pipelinesCi:
+    enabled: false
+    profiles: [developer]
+    name: pipelines-ci
+    path: platform/pipelines/ci
+    namespace: box1-ci
+    syncWave: "2"
+  developerHubOperator:
+    enabled: false
+    profiles: [developer]
+    name: developer-hub-operator
+    path: platform/developer-hub/operator
+    namespace: rhdh-operator
+    syncWave: "0"
+  developerHub:
+    enabled: false
+    profiles: [developer]
+    name: developer-hub
+    path: platform/developer-hub
+    namespace: rhdh
+    syncWave: "2"
+  devSpacesOperator:
+    enabled: false
+    profiles: [developer]
+    name: dev-spaces-operator
+    path: platform/dev-spaces/operator
+    namespace: openshift-devspaces
+    syncWave: "0"
+  devSpaces:
+    enabled: false
+    profiles: [developer]
+    name: dev-spaces
+    path: platform/dev-spaces/instance
+    namespace: openshift-devspaces
+    syncWave: "2"
+  reposilite:
+    enabled: false
+    profiles: [developer]
+    name: reposilite
+    path: platform/reposilite
+    namespace: box1-maven
+    syncWave: "1"
+  mailhog:
+    enabled: false
+    profiles: [developer]
+    name: mailhog
+    path: platform/mailhog
+    namespace: mailhog
+    syncWave: "1"
+  serviceMeshOperators:
+    enabled: false
+    profiles: [operate]
+    name: service-mesh-operators
+    path: platform/service-mesh/operators
+    namespace: openshift-operators
+    syncWave: "0"
+  serviceMeshNetwork:
+    enabled: false
+    profiles: [operate]
+    name: service-mesh-network
+    path: platform/service-mesh/network
+    namespace: openshift-gitops
+    syncWave: "0"
+  serviceMesh:
+    enabled: false
+    profiles: [operate]
+    name: service-mesh-control-plane
+    path: platform/service-mesh/mesh
+    namespace: istio-system
+    syncWave: "1"
+  kiali:
+    enabled: false
+    profiles: [operate]
+    name: service-mesh-kiali
+    path: platform/service-mesh/kiali
+    namespace: istio-system
+    syncWave: "2"
+  observabilityOperators:
+    enabled: false
+    profiles: [operate]
+    name: observability-operators
+    path: platform/observability/operators
+    namespace: openshift-operators
+    syncWave: "0"
+  observabilityLogging:
+    enabled: false
+    profiles: [operate]
+    name: observability-logging
+    path: platform/observability/logging
+    namespace: openshift-logging
+    syncWave: "1"
+  observabilityTracing:
+    enabled: false
+    profiles: [operate]
+    name: observability-tracing
+    path: platform/observability/tracing
+    namespace: box1-observability
+    syncWave: "1"
+  acsOperator:
+    enabled: false
+    profiles: [security]
+    name: acs-operator
+    path: platform/advanced-cluster-security/operator
+    namespace: rhacs-operator
+    syncWave: "0"
+  acs:
+    enabled: false
+    profiles: [security]
+    name: acs
+    path: platform/advanced-cluster-security/instance
+    namespace: stackrox
+    syncWave: "1"
+  rhtpaOperator:
+    enabled: false
+    profiles: [security]
+    name: rhtpa-operator
+    path: platform/trusted-profile-analyzer/operator
+    namespace: trusted-profile-analyzer
+    syncWave: "0"
+  rhtpaPrerequisites:
+    enabled: false
+    profiles: [security]
+    name: rhtpa-prerequisites
+    path: platform/trusted-profile-analyzer/prerequisites
+    namespace: trusted-profile-analyzer
+    syncWave: "1"
+  rhtpa:
+    enabled: false
+    profiles: [security]
+    name: rhtpa
+    path: platform/trusted-profile-analyzer/instance
+    namespace: trusted-profile-analyzer
+    syncWave: "2"
+  lightspeedOperator:
+    enabled: false
+    profiles: [ai]
+    name: lightspeed-operator
+    path: platform/lightspeed/operator
+    namespace: openshift-lightspeed
+    syncWave: "0"
+  lightspeed:
+    enabled: false
+    profiles: [ai]
+    name: lightspeed
+    path: platform/lightspeed/config
+    namespace: openshift-lightspeed
+    syncWave: "1"
+  langfuse:
+    enabled: false
+    profiles: [ai]
+    name: langfuse
+    path: platform/langfuse
+    namespace: langfuse
+    syncWave: "2"

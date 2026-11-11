@@ -1,0 +1,5 @@
+apiVersion: v2
+name: box1-rhbk-bootstrap
+description: Parameterized RHBK bootstrap installation for RHDP
+type: application
+version: 0.1.0

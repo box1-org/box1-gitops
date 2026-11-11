@@ -1,0 +1,7 @@
+deployer:
+  domain: ""
+  apiUrl: ""
+storage:
+  rwoClass: ""
+keycloak:
+  instanceName: keycloak

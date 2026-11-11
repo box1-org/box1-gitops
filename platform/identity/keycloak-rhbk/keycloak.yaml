@@ -1,0 +1,50 @@
+# RHBK 26 bootstrap target for a new cluster.  This is intentionally separate
+# from platform/identity/keycloak, which remains the homelab RH-SSO target.
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: box1-keycloak
+  labels:
+    app: box1-sso
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  instances: 1
+  # The Keycloak database Secret is provisioned outside Git. It must provide
+  # POSTGRES_USERNAME and POSTGRES_PASSWORD.
+  db:
+    vendor: postgres
+    host: postgres-db
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-secret
+      key: POSTGRES_USERNAME
+    passwordSecret:
+      name: keycloak-db-secret
+      key: POSTGRES_PASSWORD
+  # A bootstrap-only admin Secret (username and password keys) is also
+  # provisioned outside Git before the first sync.
+  bootstrapAdmin:
+    user:
+      secret: keycloak-bootstrap-admin
+  hostname:
+    hostname: https://keycloak.apps.ocp.box1.org/auth
+    strict: true
+    backchannelDynamic: true
+  proxy:
+    headers: xforwarded
+  http:
+    httpEnabled: true
+    serviceName: keycloak
+    tlsSecret: keycloak-tls
+  # The separate Ingress remains responsible for the external certificate and
+  # route policy. The RHBK operator must not create a competing Ingress.
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi

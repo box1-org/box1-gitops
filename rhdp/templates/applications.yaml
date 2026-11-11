@@ -1,0 +1,49 @@
+{{- if not .Values.gitops.repoURL }}
+{{- fail "gitops.repoURL is injected by ocp4_workload_field_content and is required" }}
+{{- end }}
+{{- range $key, $component := .Values.components }}
+{{- $profileEnabled := true }}
+{{- range $profile := $component.profiles }}
+{{- if not (index $.Values.profiles $profile) }}{{- $profileEnabled = false }}{{- end }}
+{{- end }}
+{{- if and $component.enabled $profileEnabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $component.name }}
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $component.syncWave | quote }}
+  labels:
+    app.kubernetes.io/part-of: box1-rhdp
+    box1.org/profile: {{ join "+" $component.profiles | quote }}
+spec:
+  project: default
+  source:
+    repoURL: {{ $.Values.gitops.repoURL | quote }}
+    targetRevision: {{ $.Values.gitops.revision | quote }}
+    path: {{ $component.path | quote }}
+    {{- if $component.helm }}
+    helm:
+      values: |
+        deployer:
+          domain: {{ $.Values.deployer.domain | quote }}
+          apiUrl: {{ $.Values.deployer.apiUrl | quote }}
+        storage:
+          rwoClass: {{ $.Values.storage.rwoClass | quote }}
+        keycloak:
+          instanceName: {{ $.Values.keycloak.instanceName | quote }}
+    {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $component.namespace | quote }}
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+{{- end }}
+{{- end }}

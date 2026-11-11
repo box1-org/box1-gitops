@@ -1,0 +1,6 @@
+apiVersion: v2
+name: box1-rhdp
+description: RHDP field-content entry point for the Box1 GitOps platform
+type: application
+version: 0.1.0
+appVersion: "1.0"

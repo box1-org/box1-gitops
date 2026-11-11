@@ -1,0 +1,552 @@
+---
+apiVersion: k8s.keycloak.org/v2beta1
+kind: KeycloakRealmImport
+metadata:
+  name: box1
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  keycloakCRName: {{ .Values.keycloak.instanceName | quote }}
+  realm:
+    id: box1
+    realm: box1
+    enabled: true
+    displayName: Box1
+    sslRequired: external
+    registrationAllowed: false
+    roles:
+      realm:
+      - name: openshell-user
+        description: OpenShell standard user
+      - name: openshell-admin
+        description: OpenShell administrator
+    clients:
+    - clientId: agentic-operations-cli
+      name: box1 agentic operations CLI and MCP
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - http://127.0.0.1/*
+      - http://localhost/*
+      attributes:
+        pkce.code.challenge.method: S256
+        oauth2.device.authorization.grant.enabled: 'true'
+      defaultClientScopes:
+      - profile
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: agentic-operations-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: agentic-operations
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+    - id: e7f3076c-02cd-405f-a148-3e4e0c2307b9
+      clientId: agentic-operations
+      name: box1 agentic operations
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      bearerOnly: true
+      standardFlowEnabled: false
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      defaultClientScopes: []
+      optionalClientScopes: []
+      roles:
+      - name: aiops-viewer
+        description: Read evidence and analyses through REST and MCP
+        clientRole: true
+      - name: aiops-analyst
+        description: aiops-viewer, plus start analyses (which propose actions only
+          and never execute them)
+        clientRole: true
+    - id: 0b509c04-6761-4cc3-af7d-be7ac1c7c743
+      clientId: asset-service
+      name: Asset telemetry service
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - https://asset-service-dev.{{ .Values.deployer.domain }}/console/*
+      webOrigins:
+      - https://asset-service-dev.{{ .Values.deployer.domain }}
+      attributes:
+        pkce.code.challenge.method: S256
+        post.logout.redirect.uris: https://asset-service-dev.{{ .Values.deployer.domain }}/signed-out.html
+      defaultClientScopes:
+      - profile
+      - roles
+      - web-origins
+      optionalClientScopes: []
+      protocolMappers:
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      roles:
+      - name: chaos-operator
+        description: Use the asset telemetry load and chaos console and its control
+          API
+        clientRole: true
+      - name: telemetry-writer
+        description: Post readings to the asset telemetry ingestion API
+        clientRole: true
+      - name: telemetry-reader
+        description: Read readings and alerts from the asset telemetry API
+        clientRole: true
+      - name: site-reporter
+        description: Write the site's own status (PUT /api/v1/sites/{siteId}/status);
+          edge site clients only
+        clientRole: true
+    - clientId: developer-hub
+      name: Red Hat Developer Hub
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: true
+      fullScopeAllowed: true
+      redirectUris:
+      - https://developer-hub.{{ .Values.deployer.domain }}/api/auth/oidc/handler/frame
+      webOrigins:
+      - https://developer-hub.{{ .Values.deployer.domain }}
+      defaultClientScopes:
+      - profile
+      - email
+      - roles
+      - web-origins
+      optionalClientScopes:
+      - offline_access
+    - clientId: fulfillment-adapter
+      name: Fulfillment adapter
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - http://127.0.0.1/callback
+      webOrigins: []
+      attributes:
+        pkce.code.challenge.method: S256
+      defaultClientScopes:
+      - profile
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: fulfillment-adapter-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: fulfillment-adapter
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      roles:
+      - name: fulfillment-writer
+        description: Create fulfillment requests and run operator reconcile on the
+          fulfillment adapter
+        clientRole: true
+    - id: e9b8158d-c5a6-4003-94ec-158e883bc9d5
+      clientId: inventory-service
+      name: box1 inventory service
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: false
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      roles:
+      - name: inventory-admin
+        description: Restock, release reservations, and create sites and stock records
+          (create once)
+        clientRole: true
+    - clientId: langfuse
+      name: Langfuse
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - https://langfuse.{{ .Values.deployer.domain }}/api/auth/callback/keycloak
+      webOrigins:
+      - https://langfuse.{{ .Values.deployer.domain }}
+      attributes:
+        pkce.code.challenge.method: S256
+        post.logout.redirect.uris: https://langfuse.{{ .Values.deployer.domain }}/auth/sign-in
+      defaultClientScopes:
+      - profile
+      - email
+      - web-origins
+      optionalClientScopes: []
+    - clientId: notification-service
+      name: Notification service
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - http://127.0.0.1/callback
+      webOrigins: []
+      attributes:
+        pkce.code.challenge.method: S256
+      defaultClientScopes:
+      - profile
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: notification-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: notification-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      roles:
+      - name: notification-reader
+        description: Read operator notifications, their attempts and receipts, and
+          the stub provider state
+        clientRole: true
+      - name: notification-fault-operator
+        description: Switch the stub delivery provider's fault modes in an allowlisted
+          demo namespace
+        clientRole: true
+    - clientId: openshell-cli
+      name: OpenShell CLI
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: true
+      redirectUris:
+      - http://127.0.0.1/callback
+      webOrigins: []
+      attributes:
+        pkce.code.challenge.method: S256
+      defaultClientScopes:
+      - profile
+      - email
+      - roles
+      - web-origins
+      optionalClientScopes:
+      - offline_access
+      protocolMappers:
+      - name: openshell-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: openshell-cli
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+    - clientId: openshift
+      name: OpenShift
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - https://oauth-openshift.{{ .Values.deployer.domain }}/oauth2callback/keycloak
+      defaultClientScopes:
+      - profile
+      - email
+    - clientId: operations-console
+      name: box1 Operations console
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - https://operations-console-dev.{{ .Values.deployer.domain }}/callback
+      - https://operations-console-dev.{{ .Values.deployer.domain }}/signed-out.html
+      webOrigins:
+      - https://operations-console-dev.{{ .Values.deployer.domain }}
+      attributes:
+        pkce.code.challenge.method: S256
+        post.logout.redirect.uris: https://operations-console-dev.{{ .Values.deployer.domain }}/signed-out.html
+      defaultClientScopes:
+      - profile
+      - roles
+      - web-origins
+      optionalClientScopes: []
+      protocolMappers:
+      - name: operations-console-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: operations-console
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      - name: scenario-controller-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: scenario-controller
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      - name: agentic-operations-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: agentic-operations
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      roles:
+      - name: console-viewer
+        description: Read every box1 Operations console page
+        clientRole: true
+      - name: console-operator
+        description: Console viewer, plus place orders through the console
+        clientRole: true
+      - name: console-developer
+        description: Console viewer, plus deployed source revisions
+        clientRole: true
+    - clientId: scenario-controller-cli
+      name: box1 scenario controller CLI
+      enabled: true
+      protocol: openid-connect
+      publicClient: true
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      fullScopeAllowed: false
+      redirectUris:
+      - http://127.0.0.1/*
+      attributes:
+        pkce.code.challenge.method: S256
+        oauth2.device.authorization.grant.enabled: 'true'
+      defaultClientScopes:
+      - profile
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: scenario-controller-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: scenario-controller
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+    - id: 28ee7934-a30a-4dfc-9f78-c4447ad8e5a2
+      clientId: scenario-controller
+      name: box1 scenario controller
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: false
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: true
+      fullScopeAllowed: false
+      defaultClientScopes:
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: inventory-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: inventory-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      roles:
+      - name: scenario-viewer
+        description: Read the scenario catalog, runs and audit trail
+        clientRole: true
+      - name: scenario-operator
+        description: Scenario viewer, plus start, stop and reset scenarios and seed
+          the demo fixtures
+        clientRole: true
+    - id: d87f42c0-7dfc-4536-a5a2-7326761bb73a
+      clientId: site-east
+      name: box1 edge site East (site_spacedock)
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: false
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: true
+      fullScopeAllowed: false
+      defaultClientScopes:
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      - name: site-id
+        protocol: openid-connect
+        protocolMapper: oidc-hardcoded-claim-mapper
+        consentRequired: false
+        config:
+          claim.name: siteId
+          claim.value: site_spacedock
+          jsonType.label: String
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+          userinfo.token.claim: 'false'
+    - id: a55e74fe-e1e9-44af-b828-5a51a072b564
+      clientId: site-west
+      name: box1 edge site West (site_ds9)
+      enabled: true
+      protocol: openid-connect
+      publicClient: false
+      standardFlowEnabled: false
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: true
+      fullScopeAllowed: false
+      defaultClientScopes:
+      - roles
+      optionalClientScopes: []
+      protocolMappers:
+      - name: asset-service-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: asset-service
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+      - name: site-id
+        protocol: openid-connect
+        protocolMapper: oidc-hardcoded-claim-mapper
+        consentRequired: false
+        config:
+          claim.name: siteId
+          claim.value: site_ds9
+          jsonType.label: String
+          access.token.claim: 'true'
+          id.token.claim: 'false'
+          userinfo.token.claim: 'false'
+    clientScopeMappings:
+      agentic-operations-cli:
+      - client: agentic-operations
+        roles:
+        - aiops-viewer
+        - aiops-analyst
+      operations-console:
+      - client: scenario-controller
+        roles:
+        - scenario-viewer
+        - scenario-operator
+      - client: asset-service
+        roles:
+        - telemetry-reader
+      - client: agentic-operations
+        roles:
+        - aiops-viewer
+        - aiops-analyst
+      scenario-controller-cli:
+      - client: scenario-controller
+        roles:
+        - scenario-viewer
+        - scenario-operator
+      scenario-controller:
+      - client: inventory-service
+        roles:
+        - inventory-admin
+      site-east:
+      - client: asset-service
+        roles:
+        - site-reporter
+      site-west:
+      - client: asset-service
+        roles:
+        - site-reporter
+    users:
+    - username: service-account-developer-hub
+      enabled: true
+      serviceAccountClientId: developer-hub
+      clientRoles:
+        realm-management:
+        - view-users
+        - view-groups
+    - username: service-account-scenario-controller
+      enabled: true
+      serviceAccountClientId: scenario-controller
+      clientRoles:
+        inventory-service:
+        - inventory-admin
+    - username: service-account-site-east
+      enabled: true
+      serviceAccountClientId: site-east
+      clientRoles:
+        asset-service:
+        - site-reporter
+    - username: service-account-site-west
+      enabled: true
+      serviceAccountClientId: site-west
+      clientRoles:
+        asset-service:
+        - site-reporter
+
+
