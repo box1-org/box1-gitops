@@ -5,6 +5,19 @@
 # collector's otelcol_exporter_send_failed_spans metric, scraped by
 # user-workload monitoring through the operator-created ServiceMonitor); it never blocks the
 # services, which export asynchronously in batches.
+#
+# Edge sites (box1-docs#132, #126) also send OTLP logs and metrics. Only records whose resource
+# attribute site.id (or siteId) is a known site are kept; everything else in those two pipelines
+# is dropped, so services cannot use them by accident. Adding a site means adding it to
+# filter/site and transform/site-logs below.
+#   logs    -> LokiStack logging-loki, application tenant, through the gateway's OTLP endpoint,
+#              in the site's namespace (site_ds9 -> site-west-dev, site_spacedock -> site-east-dev)
+#              so the openshift-logging tenancy applies; written with ClusterRole
+#              box1-collector-logs-write-application (rbac-logs.yaml).
+#   metrics -> Prometheus exporter on :8889. The operator adds port "prometheus" to Service
+#              box1-collector and a ServiceMonitor box1-collector for it (enableMetrics), which
+#              user-workload monitoring scrapes. Resource attributes site.id, service.name and
+#              host.name become labels (site_id, job, host_name).
 apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
@@ -45,6 +58,41 @@ spec:
         limit_percentage: 75
         spike_limit_percentage: 15
       batch: {}
+      # Edge sites: accept siteId as an alias of site.id.
+      transform/site-id:
+        error_mode: ignore
+        log_statements:
+          - set(resource.attributes["site.id"], resource.attributes["siteId"]) where resource.attributes["site.id"] == nil and resource.attributes["siteId"] != nil
+          - delete_key(resource.attributes, "siteId")
+        metric_statements:
+          - set(resource.attributes["site.id"], resource.attributes["siteId"]) where resource.attributes["site.id"] == nil and resource.attributes["siteId"] != nil
+          - delete_key(resource.attributes, "siteId")
+      # Edge sites: drop anything not from a known site. For logs, also drop a line that looks
+      # like it carries a credential (the same pattern as the ClusterLogForwarder's
+      # drop-credentials filter; the site collector should redact first).
+      filter/site:
+        error_mode: ignore
+        log_conditions:
+          - not (resource.attributes["site.id"] == "site_ds9" or resource.attributes["site.id"] == "site_spacedock")
+          - 'IsMatch(log.body, "(?i)(bearer\\s+[a-z0-9._~+/=-]{16,}|password\\s*[\"=:]+\\s*\\S|client_secret\\s*[\"=:]|-----BEGIN [A-Z ]*PRIVATE KEY)")'
+        metric_conditions:
+          - not (resource.attributes["site.id"] == "site_ds9" or resource.attributes["site.id"] == "site_spacedock")
+      # Edge sites: the labels the openshift-logging tenancy and Observe -> Logs (ViaQ schema)
+      # select on. The namespace comes from site.id here, never from the sender.
+      transform/site-logs:
+        error_mode: ignore
+        log_statements:
+          - set(resource.attributes["k8s.namespace.name"], "site-west-dev") where resource.attributes["site.id"] == "site_ds9"
+          - set(resource.attributes["k8s.namespace.name"], "site-east-dev") where resource.attributes["site.id"] == "site_spacedock"
+          - set(resource.attributes["kubernetes.namespace_name"], resource.attributes["k8s.namespace.name"])
+          - set(resource.attributes["log_type"], "application")
+          - set(resource.attributes["openshift.log.type"], "application")
+          - set(log.attributes["level"], ConvertCase(log.severity_text, "lower")) where log.severity_text != nil and log.severity_text != ""
+      # Edge sites: bound the Prometheus label set; every other resource attribute is dropped.
+      transform/site-metrics:
+        error_mode: ignore
+        metric_statements:
+          - keep_keys(resource.attributes, ["site.id", "service.name", "host.name"])
     exporters:
       otlp_grpc/tempo:
         # Tempo gateway: TLS with the OpenShift service CA, the collector's
@@ -63,6 +111,28 @@ spec:
         retry_on_failure:
           enabled: true
           max_elapsed_time: 120s
+      otlp_http/lokistack:
+        # LokiStack gateway, application tenant: TLS with the OpenShift service CA and the
+        # collector's service-account token (create on loki.grafana.com application/logs).
+        # The exporter appends /v1/logs.
+        endpoint: https://logging-loki-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/otlp
+        encoding: json
+        tls:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+        auth:
+          authenticator: bearertokenauth
+        sending_queue:
+          enabled: true
+          queue_size: 1000   # export requests, not log records
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 120s
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        resource_to_telemetry_conversion:
+          enabled: true
+        # A site that stops sending (disconnected) disappears from the endpoint after this.
+        metric_expiration: 5m
     service:
       extensions: [bearertokenauth]
       pipelines:
@@ -70,3 +140,11 @@ spec:
           receivers: [otlp]
           processors: [memory_limiter, batch]
           exporters: [otlp_grpc/tempo]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, transform/site-id, filter/site, transform/site-logs, batch]
+          exporters: [otlp_http/lokistack]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, transform/site-id, filter/site, transform/site-metrics, batch]
+          exporters: [prometheus]
