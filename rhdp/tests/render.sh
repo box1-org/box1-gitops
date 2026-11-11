@@ -27,7 +27,7 @@ helm template box1-operate "$root/rhdp/components/operate" \
   --set storage.rwoClass=example-rwo \
   --set storage.objectBucketClass=example-obc >"$rendered"
 
-test "$(rg -c '^apiVersion:' "$rendered")" -eq 60
+test "$(rg -c '^apiVersion:' "$rendered")" -eq 67
 ! rg -q 'apps.ocp.box1.org|lvms-vg1|installPlanApproval: Manual' "$rendered"
 
 helm template box1-operate-operators "$root/rhdp/components/operate-operators" >"$rendered"
