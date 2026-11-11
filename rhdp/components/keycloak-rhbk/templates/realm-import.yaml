@@ -522,31 +522,5 @@ spec:
       - client: asset-service
         roles:
         - site-reporter
-    users:
-    - username: service-account-developer-hub
-      enabled: true
-      serviceAccountClientId: developer-hub
-      clientRoles:
-        realm-management:
-        - view-users
-        - view-groups
-    - username: service-account-scenario-controller
-      enabled: true
-      serviceAccountClientId: scenario-controller
-      clientRoles:
-        inventory-service:
-        - inventory-admin
-    - username: service-account-site-east
-      enabled: true
-      serviceAccountClientId: site-east
-      clientRoles:
-        asset-service:
-        - site-reporter
-    - username: service-account-site-west
-      enabled: true
-      serviceAccountClientId: site-west
-      clientRoles:
-        asset-service:
-        - site-reporter
 
 
