@@ -1,0 +1,9 @@
+deployer:
+  domain: ""
+storage:
+  rwoClass: ""
+  objectBucketClass: ""
+operators:
+  # RHDP owns this isolated cluster, so profile subscriptions may advance
+  # automatically once their catalog is available.
+  installPlanApproval: Automatic

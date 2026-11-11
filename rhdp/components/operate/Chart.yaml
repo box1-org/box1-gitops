@@ -1,0 +1,5 @@
+apiVersion: v2
+name: box1-operate
+description: Parameterized Box1 service-mesh and observability profile
+type: application
+version: 0.1.0

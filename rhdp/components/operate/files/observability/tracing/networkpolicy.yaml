@@ -1,0 +1,90 @@
+# Tempo (with its gateway in the same pod) accepts spans only from the
+# collector, through the gateway. Queries reach only the gateway, which checks
+# the caller's OpenShift identity and tenant RBAC. Tempo's own API (3200), which
+# trusts any X-Scope-OrgID, is not reachable from other pods; the gateway
+# reaches Tempo over localhost. Applied last (wave 2), after the collector has
+# moved to the gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tempo-box1
+  namespace: box1-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tempo-monolithic
+      app.kubernetes.io/instance: box1
+  policyTypes: [Ingress]
+  ingress:
+    # Span ingest: collector -> gateway OTLP gRPC (Service 4317 -> pod 8090).
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: opentelemetry-collector
+      ports:
+        - protocol: TCP
+          port: 8090
+    # Queries: Jaeger UI Route (router) and the console Traces plugin backend
+    # -> gateway HTTP (8080). The gateway authenticates and authorizes users.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-cluster-observability-operator
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: distributed-tracing
+        # Kiali (box1-docs#23) queries traces with its own token.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kiali
+        # agentic-operations (box1-docs#111) reads traces as evidence with its own token.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentic-operations-dev
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentic-operations
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# The collector accepts unauthenticated OTLP from any namespace (services do
+# not restrict egress). Any pod could inject or flood spans; memory_limiter
+# bounds the impact. Accepted for the lab. It also accepts metrics scrapes
+# from user-workload monitoring.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: box1-collector
+  namespace: box1-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: opentelemetry-collector
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-user-workload-monitoring
+      ports:
+        - protocol: TCP
+          port: 8888
+

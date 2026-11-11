@@ -1,0 +1,34 @@
+# Smallest LokiStack size. 1x.demo sets no CPU or memory requests (the node
+# has about 75% of its CPU and 70% of its memory requested) and creates four
+# 10 Gi PVCs on lvms-vg1 (ingester, WAL, compactor, index gateway). The ruler
+# is off. Red Hat does not support 1x.demo for production; this is a lab.
+# Tenant mode openshift-logging: reads are authorized with OpenShift RBAC,
+# and application logs are visible to users who can view the namespace.
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: logging-loki
+  namespace: openshift-logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  size: 1x.demo
+  storageClassName: lvms-vg1
+  storage:
+    schemas:
+      - version: v13
+        effectiveDate: "2026-11-06"
+    secret:
+      name: logging-loki-s3
+      type: s3
+    # NooBaa's S3 endpoint is signed by the OpenShift service CA.
+    tls:
+      caName: openshift-service-ca.crt
+      caKey: service-ca.crt
+  limits:
+    global:
+      retention:
+        days: 3
+  tenants:
+    mode: openshift-logging
+

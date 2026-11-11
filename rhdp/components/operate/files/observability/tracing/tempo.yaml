@@ -1,0 +1,58 @@
+# Single-pod Tempo with traces on a PersistentVolume (lvms-vg1, the default
+# class). No object storage. Clients use the gateway service tempo-box1-gateway
+# (OTLP gRPC 4317, HTTP/query 8080) with an OpenShift token and tenant "dev".
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoMonolithic
+metadata:
+  name: box1
+  namespace: box1-observability
+spec:
+  storage:
+    traces:
+      backend: pv
+      size: 10Gi
+  ingestion:
+    otlp:
+      grpc:
+        enabled: true
+      http:
+        enabled: false
+  jaegerui:
+    enabled: true
+    # With the gateway enabled, the Route targets the gateway, which performs
+    # the OpenShift login and per-tenant RBAC; the operator drops the OAuth
+    # proxy. Deprecated upstream: the console Traces view (observability-console)
+    # is the long-term UI. Both are kept for now.
+    route:
+      enabled: true
+      termination: reencrypt
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # One tenant, "dev". Writers and readers are authorized per tenant through
+  # OpenShift RBAC (see rbac-traces.yaml). Traces written before multitenancy
+  # was enabled belong to Tempo's single tenant and are not visible here; they
+  # expire with the 72 h retention.
+  multitenancy:
+    enabled: true
+    mode: openshift
+    authentication:
+      - tenantName: dev
+        tenantId: "dd16bd17-d5c2-4ab5-985d-8bf62bb985a2"
+  extraConfig:
+    tempo:
+      compactor:
+        compaction:
+          block_retention: 72h
+

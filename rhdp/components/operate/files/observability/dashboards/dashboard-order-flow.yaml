@@ -1,0 +1,995 @@
+# Generated structure; edit queries here. Shown in the console under Observe -> Dashboards (Perses).
+{
+  "apiVersion": "perses.dev/v1alpha2",
+  "kind": "PersesDashboard",
+  "metadata": {
+    "name": "box1-order-flow",
+    "namespace": "box1-observability"
+  },
+  "spec": {
+    "config": {
+      "display": {
+        "name": "Box1 / Order flow and ERP",
+        "description": "Order age, ERP acknowledgement and adapter errors (box1-docs#22). Alerts: Box1Erp*, Box1Fulfillment*, Box1Orders*, Box1Inventory*."
+      },
+      "duration": "1h",
+      "refreshInterval": "30s",
+      "panels": {
+        "o_age": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Oldest open order age",
+              "description": "Age of the oldest order not yet shipped or rejected. Stuck after 900 s."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "seconds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 900
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_orders_oldest_open_age_seconds{namespace=\"order-service-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "o_stuck": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Stuck orders",
+              "description": "Orders open longer than 900 s (ORDER_STUCK_AFTER_SECONDS)."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_orders_stuck{namespace=\"order-service-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "o_flow": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Order state transitions per minute"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (state) (rate(box1_orders_lifecycle_total{namespace=\"order-service-dev\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{state}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "o_outbox": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Order outbox"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_outbox_pending{namespace=\"order-service-dev\"})",
+                      "seriesNameFormat": "pending events"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_outbox_oldest_pending_age_seconds{namespace=\"order-service-dev\"})",
+                      "seriesNameFormat": "oldest pending (s)"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_unack": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Oldest unacknowledged ERP request",
+              "description": "Alert Box1ErpAcknowledgementDelayed fires above 30 s for 30 s."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "seconds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 30
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_oldest_unacknowledged_seconds{namespace=\"fulfillment-adapter-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_backlog": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "ERP backlog",
+              "description": "Accepted requests the ERP has not acknowledged."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_backlog{namespace=\"fulfillment-adapter-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_operator": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Awaiting ERP operator",
+              "description": "PENDING or HELD in the ERP (MANUAL mode)."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_awaiting_operator{namespace=\"fulfillment-adapter-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_attention": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Needs attention",
+              "description": "Requests whose automatic work stopped."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_needs_attention{namespace=\"fulfillment-adapter-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_ages": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "ERP acknowledgement age"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "seconds"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_oldest_unacknowledged_seconds{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "oldest unacknowledged request"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_oldest_unacknowledged_upload_seconds{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "oldest unacknowledged upload"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "e_queues": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "ERP request states"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_backlog{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "backlog"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_queued{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "upload due"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_awaiting_operator{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "awaiting operator"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_held{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "held"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_needs_attention{namespace=\"fulfillment-adapter-dev\"})",
+                      "seriesNameFormat": "needs attention"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_results": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "ERP results per minute by outcome",
+              "description": "Outcomes other than APPLY indicate rejected or quarantined ERP results."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (outcome) (rate(fulfillment_results_total{namespace=\"fulfillment-adapter-dev\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{outcome}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_uploads": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Uploads per minute by result"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (result, reason) (rate(fulfillment_uploads_total{namespace=\"fulfillment-adapter-dev\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{result}} ({{reason}})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_consumed": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Adapter events consumed per minute by outcome",
+              "description": "dead_lettered means a poison or conflicting event."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (outcome) (rate(fulfillment_events_consumed_total{namespace=\"fulfillment-adapter-dev\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{outcome}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_quar": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Quarantined files (since database creation)"
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(fulfillment_quarantined_files{namespace=\"fulfillment-adapter-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "p_rej": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Inventory rejections per minute"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (reason) (rate(box1_inventory_rejections_total{namespace=\"inventory-service-dev\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{reason}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "p_backlogs": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Dead letters and notification backlog"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_inventory_dlq_depth{namespace=\"inventory-service-dev\"})",
+                      "seriesNameFormat": "inventory DLQ"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_notification_pending{namespace=\"notification-service-dev\"})",
+                      "seriesNameFormat": "notifications pending"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "p_up": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Services scraped (1 = up)"
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (job) (up{namespace=~\"(order-service|inventory-service|fulfillment-adapter|notification-service|asset-service|scenario-controller|operations-console)-dev\", job=~\"order-service|inventory-service|fulfillment-adapter|notification-service|asset-service|scenario-controller|operations-console\"})",
+                      "seriesNameFormat": "{{job}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "layouts": [
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Orders"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/o_age"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/o_stuck"
+                },
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/o_flow"
+                },
+                "x": 12,
+                "y": 0,
+                "width": 12,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/o_outbox"
+                },
+                "x": 0,
+                "y": 5,
+                "width": 12,
+                "height": 6
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "ERP via fulfillment adapter"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_unack"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_backlog"
+                },
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_operator"
+                },
+                "x": 12,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_attention"
+                },
+                "x": 18,
+                "y": 0,
+                "width": 6,
+                "height": 5
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_ages"
+                },
+                "x": 0,
+                "y": 5,
+                "width": 12,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/e_queues"
+                },
+                "x": 12,
+                "y": 5,
+                "width": 12,
+                "height": 8
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Adapter errors"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/x_results"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/x_uploads"
+                },
+                "x": 8,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/x_consumed"
+                },
+                "x": 16,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/x_quar"
+                },
+                "x": 0,
+                "y": 8,
+                "width": 6,
+                "height": 5
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Pipeline health"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/p_rej"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/p_backlogs"
+                },
+                "x": 8,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/p_up"
+                },
+                "x": 16,
+                "y": 0,
+                "width": 8,
+                "height": 8
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+

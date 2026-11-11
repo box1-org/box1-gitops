@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    box1.org/profile: operate
+    # Visible to the ambient mesh control plane (box1-docs#23) so istiod can
+    # resolve the box1-otel tracing provider (box1-collector) for waypoints.
+    # Discovery only: no istio.io/dataplane-mode, nothing here is enrolled.
+    istio-discovery: enabled
+

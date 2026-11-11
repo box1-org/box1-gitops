@@ -1,0 +1,14 @@
+{{- if not .Values.deployer.domain }}
+{{- fail "deployer.domain is required" }}
+{{- end }}
+{{- if not .Values.storage.rwoClass }}
+{{- fail "storage.rwoClass is required for the operate profile" }}
+{{- end }}
+{{- if not .Values.storage.objectBucketClass }}
+{{- fail "storage.objectBucketClass is required for the operate profile" }}
+{{- end }}
+{{- range $path, $asset := .Files.Glob "files/**" }}
+---
+{{ $content := $asset | toString }}
+{{ $content | replace "apps.ocp.box1.org" $.Values.deployer.domain | replace "lvms-vg1" $.Values.storage.rwoClass | replace "openshift-storage.noobaa.io" $.Values.storage.objectBucketClass | replace "installPlanApproval: Manual" (printf "installPlanApproval: %s" $.Values.operators.installPlanApproval) }}
+{{- end }}

@@ -225,3 +225,11 @@ components:
     path: platform/langfuse
     namespace: langfuse
     syncWave: "2"
+  operate:
+    enabled: false
+    profiles: [operate]
+    name: box1-operate
+    path: rhdp/components/operate
+    namespace: openshift-gitops
+    syncWave: "0"
+    helm: true

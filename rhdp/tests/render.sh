@@ -21,3 +21,12 @@ helm template box1-rhbk "$root/rhdp/components/keycloak-rhbk" \
 rg -q 'developer-hub.apps.cluster.example.com' "$rendered"
 rg -q 'keycloakCRName: "keycloak"' "$rendered"
 ! rg -q 'apps.ocp.box1.org' "$rendered"
+
+helm template box1-operate "$root/rhdp/components/operate" \
+  --set deployer.domain=apps.cluster.example.com \
+  --set storage.rwoClass=example-rwo \
+  --set storage.objectBucketClass=example-obc >"$rendered"
+
+test "$(rg -c '^apiVersion:' "$rendered")" -eq 82
+rg -q 'installPlanApproval: Automatic' "$rendered"
+! rg -q 'apps.ocp.box1.org|lvms-vg1|installPlanApproval: Manual' "$rendered"

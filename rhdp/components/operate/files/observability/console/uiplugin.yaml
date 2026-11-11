@@ -1,0 +1,11 @@
+# Observe -> Traces in the OpenShift console. The plugin lists TempoMonolithic
+# and TempoStack instances and, for multi-tenant instances, queries through the
+# Tempo gateway with the signed-in user's token, so tenant RBAC applies
+# (ClusterRole box1-traces-read-dev).
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: distributed-tracing
+spec:
+  type: DistributedTracing
+

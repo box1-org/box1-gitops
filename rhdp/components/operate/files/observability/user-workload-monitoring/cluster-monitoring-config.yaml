@@ -1,0 +1,14 @@
+# Enables OpenShift's built-in monitoring for user projects (Prometheus,
+# Thanos Ruler and Alertmanager routing in openshift-user-workload-monitoring).
+# The ConfigMap did not exist before this change (observed 2026-11-06), so
+# platform monitoring keeps its defaults. Add any future platform monitoring
+# settings here, because Argo CD now owns this ConfigMap.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+

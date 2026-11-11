@@ -1,0 +1,26 @@
+# Observe -> Logs in the OpenShift console, backed by LokiStack logging-loki
+# (observability-logging, box1-docs#82). Queries go through the LokiStack
+# gateway with the signed-in user's token.
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: logging
+spec:
+  type: Logging
+  logging:
+    lokiStack:
+      name: logging-loki
+      namespace: openshift-logging
+    schema: viaq
+---
+# Troubleshooting panel (korrel8r): correlates alerts, Pods and their logs.
+# Its trace store is fixed by the operator to tempo-platform in
+# openshift-tracing, which does not exist here, so it does not link Box1
+# traces to logs (box1-docs#82).
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: troubleshooting-panel
+spec:
+  type: TroubleshootingPanel
+
