@@ -32,6 +32,7 @@ spec:
           apiUrl: {{ $.Values.deployer.apiUrl | quote }}
         storage:
           rwoClass: {{ $.Values.storage.rwoClass | quote }}
+          objectBucketClass: {{ $.Values.storage.objectBucketClass | quote }}
         keycloak:
           instanceName: {{ $.Values.keycloak.instanceName | quote }}
     {{- end }}
