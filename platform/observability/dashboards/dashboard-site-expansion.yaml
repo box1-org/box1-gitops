@@ -1,0 +1,882 @@
+# Generated structure; edit queries here. Shown in the console under Observe -> Dashboards (Perses).
+{
+  "apiVersion": "perses.dev/v1alpha2",
+  "kind": "PersesDashboard",
+  "metadata": {
+    "name": "box1-site-expansion",
+    "namespace": "box1-observability"
+  },
+  "spec": {
+    "config": {
+      "display": {
+        "name": "Box1 / Site expansion",
+        "description": "Edge site status, outbox forwarding, pick lists and VM resources (box1-docs#126, #132). Alert: Box1SiteStale."
+      },
+      "duration": "1h",
+      "refreshInterval": "30s",
+      "variables": [
+        {
+          "kind": "ListVariable",
+          "spec": {
+            "name": "site",
+            "display": {
+              "name": "Site",
+              "hidden": false
+            },
+            "allowAllValue": true,
+            "allowMultiple": true,
+            "customAllValue": ".*",
+            "defaultValue": "$__all",
+            "plugin": {
+              "kind": "PrometheusLabelValuesVariable",
+              "spec": {
+                "labelName": "site_id",
+                "matchers": [
+                  "site_heartbeat_total"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "panels": {
+        "s_online": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Sites online",
+              "description": "Sites asset-service reports ONLINE (asset_site_state)."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "count(max by (siteId) (asset_site_state{namespace=\"asset-service-dev\",siteId=~\"$site\",state=\"ONLINE\"}) == 1) or vector(0)"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "s_stale": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Sites stale",
+              "description": "Sites with no heartbeat and no reading for over 120 s: the Box1SiteStale condition before its 1 m for."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "count(max by (siteId) (asset_site_heartbeat_age_seconds{namespace=\"asset-service-dev\",siteId=~\"$site\"}) > 120 and on (siteId) max by (siteId) (asset_site_last_reading_age_seconds{namespace=\"asset-service-dev\",siteId=~\"$site\"}) > 120) or vector(0)"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "s_buffer": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Site buffer depth (max)",
+              "description": "Largest buffer depth a site reported in its last status (asset_site_buffer_depth)."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(asset_site_buffer_depth{namespace=\"asset-service-dev\",siteId=~\"$site\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "s_dlq": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Inventory site DLQ depth",
+              "description": "Site events dead-lettered by inventory-service (box1.site.dlq.v1). Not split by site."
+            },
+            "plugin": {
+              "kind": "StatChart",
+              "spec": {
+                "calculation": "last-number",
+                "format": {
+                  "unit": "decimal"
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max(box1_inventory_site_dlq_depth{namespace=\"inventory-service-dev\"})"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "s_state": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Site state",
+              "description": "2 = ONLINE, 1 = DEGRADED, 0 = OFFLINE, as asset-service reports it."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true,
+                  "min": 0,
+                  "max": 2
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (siteId) (asset_site_state{namespace=\"asset-service-dev\",siteId=~\"$site\",state=\"ONLINE\"}) * 2 + on (siteId) max by (siteId) (asset_site_state{namespace=\"asset-service-dev\",siteId=~\"$site\",state=\"DEGRADED\"})",
+                      "seriesNameFormat": "{{siteId}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "s_age": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Heartbeat and last reading age",
+              "description": "Seconds since asset-service last heard from each site. Box1SiteStale needs both over 120 s."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "seconds"
+                  },
+                  "show": true
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 120
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (siteId) (asset_site_heartbeat_age_seconds{namespace=\"asset-service-dev\",siteId=~\"$site\"})",
+                      "seriesNameFormat": "{{siteId}} heartbeat"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (siteId) (asset_site_last_reading_age_seconds{namespace=\"asset-service-dev\",siteId=~\"$site\"})",
+                      "seriesNameFormat": "{{siteId}} reading"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "f_depth": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Outbox depth",
+              "description": "Records waiting in each site's local outbox, by class. Grows while a site cannot reach Kafka."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (site_id, class) (site_outbox_depth{site_id=~\"$site\"})",
+                      "seriesNameFormat": "{{site_id}} {{class}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "f_oldest": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Oldest outbox record age",
+              "description": "Age of the oldest unpublished outbox record at each site."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "seconds"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (site_id) (site_outbox_oldest_age_seconds{site_id=~\"$site\"})",
+                      "seriesNameFormat": "{{site_id}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "f_rate": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Outbox recorded vs published per minute",
+              "description": "Records written to the outbox and records forwarded to Kafka. Published above recorded means a backlog is draining."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id, class) (rate(site_outbox_recorded_total{site_id=~\"$site\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{site_id}} {{class}} recorded"
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id, class) (rate(site_outbox_published_total{site_id=~\"$site\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{site_id}} {{class}} published"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "f_hb": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Heartbeats per minute by outcome",
+              "description": "Site status heartbeats to asset-service. 'unreachable' means the site could not reach the hub."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id, outcome) (rate(site_heartbeat_total{site_id=~\"$site\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{site_id}} {{outcome}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "p_rate": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Pick-list records per minute by outcome",
+              "description": "Reservation records each site's pick list handled: added, shipped, ignored, or skipped as another site's."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id, outcome) (rate(site_picklist_records_total{site_id=~\"$site\"}[$__rate_interval])) * 60",
+                      "seriesNameFormat": "{{site_id}} {{outcome}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "h_cpu": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "CPU utilisation",
+              "description": "1 - idle share of CPU time per site VM."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "show": true,
+                  "min": 0,
+                  "max": 1
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "1 - sum by (site_id) (rate(system_cpu_time_seconds_total{site_id=~\"$site\",state=\"idle\"}[$__rate_interval])) / sum by (site_id) (rate(system_cpu_time_seconds_total{site_id=~\"$site\"}[$__rate_interval]))",
+                      "seriesNameFormat": "{{site_id}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "h_mem": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Memory used",
+              "description": "Memory in the 'used' state per site VM (excludes page cache and buffers)."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "bytes"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id) (system_memory_usage_bytes{site_id=~\"$site\",state=\"used\"})",
+                      "seriesNameFormat": "{{site_id}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "h_disk": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Root filesystem used (/sysroot)",
+              "description": "Used share of the bootc root filesystem, which holds /var and the site data."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "percent-decimal"
+                  },
+                  "show": true,
+                  "min": 0,
+                  "max": 1
+                },
+                "thresholds": {
+                  "steps": [
+                    {
+                      "color": "#EE6C6C",
+                      "value": 0.85
+                    }
+                  ]
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "sum by (site_id) (system_filesystem_usage_bytes{site_id=~\"$site\",mountpoint=\"/sysroot\",state=\"used\"}) / sum by (site_id) (system_filesystem_usage_bytes{site_id=~\"$site\",mountpoint=\"/sysroot\"})",
+                      "seriesNameFormat": "{{site_id}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "h_load": {
+          "kind": "Panel",
+          "spec": {
+            "display": {
+              "name": "Load average (1 m)",
+              "description": "1-minute load average per site VM."
+            },
+            "plugin": {
+              "kind": "TimeSeriesChart",
+              "spec": {
+                "legend": {
+                  "mode": "list",
+                  "position": "bottom"
+                },
+                "visual": {
+                  "display": "line",
+                  "lineWidth": 1.25,
+                  "pointRadius": 2
+                },
+                "yAxis": {
+                  "format": {
+                    "unit": "decimal"
+                  },
+                  "show": true
+                }
+              }
+            },
+            "queries": [
+              {
+                "kind": "TimeSeriesQuery",
+                "spec": {
+                  "plugin": {
+                    "kind": "PrometheusTimeSeriesQuery",
+                    "spec": {
+                      "query": "max by (site_id) (system_cpu_load_average_1m{site_id=~\"$site\"})",
+                      "seriesNameFormat": "{{site_id}}"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "layouts": [
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Site status"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_online"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 6,
+                "height": 4
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_stale"
+                },
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 4
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_buffer"
+                },
+                "x": 12,
+                "y": 0,
+                "width": 6,
+                "height": 4
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_dlq"
+                },
+                "x": 18,
+                "y": 0,
+                "width": 6,
+                "height": 4
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_state"
+                },
+                "x": 0,
+                "y": 4,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/s_age"
+                },
+                "x": 12,
+                "y": 4,
+                "width": 12,
+                "height": 7
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Forwarding (site-gateway outbox)"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/f_depth"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/f_oldest"
+                },
+                "x": 12,
+                "y": 0,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/f_rate"
+                },
+                "x": 0,
+                "y": 7,
+                "width": 12,
+                "height": 8
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/f_hb"
+                },
+                "x": 12,
+                "y": 7,
+                "width": 12,
+                "height": 8
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Pick lists"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/p_rate"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 24,
+                "height": 7
+              }
+            ]
+          }
+        },
+        {
+          "kind": "Grid",
+          "spec": {
+            "display": {
+              "title": "Site VM resources"
+            },
+            "items": [
+              {
+                "content": {
+                  "$ref": "#/spec/panels/h_cpu"
+                },
+                "x": 0,
+                "y": 0,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/h_mem"
+                },
+                "x": 12,
+                "y": 0,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/h_disk"
+                },
+                "x": 0,
+                "y": 7,
+                "width": 12,
+                "height": 7
+              },
+              {
+                "content": {
+                  "$ref": "#/spec/panels/h_load"
+                },
+                "x": 12,
+                "y": 7,
+                "width": 12,
+                "height": 7
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

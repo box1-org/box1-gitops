@@ -12,7 +12,7 @@ uses object storage (a NooBaa bucket); tracing and metrics do not.
 | `user-workload-monitoring` (0) | `user-workload-monitoring/` | `cluster-monitoring-config` with `enableUserWorkload: true` |
 | `observability-tracing` (1) | `tracing/` | Namespace `box1-observability`, `TempoMonolithic` `box1` (10 Gi PV on the default class, 72 h retention, OpenShift-mode gateway with tenant `dev`, Jaeger UI through the gateway), `OpenTelemetryCollector` `box1` (traces; edge-site logs and metrics), per-tenant trace ClusterRoles, the collector's Loki application-write ClusterRole, NetworkPolicies |
 | `observability-logging` (1) | `logging/` | In `openshift-logging`: ObjectBucketClaim `logging-loki`, a sync Job that builds Secret `logging-loki-s3` from it, LokiStack `logging-loki` (`1x.demo`, 3-day retention), Vector `ClusterLogForwarder` `box1` |
-| `observability-dashboards` (2) | `dashboards/` | Perses datasource `box1-thanos-querier` (default) and dashboard `box1-order-flow`, shown under Observe → Dashboards |
+| `observability-dashboards` (2) | `dashboards/` | Perses datasource `box1-thanos-querier` (default) and dashboards `box1-order-flow` and `box1-site-expansion`, shown under Observe → Dashboards |
 | `observability-console` (2) | `console/` | `UIPlugin`s `distributed-tracing` (Observe → Traces), `logging` (Observe → Logs), `troubleshooting-panel` (korrel8r), and Argo CD access to UIPlugins |
 
 All six Applications are manual-sync, like the other platform Applications.
@@ -110,6 +110,19 @@ traces pipeline is unchanged.
 
   Its default datasource is the cluster Thanos querier, so viewers need
   permission to query cluster metrics (for example `cluster-monitoring-view`).
+- **Dashboard:** `box1-site-expansion` (Perses, in `box1-observability`) covers the
+  edge sites (box1-docs#126), with a `site` selector over `site_id`:
+  - site status from asset-service: sites online and stale (the `Box1SiteStale`
+    condition), state history, heartbeat and last-reading age, buffer depth, and
+    the inventory-service site DLQ;
+  - forwarding: outbox depth and oldest-record age, recorded vs published rate,
+    and heartbeat outcomes (`ok` / `unreachable`);
+  - pick-list records by outcome;
+  - site VM CPU, memory, `/sysroot` usage and load.
+
+  Site-gateway and host metrics reach Prometheus through `box1-collector`, whose
+  exporter re-serves the last value for up to 5 minutes, so a dark site's host
+  panels flatten rather than gap.
 
 ## Logging
 

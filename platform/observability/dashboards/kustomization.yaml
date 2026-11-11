@@ -4,3 +4,4 @@ resources:
   - rbac.yaml
   - datasource.yaml
   - dashboard-order-flow.yaml
+  - dashboard-site-expansion.yaml
