@@ -1,0 +1,27 @@
+---
+# Cluster- and org-specific values substituted into app-config.yaml as ${BOX1_*}.
+# Homelab values; the RHDP overlay (rhdp/overlays/) patches this data.
+# Values must reproduce the former app-config literals exactly.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: developer-hub-platform-env
+  namespace: rhdh
+data:
+  BOX1_APPS_DOMAIN: apps.ocp.box1.org
+  BOX1_API_URL: https://api.ocp.box1.org:6443
+  BOX1_CONSOLE_URL: https://console-openshift-console.apps.ocp.box1.org
+  BOX1_OIDC_METADATA_URL: https://keycloak.apps.ocp.box1.org/auth/realms/box1/.well-known/openid-configuration
+  BOX1_KEYCLOAK_BASE_URL: https://keycloak.apps.ocp.box1.org/auth
+  BOX1_KEYCLOAK_REALM: box1
+  BOX1_GIT_ORG: box1-org
+  BOX1_TEMPLATES_CATALOG_URL: https://github.com/box1-org/box1-templates/blob/main/catalog-info.yaml
+  BOX1_DOCS_REPO_URL: https://github.com/box1-org/box1-docs
+  BOX1_ARGOCD_URL: https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org
+  BOX1_DEVSPACES_URL: https://devspaces.apps.ocp.box1.org
+  BOX1_KIALI_URL: https://kiali-istio-system.apps.ocp.box1.org
+  BOX1_OPERATIONS_CONSOLE_URL: https://operations-console-dev.apps.ocp.box1.org
+  # Optional, read by install-extensions.py in the install-dynamic-plugins
+  # initContainer. Unset: keep the onboarding plugin from dynamic-plugins.yaml.
+  # Non-empty: replace that package reference. Empty string: drop the plugin.
+  # BOX1_ONBOARDING_PLUGIN_PACKAGE: ""

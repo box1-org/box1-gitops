@@ -24,6 +24,19 @@ data:
         temporary_file.replace(extensions_file)
 
     base = yaml.safe_load((app_root / "dynamic-plugins.yaml").read_text())
+    # BOX1_ONBOARDING_PLUGIN_PACKAGE: unset keeps the onboarding plugin entry,
+    # non-empty replaces its package reference, empty drops the entry.
+    onboarding_package = os.environ.get("BOX1_ONBOARDING_PLUGIN_PACKAGE")
+    if onboarding_package is not None:
+        onboarding_suffix = "!box1-scaffolder-onboarding"
+        matches = [item for item in base.get("plugins", [])
+                   if str(item.get("package", "")).endswith(onboarding_suffix)]
+        if len(matches) != 1:
+            raise RuntimeError("Expected one onboarding plugin entry ending in " + onboarding_suffix)
+        if onboarding_package.strip():
+            matches[0]["package"] = onboarding_package.strip()
+        else:
+            base["plugins"].remove(matches[0])
     extensions = yaml.safe_load(extensions_file.read_text())
     if not isinstance(extensions, dict) or not isinstance(extensions.get("plugins"), list):
         raise ValueError("Extensions configuration must contain a plugins list")

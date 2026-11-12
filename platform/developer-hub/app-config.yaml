@@ -8,18 +8,18 @@ data:
   app-config.yaml: |
     app:
       title: Box1 Developer Hub
-      baseUrl: https://developer-hub.apps.ocp.box1.org
+      baseUrl: https://developer-hub.${BOX1_APPS_DOMAIN}
     organization:
-      name: box1-org
+      name: ${BOX1_GIT_ORG}
     backend:
-      baseUrl: https://developer-hub.apps.ocp.box1.org
+      baseUrl: https://developer-hub.${BOX1_APPS_DOMAIN}
       cors:
-        origin: https://developer-hub.apps.ocp.box1.org
+        origin: https://developer-hub.${BOX1_APPS_DOMAIN}
         credentials: true
       reading:
         allow:
           # Catalog API definitions may read only OpenAPI endpoints on service Routes.
-          - host: '*.apps.ocp.box1.org'
+          - host: '*.${BOX1_APPS_DOMAIN}'
             paths: ['/q/openapi']
       auth:
         externalAccess:
@@ -64,7 +64,7 @@ data:
                 - resolver: usernameMatchingUserEntityName
         oidc:
           production:
-            metadataUrl: https://keycloak.apps.ocp.box1.org/auth/realms/box1/.well-known/openid-configuration
+            metadataUrl: ${BOX1_OIDC_METADATA_URL}
             clientId: ${KEYCLOAK_CLIENT_ID}
             clientSecret: ${KEYCLOAK_CLIENT_SECRET}
             additionalScopes: 'profile email'
@@ -94,7 +94,7 @@ data:
         - type: config
           clusters:
             - name: box1
-              url: https://api.ocp.box1.org:6443
+              url: ${BOX1_API_URL}
               authProvider: serviceAccount
               skipTLSVerify: false
               skipMetricsLookup: true
@@ -134,22 +134,22 @@ data:
         - type: config
           instances:
             - name: openshift-gitops
-              url: https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org
+              url: ${BOX1_ARGOCD_URL}
               token: ${ARGOCD_AUTH_TOKEN}
     catalog:
       rules:
         - allow: [Component, System, API, Resource, Location, Template]
       locations:
         - type: url
-          target: https://github.com/box1-org/box1-templates/blob/main/catalog-info.yaml
+          target: ${BOX1_TEMPLATES_CATALOG_URL}
           rules:
             - allow: [Location, Template]
       providers:
         keycloakOrg:
           default:
-            baseUrl: https://keycloak.apps.ocp.box1.org/auth
-            loginRealm: box1
-            realm: box1
+            baseUrl: ${BOX1_KEYCLOAK_BASE_URL}
+            loginRealm: ${BOX1_KEYCLOAK_REALM}
+            realm: ${BOX1_KEYCLOAK_REALM}
             clientId: ${KEYCLOAK_CLIENT_ID}
             clientSecret: ${KEYCLOAK_CLIENT_SECRET}
             schedule:
@@ -159,7 +159,7 @@ data:
         github:
           # Match the bundled plugin default to override its GITHUB_ORG placeholder.
           providerId:
-            organization: box1-org
+            organization: ${BOX1_GIT_ORG}
             catalogPath: /catalog-info.yaml
             filters:
               branch: main
@@ -170,10 +170,10 @@ data:
               timeout: { minutes: 10 }
               initialDelay: { seconds: 30 }
         githubOrg:
-          id: box1-org
+          id: ${BOX1_GIT_ORG}
           githubUrl: https://github.com
           orgs:
-            - box1-org
+            - ${BOX1_GIT_ORG}
           schedule:
             frequency: { minutes: 30 }
             timeout: { minutes: 10 }
@@ -212,8 +212,8 @@ data:
 
                     | ![Box1](${BOX1_ICON_LOGO}) | **Build** | **Deliver** | **Operate** |
                     | :---: | --- | --- | --- |
-                    | | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](https://devspaces.apps.ocp.box1.org). | Pipelines as Code runs Tekton checks; [Argo CD](https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](https://operations-console-dev.apps.ocp.box1.org), trace traffic in [Kiali](https://kiali-istio-system.apps.ocp.box1.org), and ask Developer Lightspeed. |
-                    | | [Software Catalog →](/catalog) | [OpenShift Console →](https://console-openshift-console.apps.ocp.box1.org) | [Box1 backlog →](https://github.com/box1-org/box1-docs/issues) |
+                    | | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](${BOX1_DEVSPACES_URL}). | Pipelines as Code runs Tekton checks; [Argo CD](${BOX1_ARGOCD_URL}) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](${BOX1_OPERATIONS_CONSOLE_URL}), trace traffic in [Kiali](${BOX1_KIALI_URL}), and ask Developer Lightspeed. |
+                    | | [Software Catalog →](/catalog) | [OpenShift Console →](${BOX1_CONSOLE_URL}) | [Box1 backlog →](${BOX1_DOCS_REPO_URL}/issues) |
             - mountPoint: home.page/cards
               importName: EntitySection
               config:

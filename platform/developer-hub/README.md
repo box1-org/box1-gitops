@@ -66,9 +66,18 @@ credentials, ExternalSecret resources, or assumed secret-manager installations.
 
 | Secret | Required keys |
 | --- | --- |
-| `developer-hub-secrets` | `BACKEND_SECRET`, `AUTH_SESSION_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY` |
+| `developer-hub-secrets` | `BACKEND_SECRET`, `AUTH_SESSION_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` (Keycloak OIDC sign-in and Keycloak org provider) |
 | `developer-hub-db` | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRESQL_ADMIN_PASSWORD` |
 | `developer-hub-lightspeed-secrets` | `MCP_TOKEN` (random static token for the RHDH MCP server; see Developer Lightspeed) |
+
+Non-secret cluster and org values come from the `developer-hub-platform-env`
+ConfigMap (`platform-env.yaml`) and are substituted into `app-config.yaml` as
+`${BOX1_*}`: apps domain, API, console, Argo CD, Dev Spaces, Kiali and Operations
+Console URLs, Keycloak base URL, realm and OIDC metadata URL, GitHub org,
+templates catalog location, and docs repository. Change them there, not in
+`app-config.yaml`. The optional `BOX1_ONBOARDING_PLUGIN_PACKAGE` key replaces
+(non-empty) or drops (empty) the onboarding plugin package at installation.
+The Backstage route host in `backstage.yaml` is not substituted.
 
 Use independent, randomly generated values for backend, session, and database
 secrets. When `POSTGRES_USER=postgres`, set `POSTGRES_PASSWORD` and
