@@ -25,7 +25,7 @@ GL = P.get("GITLAB_INTERNAL_URL", "http://gitlab.gitlab.svc:8929").rstrip("/")
 HOST = P["GITLAB_HOST"]
 GROUP = P["GITLAB_GROUP"]            # service repositories (RHDH creates them)
 GITOPS_GROUP = P["GITOPS_GROUP"]     # GitOps target, only promote-bot may merge
-MIRROR_GROUP = P.get("MIRROR_GROUP", "box1-org-mirror")  # github-mirror CronJob target
+MIRROR_GROUP = P.get("MIRROR_GROUP", "box1-org")  # github-mirror CronJob target (public)
 CI_NS = P["CI_NAMESPACE"]
 GITOPS_REPO = P["GITOPS_REPO"]
 DEV = P.get("DEVSPACES_USER", "box1-dev")
@@ -151,7 +151,9 @@ def settings():
         "signup_enabled": False,
         "default_project_visibility": "private",
         "default_group_visibility": "private",
-        "restricted_visibility_levels": ["public"],
+        # Public allowed: the box1-org mirror group is public. Everything else
+        # stays private because each group and project sets it explicitly.
+        "restricted_visibility_levels": [],
         "import_sources": [],
         "usage_ping_enabled": False,
         "allow_local_requests_from_web_hooks_and_services": False,
@@ -171,10 +173,10 @@ SERVICE_BRANCH_DEFAULTS = {
 }
 
 
-def ensure_group(name, creation_level, branch_defaults=None):
+def ensure_group(name, creation_level, branch_defaults=None, visibility="private"):
     code, g = gl("GET", f"/groups/{enc(name)}")
     if code == 404:
-        g = must(gl("POST", "/groups", {"name": name, "path": name, "visibility": "private",
+        g = must(gl("POST", "/groups", {"name": name, "path": name, "visibility": visibility,
                                         "project_creation_level": creation_level,
                                         "auto_devops_enabled": False}), f"create group {name}")
         log(f"group {name} created")
@@ -292,6 +294,9 @@ def ensure_mirror():
     """Group and account for the github-mirror CronJob. Only mirror-bot is a
     member (Maintainer: creates projects, force-pushes, removes protection)."""
     group = ensure_group(MIRROR_GROUP, "maintainer")
+    if group.get("visibility") != "public":
+        must(gl("PUT", f"/groups/{group['id']}", {"visibility": "public"}), "mirror group public")
+        log(f"group {MIRROR_GROUP} made public")
     bot = ensure_user("mirror-bot")
     ensure_member("groups", group["id"], bot, MAINTAINER)
     current = get_secret("gitlab", "gitlab-mirror-token") or {}

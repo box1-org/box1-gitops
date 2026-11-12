@@ -1,5 +1,5 @@
-# Mirrors every non-archived github.com/box1-org repository into the private
-# GitLab group box1-org-mirror: all branches and tags, exactly (force-updates
+# Mirrors every non-archived github.com/box1-org repository into the public
+# GitLab group box1-org: all branches and tags, exactly (force-updates
 # and deletions included). Issues and PRs are not copied. GitHub stays the
 # source of truth; the mirror projects are overwritten on every run.
 #
@@ -9,7 +9,8 @@
 #
 # Private GitHub repositories need a read-only token in the hand-made Secret
 # gitlab/github-mirror (key: token; fine-grained PAT with Contents: read on
-# box1-org). Without it, private repositories are skipped and logged.
+# box1-org). Without it, private repositories are skipped and logged. Note that
+# the GitLab copies are public: a private GitHub repository would be published.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -35,7 +36,8 @@ spec:
               env:
                 - {name: GITHUB_ORG, value: box1-org}
                 - {name: GITLAB_URL, value: https://gitlab.apps.ocp.box1.org}
-                - {name: MIRROR_GROUP, value: box1-org-mirror}
+                - {name: MIRROR_GROUP, value: box1-org}
+                - {name: MIRROR_VISIBILITY, value: public}
                 - name: GITLAB_TOKEN
                   valueFrom: {secretKeyRef: {name: gitlab-mirror-token, key: token}}
                 - name: GITHUB_TOKEN

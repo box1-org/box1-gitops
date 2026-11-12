@@ -2,8 +2,9 @@
 
 For each repository: branches and tags are copied exactly (force-updated,
 and branches/tags deleted on GitHub are deleted on GitLab). Pull request refs,
-issues and PRs are not copied. Target: private projects in the GitLab group
-MIRROR_GROUP, created on first sync. The mirror projects are read-only by
+issues and PRs are not copied. Target: projects in the GitLab group
+MIRROR_GROUP with visibility MIRROR_VISIBILITY (default public), created on
+first sync and kept at that visibility. The mirror projects are read-only by
 convention: only mirror-bot is a member, and every run overwrites them.
 
 Environment:
@@ -27,6 +28,7 @@ GL = os.environ["GITLAB_URL"].rstrip("/")
 GROUP = os.environ["MIRROR_GROUP"]
 GL_TOKEN = os.environ["GITLAB_TOKEN"]
 GH_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
+VISIBILITY = os.environ.get("MIRROR_VISIBILITY", "public")
 SKIP = {s.strip() for s in os.environ.get("SKIP_REPOS", "").split(",") if s.strip()}
 
 
@@ -84,11 +86,15 @@ def ensure_project(group_id, repo):
     desc = f"Mirror of github.com/{ORG}/{repo['name']}. Read-only: overwritten by the github-mirror CronJob."
     if code == 404:
         proj = must(gl("POST", "/projects", {"name": repo["name"], "path": repo["name"], "namespace_id": group_id,
-                                             "visibility": "private", "description": desc,
+                                             "visibility": VISIBILITY, "description": desc,
                                              "initialize_with_readme": False}), f"create {path}")
         log(f"{repo['name']}: project created")
     elif code != 200:
         raise RuntimeError(f"read {path}: HTTP {code} {proj}")
+    elif proj.get("visibility") != VISIBILITY or proj.get("description") != desc:
+        proj = must(gl("PUT", f"/projects/{proj['id']}", {"visibility": VISIBILITY, "description": desc}),
+                    f"update {path}")
+        log(f"{repo['name']}: visibility {VISIBILITY}")
     return proj
 
 
