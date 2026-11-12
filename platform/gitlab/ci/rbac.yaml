@@ -1,0 +1,92 @@
+# Runs the promotion Task. Holds no Kubernetes write access except syncing
+# the one Argo CD Application; Git writes use the GitLab promote-bot token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gl-promote
+  namespace: box1-gl-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gl-promote-argocd
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [gitlab-proof-workloads]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gl-promote-argocd
+  namespace: openshift-gitops
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gl-promote-argocd}
+subjects: [{kind: ServiceAccount, name: gl-promote, namespace: box1-gl-ci}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gl-promote-observe
+  namespace: box1-gl-dev
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gl-promote-observe
+  namespace: box1-gl-dev
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gl-promote-observe}
+subjects: [{kind: ServiceAccount, name: gl-promote, namespace: box1-gl-ci}]
+---
+# Workloads in box1-gl-dev pull the images CI pushed to box1-gl-ci.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-gl-dev-image-puller
+  namespace: box1-gl-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: system:image-puller}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:box1-gl-dev
+---
+# Registrar: creates Repository CRs for new box1-gl repositories.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gl-registrar
+  namespace: box1-gl-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gl-registrar
+  namespace: box1-gl-ci
+rules:
+  - apiGroups: [pipelinesascode.tekton.dev]
+    resources: [repositories]
+    verbs: [get, list, create]
+  # PaC's admission webhook only admits a Repository from someone who may
+  # create PipelineRuns in its namespace.
+  - apiGroups: [tekton.dev]
+    resources: [pipelineruns]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gl-registrar
+  namespace: box1-gl-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gl-registrar}
+subjects: [{kind: ServiceAccount, name: gl-registrar, namespace: box1-gl-ci}]

@@ -92,6 +92,12 @@ data:
         - host: forgejo.apps.ocp.box1.org
           username: ${FORGEJO_USERNAME}
           password: ${FORGEJO_TOKEN}
+      # GitLab CE proof (box1-docs#164 re-run). rhdh-bot token, written by the
+      # gitlab bootstrap Job into developer-hub-gitlab-secrets.
+      gitlab:
+        - host: gitlab.apps.ocp.box1.org
+          apiBaseUrl: https://gitlab.apps.ocp.box1.org/api/v4
+          token: ${GITLAB_TOKEN}
     kubernetes:
       serviceLocatorMethod:
         type: multiTenant

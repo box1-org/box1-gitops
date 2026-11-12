@@ -1,0 +1,86 @@
+# Wave 1: create the gitlab-admin Secret (root password and root API token) if missing.
+# The Deployment (wave 2) waits for it: it needs the root password and token.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-admin-secret
+  namespace: gitlab
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: gitlab-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: admin-secret
+          image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+          command: [python3, -I, /opt/bootstrap/bootstrap.py, admin-secret]
+          envFrom:
+            - configMapRef: {name: gitlab-params}
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: seed
+              mountPath: /opt/seed
+              readOnly: true
+      volumes:
+        - name: bootstrap
+          configMap: {name: gitlab-bootstrap}
+        - name: seed
+          configMap: {name: gitlab-workloads-seed, optional: true}
+---
+# After Forgejo is healthy: org, accounts, tokens, repos, branch protection,
+# project webhooks and the consumer Secrets. Idempotent; re-run by syncing.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-bootstrap
+  namespace: gitlab
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: gitlab-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+          command: [python3, -I, /opt/bootstrap/bootstrap.py, bootstrap]
+          envFrom:
+            - configMapRef: {name: gitlab-params}
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /opt/bootstrap
+              readOnly: true
+            - name: seed
+              mountPath: /opt/seed
+              readOnly: true
+      volumes:
+        - name: bootstrap
+          configMap: {name: gitlab-bootstrap}
+        - name: seed
+          configMap: {name: gitlab-workloads-seed, optional: true}

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitlab
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+---
+# Pipelines as Code for GitLab repositories, apart from box1-ci and box1-fj-ci.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-gl-ci
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box1-gl-dev
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops

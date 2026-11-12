@@ -1,0 +1,24 @@
+# One Application for every GitLab proof service. Credentials:
+# openshift-gitops/gitlab-repo-creds (argocd-bot, read_repository), written
+# by the bootstrap Job. No automated sync: gitlab-gitops-promote syncs exactly
+# the merge commit it produced.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitlab-proof-workloads
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://gitlab.apps.ocp.box1.org/box1-gl-gitops/workloads-proof.git
+    targetRevision: main
+    path: apps
+    directory:
+      recurse: true
+      include: '*.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: box1-gl-dev
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true

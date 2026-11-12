@@ -1,0 +1,47 @@
+# publish:gitlab creates the repository; nothing tells Pipelines as Code about
+# it, and GitLab CE has no group webhooks. For every box1-gl project with a
+# .tekton directory on its default branch, this CronJob creates the PaC
+# Repository CR and the project webhook. Known gap, see box1-docs#167.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gl-registrar
+  namespace: box1-gl-ci
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 100
+      template:
+        spec:
+          serviceAccountName: gl-registrar
+          restartPolicy: Never
+          containers:
+            - name: registrar
+              image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+              command: [python3, -I, /opt/registrar/registrar.py]
+              env:
+                - {name: GITLAB_URL, value: https://gitlab.apps.ocp.box1.org}
+                - {name: GITLAB_GROUP, value: box1-gl}
+                - {name: PAC_WEBHOOK_URL, value: "http://pipelines-as-code-controller.openshift-pipelines.svc:8080"}
+                - name: GITLAB_TOKEN
+                  valueFrom: {secretKeyRef: {name: gitlab-pac, key: provider.token}}
+                - name: WEBHOOK_SECRET
+                  valueFrom: {secretKeyRef: {name: gitlab-pac, key: webhook.secret}}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile: {type: RuntimeDefault}
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: script, mountPath: /opt/registrar, readOnly: true}
+          volumes:
+            - name: script
+              configMap: {name: gl-registrar}

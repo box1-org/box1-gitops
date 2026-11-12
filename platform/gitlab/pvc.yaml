@@ -1,0 +1,14 @@
+# /etc/gitlab (subPath etc) and /var/opt/gitlab (subPath opt): config, secrets,
+# PostgreSQL, Redis and Gitaly repositories. Lab scale, no HA.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-data
+  namespace: gitlab
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi

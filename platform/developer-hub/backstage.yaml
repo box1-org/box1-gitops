@@ -26,6 +26,8 @@ spec:
         - name: developer-hub-lightspeed-secrets
         # Written by the forgejo bootstrap Job (platform/forgejo).
         - name: developer-hub-forgejo-secrets
+        # Written by the gitlab bootstrap Job (platform/gitlab).
+        - name: developer-hub-gitlab-secrets
     extraFiles:
       mountPath: /opt/app-root/src
     route:

@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab
+  namespace: gitlab
+---
+# Omnibus needs to start as root (it drops privileges per service itself).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-anyuid
+  namespace: gitlab
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: system:openshift:scc:anyuid}
+subjects: [{kind: ServiceAccount, name: gitlab, namespace: gitlab}]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-bootstrap
+  namespace: gitlab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-bootstrap
+  namespace: gitlab
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [gitlab-admin, gitlab-dev-token]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-bootstrap
+  namespace: gitlab
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gitlab-bootstrap}
+subjects: [{kind: ServiceAccount, name: gitlab-bootstrap, namespace: gitlab}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: box1-gl-ci
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [gitlab-pac, gitlab-promote]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: box1-gl-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gitlab-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: gitlab-bootstrap, namespace: gitlab}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: rhdh
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [developer-hub-gitlab-secrets]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: rhdh
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gitlab-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: gitlab-bootstrap, namespace: gitlab}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [gitlab-repo-creds]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-bootstrap-secrets
+  namespace: openshift-gitops
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gitlab-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: gitlab-bootstrap, namespace: gitlab}]

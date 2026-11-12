@@ -14,6 +14,9 @@ data:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-github-dynamic
         disabled: false
+      # publish:gitlab for the GitLab proof (bundled, disabled by default).
+      - package: ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-gitlab-dynamic
+        disabled: false
       # publish:gitea for the Forgejo proof (box1-docs#164). Not bundled in RHDH 1.9.
       - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-scaffolder-backend-module-gitea@sha256:3e798b0af41f52e73d26df3b862bb339b2658bd633e1885bb4d64cfa5a803a56!backstage-plugin-scaffolder-backend-module-gitea
         disabled: false
