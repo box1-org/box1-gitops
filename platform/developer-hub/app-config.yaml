@@ -86,6 +86,12 @@ data:
               clientId: ${GITHUB_APP_CLIENT_ID}
               clientSecret: ${GITHUB_APP_CLIENT_SECRET}
               privateKey: ${GITHUB_APP_PRIVATE_KEY}
+      # Forgejo proof (box1-docs#164): Forgejo speaks the Gitea API. The token
+      # belongs to rhdh-bot and is written by the forgejo bootstrap Job.
+      gitea:
+        - host: forgejo.apps.ocp.box1.org
+          username: ${FORGEJO_USERNAME}
+          password: ${FORGEJO_TOKEN}
     kubernetes:
       serviceLocatorMethod:
         type: multiTenant

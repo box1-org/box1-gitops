@@ -40,6 +40,9 @@ spec:
                 f=/var/lib/gitea/secrets/$(echo "$k" | tr A-Z a-z)
                 [ -s "$f" ] || { forgejo generate secret "$k" > "$f"; chmod 0600 "$f"; }
               done
+              # OpenShift assigns an arbitrary UID per namespace; Forgejo refuses to
+              # start unless RUN_USER matches it. Persisted in app.ini on the PVC.
+              export FORGEJO____RUN_USER="$(id -un 2>/dev/null || id -u)"
               /usr/local/bin/docker-setup.sh
               forgejo migrate
               if forgejo admin user list --admin | awk 'NR>1{print $2}' | grep -qx "$ADMIN_USER"; then
