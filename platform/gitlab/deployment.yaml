@@ -24,7 +24,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: gitlab
-          image: docker.io/gitlab/gitlab-ce@sha256:bb79dc86267c557fd11e7feb0cd9dd506dd02e991ecdd6cae11ca7d7e5d36fc3  # 19.5.1-ce.0
+          image: docker.io/gitlab/gitlab-ce@sha256:fde2dacdec6307a142c3f28bc07c62e534bccf47bc7ffb3a4e81a90e1cf0c5b7  # 19.5.4-ce.0
           command: [/bin/bash, -c, "/opt/box1/seed-token.sh & exec /assets/init-container"]
           env:
             - name: GITLAB_OMNIBUS_CONFIG
