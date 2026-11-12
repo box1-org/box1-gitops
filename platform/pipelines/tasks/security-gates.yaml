@@ -36,10 +36,12 @@ spec:
     description: disabled is an auditable no-op; observe reports; gate fails on scanner or policy failure.
   - name: rhtpa-url
     type: string
-    default: https://tpa.apps.ocp.box1.org
+    default: ''
+    description: RHTPA base URL; empty means BOX1_TPA_URL, else https://tpa.apps.ocp.box1.org.
   - name: rhtpa-issuer
     type: string
-    default: https://keycloak.apps.ocp.box1.org/auth/realms/box1
+    default: ''
+    description: OIDC issuer for the rhtpa-ci client; empty means BOX1_OIDC_ISSUER, else https://keycloak.apps.ocp.box1.org/auth/realms/box1.
   - name: rhtpa-secret
     type: string
   - name: rhacs-endpoint
@@ -49,8 +51,8 @@ spec:
     type: string
   - name: rhacs-console-url
     type: string
-    default: https://acs.apps.ocp.box1.org
-    description: ACS Central console base URL, used to build a link to the scanned image.
+    default: ''
+    description: ACS Central console base URL, used to build a link to the scanned image; empty means BOX1_ACS_URL, else https://acs.apps.ocp.box1.org.
   results:
   - name: sbom-id
     type: string
@@ -121,12 +123,20 @@ spec:
           optional: true
     - name: ENFORCEMENT
       value: $(params.enforcement)
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: reports
       mountPath: /reports
     script: |
       #!/usr/bin/env python3
       import hashlib, io, json, os, pathlib, re, shutil, tarfile, urllib.parse, urllib.request
+      # Param, then the box1-platform-settings ConfigMap, then the homelab endpoint.
+      rhtpa_url=os.environ['RHTPA_URL'] or os.environ.get('BOX1_TPA_URL','https://tpa.apps.ocp.box1.org')
+      rhtpa_issuer=os.environ['RHTPA_ISSUER'] or os.environ.get('BOX1_OIDC_ISSUER','https://keycloak.apps.ocp.box1.org/auth/realms/box1')
       if os.environ['ENFORCEMENT']=='disabled':
           pathlib.Path('/tekton/results/sbom-id').write_text('disabled')
           pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text('disabled')
@@ -149,15 +159,15 @@ spec:
       if document.get('bomFormat')!='CycloneDX' or document.get('specVersion')!='1.5': raise SystemExit('Syft did not produce CycloneDX 1.5')
       labels={'labels.image-digest':digest,'labels.source-revision':revision,'labels.service':os.environ['APPLICATION_NAME'],'labels.source-repository':os.environ['SOURCE_REPOSITORY'],'labels.pipeline-run':os.environ['PIPELINE_RUN']}
       form=urllib.parse.urlencode({'grant_type':'client_credentials','client_id':os.environ['RHTPA_CLIENT_ID'],'client_secret':os.environ['RHTPA_CLIENT_SECRET']}).encode()
-      with urllib.request.urlopen(os.environ['RHTPA_ISSUER']+'/protocol/openid-connect/token', data=form, timeout=60) as response: token=json.load(response)['access_token']
-      endpoint=os.environ['RHTPA_URL']+'/api/v3/sbom?format=cyclonedx&cache=Wait&'+urllib.parse.urlencode(labels)
+      with urllib.request.urlopen(rhtpa_issuer+'/protocol/openid-connect/token', data=form, timeout=60) as response: token=json.load(response)['access_token']
+      endpoint=rhtpa_url+'/api/v3/sbom?format=cyclonedx&cache=Wait&'+urllib.parse.urlencode(labels)
       request=urllib.request.Request(endpoint, data=json.dumps(document).encode(), method='POST', headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
       with urllib.request.urlopen(request, timeout=300) as response:
           if response.status!=201: raise SystemExit('RHTPA rejected the SBOM')
           result=json.loads(response.read())
       sbom_id=result.get('id') or result.get('sbomId') or 'accepted'
       pathlib.Path('/tekton/results/sbom-id').write_text(sbom_id)
-      sbom_url=os.environ['RHTPA_URL'].rstrip('/')+'/sboms'+('' if sbom_id=='accepted' else '/'+urllib.parse.quote(sbom_id, safe=':'))
+      sbom_url=rhtpa_url.rstrip('/')+'/sboms'+('' if sbom_id=='accepted' else '/'+urllib.parse.quote(sbom_id, safe=':'))
       pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text(sbom_url)
       pathlib.Path('/tekton/results/LINK_TO_SBOM').write_text(sbom_url)
       print('RHTPA SBOM: '+sbom_url)
@@ -187,6 +197,11 @@ spec:
       value: /etc/rhacs-ca/ca.pem
     - name: RHACS_CONSOLE_URL
       value: $(params.rhacs-console-url)
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: reports
       mountPath: /reports
@@ -233,7 +248,8 @@ spec:
       # The ACS console addresses images by a UUIDv5 of (image full name, digest),
       # not by digest (stackrox pkg/images/utils NewImageV2ID). Ask Central for the
       # scanned image; use its id if it is already a UUID, otherwise derive it.
-      console=env['RHACS_CONSOLE_URL'].rstrip('/')
+      # Param, then the box1-platform-settings ConfigMap, then the homelab console.
+      console=(env['RHACS_CONSOLE_URL'] or env.get('BOX1_ACS_URL','https://acs.apps.ocp.box1.org')).rstrip('/')
       rhacs_url=console+'/main/vulnerabilities/all-images'
       try:
           import json, re, ssl, urllib.parse, uuid

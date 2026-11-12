@@ -59,6 +59,11 @@ spec:
   steps:
   - name: prepare
     image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/bin/sh
       set -eu
@@ -67,7 +72,7 @@ spec:
       echo "$IMAGE_DIGEST" | grep -Eq '^sha256:[a-f0-9]{64}$'
       echo "$CHANNEL" | grep -Eq '^(development|approval|production)$'
       token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-      source="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME@$IMAGE_DIGEST"
+      source="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME@$IMAGE_DIGEST"
       tracked="image-registry.openshift-image-registry.svc:5000/box1-ci/$IMAGE_NAME:$CHANNEL"
       buildah pull --creds "serviceaccount:$token" "$source"
       # bootc-image-builder records this reference as the installed system's update source.
@@ -85,10 +90,15 @@ spec:
   - name: package-push
     image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
     workingDir: /workspace
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/bin/sh
       set -eu
-      disk="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME-disk:$REVISION"
+      disk="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME-disk:$REVISION"
       ls -lsh output/qcow2/
       # KubeVirt containerDisk layout: the disk under /disk, owned by qemu (107).
       ctr=$(buildah from scratch)
@@ -102,4 +112,4 @@ spec:
       digest=$(cat /workspace/disk-digest)
       echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
       printf '%s' "$digest" > "$(results.disk-digest.path)"
-      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s-disk@%s\n' "$IMAGE_NAME" "$digest"
+      printf 'Published %s/box1-ci/%s-disk@%s\n' "${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}" "$IMAGE_NAME" "$digest"

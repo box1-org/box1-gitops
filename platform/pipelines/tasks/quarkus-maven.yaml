@@ -11,7 +11,8 @@ spec:
     default: ''
   - name: source-repo
     type: string
-    default: box1-org/quarkus-reference
+    default: ''
+    description: owner/name of the source repository; empty means <BOX1_GIT_ORG>/quarkus-reference (box1-org/quarkus-reference on the homelab).
   - name: git-auth-secret
     type: string
     default: ''
@@ -38,15 +39,21 @@ spec:
         secretKeyRef:
           name: "$(params.git-auth-secret)"
           key: git-provider-token
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: source
       mountPath: "/workspace"
     script: |
       #!/usr/bin/env python3
       import hashlib, io, os, pathlib, re, shutil, urllib.request, zipfile
-      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
+      org=os.environ.get('BOX1_GIT_ORG','box1-org')
+      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO'] or org+'/quarkus-reference'
       assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
-      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
+      assert re.fullmatch(re.escape(org)+'/[a-z0-9-]+',repo), 'Source repository outside '+org
       req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
           headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
       with urllib.request.urlopen(req,timeout=60) as response:
@@ -80,6 +87,11 @@ spec:
       value: "$(params.push-image)"
     - name: IMAGE_NAME
       value: "$(params.image-name)"
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: source
       mountPath: "/workspace"
@@ -99,7 +111,7 @@ spec:
         export QUARKUS_CONTAINER_IMAGE_PASSWORD="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
         mvn -B -ntp -s "$BOX1_MAVEN_SETTINGS" -Dmaven.repo.local=/workspace/m2 -Dmaven.repo.local.tail="$BOX1_MAVEN_TAIL" package -DskipTests \
           -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true \
-          -Dquarkus.container-image.registry=registry.apps.ocp.box1.org \
+          -Dquarkus.container-image.registry="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}" \
           -Dquarkus.container-image.group=box1-ci -Dquarkus.container-image.name="$IMAGE_NAME" \
           -Dquarkus.container-image.tag="$REVISION"
         unset QUARKUS_CONTAINER_IMAGE_PASSWORD
