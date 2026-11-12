@@ -69,7 +69,9 @@ spec:
           [ -f "$f" ] || continue
           case "$f" in *.yaml|*.yml) ;; *) continue;; esac
           mkdir -p "/workspace/json/$(dirname "$f")"
-          oc create --dry-run=client -o json -f "$f" > "/workspace/json/$f.json"
+          # -n: objects without a namespace get the target one; oc refuses a
+          # manifest that names a different namespace.
+          oc create --dry-run=client -o json -n box1-fj-dev -f "$f" > "/workspace/json/$f.json"
         done < /workspace/src/changed-files
     - name: check
       image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
