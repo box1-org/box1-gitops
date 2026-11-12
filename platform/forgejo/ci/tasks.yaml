@@ -31,6 +31,8 @@ spec:
     securityContext:
       allowPrivilegeEscalation: false
       runAsNonRoot: true
+      # The pipeline SA's SCC assigns no UID and the cli image defaults to root.
+      runAsUser: 1001
       capabilities: {drop: [ALL]}
     volumeMounts:
       - {name: src, mountPath: /workspace/src}
