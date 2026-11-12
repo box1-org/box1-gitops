@@ -34,7 +34,9 @@ KUBE = "https://kubernetes.default.svc"
 # Account -> (team, token scopes). Scopes follow Forgejo's token scope names.
 ACCOUNTS = {
     "rhdh-bot": ("writers", ["write:repository", "write:organization", "read:user"]),
-    "pac-bot": ("writers", ["write:repository", "write:issue", "read:user", "read:organization"]),
+    # Repo admin: PaC asks Forgejo for the PR author's permission on the repo,
+    # which Forgejo allows only to repo admins. Scoped token, no admin:* scope.
+    "pac-bot": ("ci-admins", ["write:repository", "write:issue", "read:user", "read:organization"]),
     "promote-bot": ("writers", ["write:repository", "write:issue", "read:user"]),
     "argocd-bot": ("readers", ["read:repository"]),
     P.get("DEVSPACES_USER", "box1-dev"): ("writers", ["write:repository", "write:issue", "read:user"]),
@@ -156,7 +158,8 @@ def ensure_org(admin):
                                   "repo_admin_change_team_access": False}, auth=admin), "create org")
         log(f"org {ORG} created")
     teams = {t["name"]: t for t in must(fj("GET", f"/orgs/{ORG}/teams", auth=admin), "list teams")}
-    for name, perm, create in (("writers", "write", True), ("readers", "read", False)):
+    for name, perm, create in (("writers", "write", True), ("readers", "read", False),
+                               ("ci-admins", "admin", False)):
         if name not in teams:
             body = {"name": name, "permission": perm, "includes_all_repositories": True,
                     "can_create_org_repo": create, "units": TEAM_UNITS,
