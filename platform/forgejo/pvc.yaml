@@ -5,6 +5,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: forgejo-data
   namespace: forgejo
+  annotations:
+    # Same wave as the Deployment: lvms binds on first consumer, so an earlier
+    # wave would wait forever for the claim to become healthy.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   accessModes: [ReadWriteOnce]
   resources:
