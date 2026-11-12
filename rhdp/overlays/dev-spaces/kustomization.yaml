@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# CheCluster and Argo CD access from platform/. The homelab owner's sandbox
+# is dropped; rhdp/components/sandboxes creates per-user sandboxes from
+# multi_user when devSpaces.sandboxes is true.
+resources:
+  - ../../../platform/dev-spaces/instance
+patches:
+  - target: {kind: Namespace, name: mike-sandbox}
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: mike-sandbox
+  - target: {kind: RoleBinding, name: sandbox-owner-edit}
+    patch: |
+      $patch: delete
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: sandbox-owner-edit

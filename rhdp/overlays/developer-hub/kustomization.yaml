@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Developer Hub from platform/. The root chart patches developer-hub-platform-env
+# (URLs, org, onboarding plugin), the route host, the plugin PVC class and the
+# Lightspeed/LiteMaaS wiring. run.py creates the Secrets the homelab made by
+# hand and replaces platform/gitops/developer-hub-access, which must not run
+# on RHDP because it overwrites the ArgoCD CR's RBAC policy.
+resources:
+  - ../../../platform/developer-hub
+  - inputs-access.yaml
+  - cluster-access.yaml
+components:
+  - ../_components/platform-settings
+  - ../_components/credentials
+configMapGenerator:
+  - name: box1-credentials-script
+    files:
+      - run.py
+    options:
+      disableNameSuffixHash: true
+patches:
+  # The shared credentials Component cannot know its namespace.
+  - target: {kind: RoleBinding, name: box1-credentials}
+    patch: |
+      - {op: add, path: /subjects/0/namespace, value: rhdh}

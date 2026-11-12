@@ -1,0 +1,4 @@
+# Injected by ocp4_workload_field_content when create_multi_user is true:
+#   multi_user: {num_users: N, users: [{username: user1}, ...]}
+multi_user: {}
+profiles: {}

@@ -322,3 +322,63 @@ components:
     syncWave: "2"
     settings: true
     kustomizeTemplate: box1.k.pipelinesCi
+  developerHubOperator:
+    profiles: [developer]
+    name: developer-hub-operator
+    path: platform/developer-hub/operator
+    namespace: rhdh-operator
+    syncWave: "0"
+    subscriptions: [rhdh]
+  developerHub:
+    profiles: [developer]
+    requires: {profiles: [rhbk]}
+    name: developer-hub
+    path: rhdp/overlays/developer-hub
+    namespace: rhdh
+    syncWave: "3"
+    settings: true
+    kustomizeTemplate: box1.k.developerHub
+  devSpacesOperator:
+    profiles: [developer]
+    name: dev-spaces-operator
+    path: platform/dev-spaces/operator
+    namespace: openshift-devspaces
+    syncWave: "0"
+    subscriptions: [devspaces]
+  devSpaces:
+    profiles: [developer]
+    name: dev-spaces
+    path: rhdp/overlays/dev-spaces
+    namespace: openshift-devspaces
+    syncWave: "2"
+  sandboxes:
+    profiles: [developer]
+    requires: {values: [devSpaces.sandboxes, multi_user.users]}
+    name: box1-sandboxes
+    path: rhdp/components/sandboxes
+    helm: true
+    namespace: openshift-gitops
+    syncWave: "3"
+  reposilite:
+    profiles: [developer]
+    name: reposilite
+    path: platform/reposilite
+    namespace: box1-maven
+    syncWave: "1"
+    routeHosts: [{name: reposilite, prefix: reposilite}]
+  mailhog:
+    profiles: [developer]
+    name: mailhog
+    path: platform/mailhog
+    namespace: mailhog
+    syncWave: "1"
+    routeHosts: [{name: mailhog, prefix: mailhog}]
+  # Service Applications from the demo organization's box1-workloads-dev fork.
+  workloadsDev:
+    profiles: [developer]
+    name: box1-workloads-dev
+    repoURL: "https://{{ .Values.git.host }}/{{ .Values.git.org }}/{{ .Values.git.repos.workloadsDev }}.git"
+    targetRevision: "{{ .Values.git.workloadsRevision }}"
+    path: applications
+    namespace: openshift-gitops
+    syncWave: "4"

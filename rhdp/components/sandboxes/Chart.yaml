@@ -1,0 +1,5 @@
+apiVersion: v2
+name: box1-sandboxes
+description: Per-user Dev Spaces sandbox namespaces for RHDP multi-user labs
+type: application
+version: 0.1.0

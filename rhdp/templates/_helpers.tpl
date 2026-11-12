@@ -123,6 +123,8 @@ BOX1_PROFILES: {{ join "," $on | quote }}
 {{- $opt := list -}}
 {{- range $k, $v := .Values.ci.optionalRepositories -}}{{- if $v -}}{{- $opt = append $opt $k -}}{{- end -}}{{- end }}
 BOX1_CI_OPTIONAL: {{ join "," $opt | quote }}
+BOX1_LITEMAAS: {{ ternary "true" "false" (eq (include "box1.litemaasEnabled" .) "true") | quote }}
+BOX1_ONBOARDING_PLUGIN_PACKAGE: {{ .Values.developerHub.onboardingPluginPackage | quote }}
 BOX1_SYSTEM_NAMESPACE: {{ .Values.system.namespace | quote }}
 BOX1_INPUTS_SECRET: {{ .Values.system.inputsSecret | quote }}
 {{- end -}}
@@ -173,10 +175,11 @@ target:
 patch: {{ toYaml $p | quote }}
 {{- end -}}
 
-{{/* Args: dict root name - settings data into a ConfigMap (default box1-platform-settings) */}}
+{{/* Args: dict root name extra - settings data (plus extra overrides) into a ConfigMap (default box1-platform-settings) */}}
 {{- define "box1.patch.settings" -}}
 {{- $name := .name | default "box1-platform-settings" -}}
-{{- $p := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" $name) "data" (include "box1.settings" .root | fromYaml) -}}
+{{- $data := merge (default dict .extra) (include "box1.settings" .root | fromYaml) -}}
+{{- $p := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" $name) "data" $data -}}
 target:
   kind: ConfigMap
   name: {{ $name }}
@@ -203,6 +206,15 @@ patch: {{ toYaml .ops | quote }}
 {{/* Args: dict root kind name apiVersion spec - strategic-merge patch of spec (CRs: JSON merge semantics) */}}
 {{- define "box1.patch.spec" -}}
 {{- $p := dict "apiVersion" .apiVersion "kind" .kind "metadata" (dict "name" .name) "spec" .spec -}}
+target:
+  kind: {{ .kind }}
+  name: {{ .name }}
+patch: {{ toYaml $p | quote }}
+{{- end -}}
+
+{{/* Args: dict kind name body - strategic-merge patch with an arbitrary body (kind/metadata added) */}}
+{{- define "box1.patch.object" -}}
+{{- $p := merge (dict "kind" .kind "metadata" (dict "name" .name)) .body -}}
 target:
   kind: {{ .kind }}
   name: {{ .name }}

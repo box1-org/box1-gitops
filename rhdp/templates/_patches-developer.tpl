@@ -67,3 +67,35 @@ images:
   - {{ printf "image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder=%s" $v.ci.builderImage | quote }}
 {{- end }}
 {{- end -}}
+
+{{- define "box1.k.developerHub" -}}
+{{- $root := .root -}}
+{{- $v := $root.Values -}}
+{{- $d := include "box1.domain" $root -}}
+{{- $lightspeed := ternary (eq (include "box1.litemaasEnabled" $root) "true") (eq (toString $v.developerHub.lightspeed) "true") (eq (toString $v.developerHub.lightspeed) "auto") -}}
+{{- $base := "/spec/deployment/patch/spec/template/spec" -}}
+patches:
+  {{- /* In-cluster API: the RHDP API certificate is not publicly trusted; the
+         platform-trust bundle carries the service-account CA. */}}
+  - {{ include "box1.patch.settings" (dict "root" $root "name" "developer-hub-platform-env" "extra" (dict "BOX1_API_URL" "https://kubernetes.default.svc")) | nindent 4 | trim }}
+  - {{ include "box1.patch.spec" (dict "apiVersion" "rhdh.redhat.com/v1alpha5" "kind" "Backstage" "name" "developer-hub" "spec" (dict "application" (dict "route" (dict "host" (printf "developer-hub.%s" $d))))) | nindent 4 | trim }}
+  - {{ include "box1.patch.pvc" (dict "root" $root "name" "dynamic-plugins-root") | nindent 4 | trim }}
+  {{- if $lightspeed }}
+  {{- $env := dict "VLLM_URL" $v.litemaas.apiUrl "VLLM_MODEL" $v.litemaas.model "VLLM_TLS_VERIFY" "true" "VLLM_API_KEY" nil }}
+  - {{ include "box1.patch.object" (dict "kind" "ConfigMap" "name" "developer-hub-llama-stack-env" "body" (dict "apiVersion" "v1" "data" $env)) | nindent 4 | trim }}
+  - {{ include "box1.patch.json" (dict "kind" "Backstage" "name" "developer-hub" "ops" (list
+        (dict "op" "test" "path" (printf "%s/containers/1/name" $base) "value" "llama-stack")
+        (dict "op" "add" "path" (printf "%s/containers/1/envFrom/-" $base) "value" (dict "secretRef" (dict "name" "developer-hub-lightspeed-litemaas"))))) | nindent 4 | trim }}
+  {{- else }}
+  {{- /* No model endpoint: drop the Lightspeed sidecars and the RAG init container. */}}
+  - {{ include "box1.patch.json" (dict "kind" "Backstage" "name" "developer-hub" "ops" (list
+        (dict "op" "test" "path" (printf "%s/containers/2/name" $base) "value" "lightspeed-core")
+        (dict "op" "remove" "path" (printf "%s/containers/2" $base))
+        (dict "op" "test" "path" (printf "%s/containers/1/name" $base) "value" "llama-stack")
+        (dict "op" "remove" "path" (printf "%s/containers/1" $base))
+        (dict "op" "test" "path" (printf "%s/initContainers/1/name" $base) "value" "init-rag-data")
+        (dict "op" "remove" "path" (printf "%s/initContainers/1" $base)))) | nindent 4 | trim }}
+  - {{ include "box1.patch.delete" (dict "kind" "ConfigMap" "name" "developer-hub-llama-stack-env") | nindent 4 | trim }}
+  {{- end }}
+{{- end -}}
+

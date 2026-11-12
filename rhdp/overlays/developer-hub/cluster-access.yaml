@@ -1,0 +1,133 @@
+# Access for the rhdh credential reconciler (run.py).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdh-credentials
+  namespace: keycloak
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [keycloak-client-secret-developer-hub]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdh-credentials
+  namespace: keycloak
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdh-credentials
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdh-credentials
+  namespace: openshift-config-managed
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [default-ingress-cert]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdh-credentials
+  namespace: openshift-config-managed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdh-credentials
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdh-credentials
+  namespace: box1-plugins
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [rhdh-plugin-puller-token]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdh-credentials
+  namespace: box1-plugins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdh-credentials
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: rhdh
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdh-litemaas
+  namespace: box1-rhdp-system
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [box1-rhdp-litemaas]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdh-litemaas
+  namespace: box1-rhdp-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdh-litemaas
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: rhdh
+# Argo CD: an apiKey account for Developer Hub (read-only policy lines are
+# appended to the existing policy, never replaced), and the admin password
+# used once to mint its token.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdh-argocd
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [argocds]
+    resourceNames: [openshift-gitops]
+    verbs: [get, patch]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [openshift-gitops-cluster]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdh-argocd
+  namespace: openshift-gitops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdh-argocd
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: rhdh

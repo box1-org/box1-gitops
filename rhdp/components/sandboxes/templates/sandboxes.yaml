@@ -1,0 +1,34 @@
+{{- /* Same shape as platform/dev-spaces/sandboxes/mike.yaml, one per lab user. */}}
+{{- $mesh := .Values.profiles.operate }}
+{{- range (.Values.multi_user.users | default list) }}
+{{- $user := .username }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $user }}-sandbox
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    box1.org/sandbox-owner: {{ $user }}
+    pod-security.kubernetes.io/enforce: restricted
+    {{- if $mesh }}
+    istio.io/dataplane-mode: ambient
+    istio-discovery: enabled
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sandbox-owner-edit
+  namespace: {{ $user }}-sandbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: {{ $user }}
+{{- end }}
