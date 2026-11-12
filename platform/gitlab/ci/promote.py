@@ -255,8 +255,16 @@ def main():
         sys.exit(f"MR author {mr['author']['username']} is not {BOT}")
     if mr["sha"] != head:
         sys.exit("MR head moved after it was opened")
-    diffs = must(gl("GET", f"/projects/{GP}/merge_requests/{iid}/diffs?per_page=100"), "MR diffs")
-    changed = {d["new_path"] for d in diffs} | {d["old_path"] for d in diffs}
+    # GitLab builds the MR diff asynchronously: wait until it exists for this head.
+    changed = set()
+    for _ in range(24):
+        mr = must(gl("GET", f"/projects/{GP}/merge_requests/{iid}"), "read MR")
+        if (mr.get("diff_refs") or {}).get("head_sha") == head:
+            diffs = must(gl("GET", f"/projects/{GP}/merge_requests/{iid}/diffs?per_page=100"), "MR diffs")
+            changed = {d["new_path"] for d in diffs} | {d["old_path"] for d in diffs}
+            if changed:
+                break
+        time.sleep(5)
     if changed != set(files):
         sys.exit(f"MR changes unexpected files: {sorted(changed ^ set(files))}")
 
