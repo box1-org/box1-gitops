@@ -183,7 +183,11 @@ target:
 patch: {{ toYaml .ops | quote }}
 {{- end -}}
 
-{{/* kustomize images entry replacing the homelab ART cli image. */}}
-{{- define "box1.image.cli" -}}
-quay.io/openshift-release-dev/ocp-v5.0-art-dev={{ .Values.images.cli }}
+{{/* Args: dict root kind name apiVersion spec - strategic-merge patch of spec (CRs: JSON merge semantics) */}}
+{{- define "box1.patch.spec" -}}
+{{- $p := dict "apiVersion" .apiVersion "kind" .kind "metadata" (dict "name" .name) "spec" .spec -}}
+target:
+  kind: {{ .kind }}
+  name: {{ .name }}
+patch: {{ toYaml $p | quote }}
 {{- end -}}

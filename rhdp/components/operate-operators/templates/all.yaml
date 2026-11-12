@@ -1,5 +1,0 @@
-{{- range $path, $asset := .Files.Glob "files/**" }}
----
-{{ $content := $asset | toString }}
-{{ $content | replace "installPlanApproval: Manual" (printf "installPlanApproval: %s" $.Values.operators.installPlanApproval) }}
-{{- end }}

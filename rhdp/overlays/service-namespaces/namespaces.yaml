@@ -1,0 +1,53 @@
+# Development service namespaces are prerequisites for the mesh waypoint
+# RoleBindings, the logging collector and the MailHog NetworkPolicy. On RHDP
+# they exist before the forked box1-workloads-dev creates its workloads; that
+# repository may also declare them (Argo CD then reports a shared resource).
+# Prune and Delete are off so removing this Application never deletes them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: order-service-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inventory-service-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fulfillment-adapter-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: notification-service-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: asset-service-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-controller-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: operations-console-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false

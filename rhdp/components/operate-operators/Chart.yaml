@@ -1,5 +1,0 @@
-apiVersion: v2
-name: box1-operate-operators
-description: Operators required by the Box1 operate profile
-type: application
-version: 0.1.0

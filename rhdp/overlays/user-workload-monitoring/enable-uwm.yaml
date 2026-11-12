@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: box1-enable-uwm
+  namespace: openshift-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-enable-uwm
+  namespace: openshift-monitoring
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [cluster-monitoring-config]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-enable-uwm
+  namespace: openshift-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-enable-uwm
+subjects:
+  - kind: ServiceAccount
+    name: box1-enable-uwm
+    namespace: openshift-monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: box1-enable-uwm
+  namespace: openshift-monitoring
+data:
+  enable-uwm.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    cm=cluster-monitoring-config
+    if ! oc get configmap "$cm" -n openshift-monitoring >/dev/null 2>&1; then
+      oc create configmap "$cm" -n openshift-monitoring --from-literal=config.yaml='enableUserWorkload: true'
+      echo "created $cm with enableUserWorkload: true"; exit 0
+    fi
+    oc get configmap "$cm" -n openshift-monitoring -o jsonpath='{.data.config\.yaml}' >/tmp/config.yaml
+    if grep -Eq '^enableUserWorkload:[[:space:]]*true[[:space:]]*$' /tmp/config.yaml; then
+      echo "user workload monitoring already enabled"; exit 0
+    elif grep -Eq '^enableUserWorkload:' /tmp/config.yaml; then
+      sed -i -E 's/^enableUserWorkload:.*/enableUserWorkload: true/' /tmp/config.yaml
+    else
+      printf '\nenableUserWorkload: true\n' >>/tmp/config.yaml
+    fi
+    oc set data configmap/"$cm" -n openshift-monitoring --from-file=config.yaml=/tmp/config.yaml
+    echo "merged enableUserWorkload: true into $cm"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: box1-enable-uwm
+  namespace: openshift-monitoring
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      serviceAccountName: box1-enable-uwm
+      restartPolicy: OnFailure
+      containers:
+        - name: enable
+          image: box1-cli
+          command: [/bin/bash, /scripts/enable-uwm.sh]
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+      volumes:
+        - name: scripts
+          configMap:
+            name: box1-enable-uwm

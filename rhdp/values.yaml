@@ -203,3 +203,83 @@ components:
     helm: true
     namespace: keycloak
     syncWave: "1"
+
+  # ----- shared ---------------------------------------------------------------
+  serviceNamespaces:
+    profiles: [developer, operate]
+    name: box1-service-namespaces
+    path: rhdp/overlays/service-namespaces
+    namespace: openshift-gitops
+    syncWave: "0"
+
+  # ----- operate --------------------------------------------------------------
+  serviceMeshOperators:
+    profiles: [operate]
+    name: service-mesh-operators
+    path: platform/service-mesh/operators
+    namespace: openshift-operators
+    syncWave: "0"
+    subscriptions: [servicemesh, kiali]
+  serviceMeshNetwork:
+    profiles: [operate]
+    name: service-mesh-network
+    path: platform/service-mesh/network
+    namespace: openshift-gitops
+    syncWave: "0"
+    # Partial Network object: Argo CD must own only this field.
+    syncOptions: [ServerSideApply=true]
+  serviceMesh:
+    profiles: [operate]
+    name: service-mesh-control-plane
+    path: platform/service-mesh/mesh
+    namespace: istio-system
+    syncWave: "1"
+  kiali:
+    profiles: [operate]
+    name: service-mesh-kiali
+    path: platform/service-mesh/kiali
+    namespace: istio-system
+    syncWave: "2"
+    kustomizeTemplate: box1.k.kiali
+  observabilityOperators:
+    profiles: [operate]
+    name: observability-operators
+    path: platform/observability/operators
+    namespace: openshift-operators
+    syncWave: "0"
+    subscriptions: [coo, logging, loki, otel, tempo]
+  userWorkloadMonitoring:
+    profiles: [operate]
+    name: user-workload-monitoring
+    path: rhdp/overlays/user-workload-monitoring
+    namespace: openshift-monitoring
+    syncWave: "0"
+    cliImage: true
+  observabilityLogging:
+    profiles: [operate]
+    requires: {objectStore: true, rwoClass: true}
+    name: observability-logging
+    path: platform/observability/logging
+    namespace: openshift-logging
+    syncWave: "1"
+    obcs: [logging-loki]
+    cliImage: true
+    kustomizeTemplate: box1.k.observabilityLogging
+  observabilityTracing:
+    profiles: [operate]
+    name: observability-tracing
+    path: platform/observability/tracing
+    namespace: box1-observability
+    syncWave: "1"
+  observabilityConsole:
+    profiles: [operate]
+    name: observability-console
+    path: platform/observability/console
+    namespace: openshift-cluster-observability-operator
+    syncWave: "2"
+  observabilityDashboards:
+    profiles: [operate]
+    name: observability-dashboards
+    path: platform/observability/dashboards
+    namespace: box1-observability
+    syncWave: "2"

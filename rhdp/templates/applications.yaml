@@ -22,7 +22,8 @@
 {{- $patches = append $patches (include "box1.patch.settings" $ | fromYaml) }}
 {{- end }}
 {{- if $c.cliImage }}
-{{- $images = append $images (include "box1.image.cli" $) }}
+{{- $images = append $images (printf "quay.io/openshift-release-dev/ocp-v5.0-art-dev=%s" $.Values.images.cli) }}
+{{- $images = append $images (printf "box1-cli=%s" $.Values.images.cli) }}
 {{- end }}
 {{- if $c.kustomizeTemplate }}
 {{- $k := include $c.kustomizeTemplate (dict "root" $ "c" $c) | fromYaml }}
