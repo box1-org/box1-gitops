@@ -194,7 +194,7 @@ def mint_token(user, password, scopes):
 
 def consumer_secrets():
     """Where each account's token lives, and how to read it back."""
-    ci, rhdh, argo, ds = CI_NS, P["RHDH_NAMESPACE"], P["ARGOCD_NAMESPACE"], P["DEVSPACES_NAMESPACE"]
+    ci, rhdh, argo = CI_NS, P["RHDH_NAMESPACE"], P["ARGOCD_NAMESPACE"]
     dev = P.get("DEVSPACES_USER", "box1-dev")
     return {
         "rhdh-bot": (rhdh, "developer-hub-forgejo-secrets", "FORGEJO_TOKEN",
@@ -206,11 +206,10 @@ def consumer_secrets():
                        lambda u, t: ({"type": "git", "url": f"https://{HOST}/{ORG}",
                                       "username": u, "password": t},
                                      {"argocd.argoproj.io/secret-type": "repo-creds"}, {})),
-        dev: (ds, "forgejo-git-credentials", "token",
-              lambda u, t: ({"credentials": f"https://{u}:{t}@{HOST}", "token": t},
-                            {"controller.devfile.io/git-credential": "true",
-                             "controller.devfile.io/watch-secret": "true"},
-                            {})),
+        # Dev Spaces namespaces are not GitOps-managed: the developer copies this
+        # into a git-credentials Secret in their own namespace (see README).
+        dev: ("forgejo", "forgejo-dev-token", "token",
+              lambda u, t: ({"username": u, "token": t}, {}, {})),
     }
 
 

@@ -19,7 +19,11 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [get, create, patch]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [forgejo-admin, forgejo-dev-token]
+    verbs: [get, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -93,27 +97,5 @@ kind: RoleBinding
 metadata:
   name: forgejo-bootstrap-secrets
   namespace: openshift-gitops
-roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
-subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: forgejo-bootstrap-secrets
-  namespace: mike-devspaces
-rules:
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [create]
-  - apiGroups: [""]
-    resources: [secrets]
-    resourceNames: [forgejo-git-credentials]
-    verbs: [get, patch]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: forgejo-bootstrap-secrets
-  namespace: mike-devspaces
 roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
 subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
