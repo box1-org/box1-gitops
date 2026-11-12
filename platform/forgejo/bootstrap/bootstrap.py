@@ -133,8 +133,11 @@ def wait_forgejo():
 
 
 def token_works(token):
+    # 401 means the token is unknown or revoked. A narrowly scoped token (for
+    # example read:repository only) gets 403 from /user, which still proves it
+    # is valid.
     code, _ = fj("GET", "/user", token=token)
-    return code == 200
+    return code in (200, 403)
 
 
 # ---------------------------------------------------------------- modes
