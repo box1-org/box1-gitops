@@ -163,7 +163,7 @@ def ensure_org(admin):
         if name not in teams:
             body = {"name": name, "permission": perm, "includes_all_repositories": True,
                     "can_create_org_repo": create, "units": TEAM_UNITS,
-                    "units_map": {u: perm for u in TEAM_UNITS}}
+                    "units_map": {u: ("write" if perm == "admin" else perm) for u in TEAM_UNITS}}
             teams[name] = must(fj("POST", f"/orgs/{ORG}/teams", body, auth=admin), f"team {name}")
             log(f"team {name} created")
     return teams
