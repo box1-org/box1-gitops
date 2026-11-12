@@ -1,0 +1,56 @@
+# Mirrors every non-archived github.com/box1-org repository into the private
+# GitLab group box1-org-mirror: all branches and tags, exactly (force-updates
+# and deletions included). Issues and PRs are not copied. GitHub stays the
+# source of truth; the mirror projects are overwritten on every run.
+#
+# Run on demand:  oc create job -n gitlab --from=cronjob/github-mirror github-mirror-manual-$(date +%s)
+#
+# Private GitHub repositories need a read-only token in the hand-made Secret
+# gitlab/github-mirror (key: token; fine-grained PAT with Contents: read on
+# box1-org). Without it, private repositories are skipped and logged.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-mirror
+  namespace: gitlab
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          containers:
+            - name: mirror
+              image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+              command: [python3, -I, /opt/mirror/mirror.py]
+              env:
+                - {name: GITHUB_ORG, value: box1-org}
+                - {name: GITLAB_URL, value: https://gitlab.apps.ocp.box1.org}
+                - {name: MIRROR_GROUP, value: box1-org-mirror}
+                - name: GITLAB_TOKEN
+                  valueFrom: {secretKeyRef: {name: gitlab-mirror-token, key: token}}
+                - name: GITHUB_TOKEN
+                  valueFrom: {secretKeyRef: {name: github-mirror, key: token, optional: true}}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {cpu: "1", memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile: {type: RuntimeDefault}
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: work, mountPath: /work}
+                - {name: script, mountPath: /opt/mirror, readOnly: true}
+          volumes:
+            - name: work
+              emptyDir: {sizeLimit: 2Gi}
+            - name: script
+              configMap: {name: github-mirror}

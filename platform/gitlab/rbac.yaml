@@ -30,7 +30,7 @@ rules:
     verbs: [create]
   - apiGroups: [""]
     resources: [secrets]
-    resourceNames: [gitlab-admin, gitlab-dev-token]
+    resourceNames: [gitlab-admin, gitlab-dev-token, gitlab-mirror-token]
     verbs: [get, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

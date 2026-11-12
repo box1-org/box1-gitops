@@ -25,6 +25,7 @@ GL = P.get("GITLAB_INTERNAL_URL", "http://gitlab.gitlab.svc:8929").rstrip("/")
 HOST = P["GITLAB_HOST"]
 GROUP = P["GITLAB_GROUP"]            # service repositories (RHDH creates them)
 GITOPS_GROUP = P["GITOPS_GROUP"]     # GitOps target, only promote-bot may merge
+MIRROR_GROUP = P.get("MIRROR_GROUP", "box1-org-mirror")  # github-mirror CronJob target
 CI_NS = P["CI_NAMESPACE"]
 GITOPS_REPO = P["GITOPS_REPO"]
 DEV = P.get("DEVSPACES_USER", "box1-dev")
@@ -287,6 +288,20 @@ def ensure_hook(pid, secret):
     log(f"project webhook -> {url}")
 
 
+def ensure_mirror():
+    """Group and account for the github-mirror CronJob. Only mirror-bot is a
+    member (Maintainer: creates projects, force-pushes, removes protection)."""
+    group = ensure_group(MIRROR_GROUP, "maintainer")
+    bot = ensure_user("mirror-bot")
+    ensure_member("groups", group["id"], bot, MAINTAINER)
+    current = get_secret("gitlab", "gitlab-mirror-token") or {}
+    if current.get("token") and token_works(current["token"]):
+        log("mirror-bot: token in gitlab/gitlab-mirror-token still valid")
+    else:
+        put_secret("gitlab", "gitlab-mirror-token", {"username": "mirror-bot", "token": mint_token(bot, ["api", "write_repository"])})
+        log("mirror-bot: new token")
+
+
 def bootstrap():
     wait_root()
     settings()
@@ -329,6 +344,7 @@ def bootstrap():
                 put_secret(ns, sname, {"provider.token": token, "webhook.secret": webhook})
     ensure_gitops_repo(gitops, webhook)
     must(gl("PUT", f"/groups/{gitops['id']}", {"project_creation_level": "noone"}), "lock gitops group")
+    ensure_mirror()
     log("done")
 
 

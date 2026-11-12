@@ -19,6 +19,7 @@ resources:
   - ci/registrar.yaml
   - ci/tasks.yaml
   - ci/argocd.yaml
+  - mirror/cronjob.yaml
 configMapGenerator:
   - name: gitlab-params
     namespace: gitlab
@@ -41,6 +42,9 @@ configMapGenerator:
   - name: gl-registrar
     namespace: box1-gl-ci
     files: [ci/registrar.py]
+  - name: github-mirror
+    namespace: gitlab
+    files: [mirror/mirror.py]
 generatorOptions:
   disableNameSuffixHash: true
 replacements:
