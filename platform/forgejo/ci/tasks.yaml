@@ -53,11 +53,10 @@ spec:
         git config --global credential.helper store
         cd /workspace/src && git init -q repo && cd repo
         git remote add origin "$REPO_URL"
-        git fetch -q --depth=50 origin "$REVISION" "$TARGET"
+        git fetch -q --depth=100 origin "+refs/heads/$TARGET:refs/remotes/origin/$TARGET" "$REVISION"
         git checkout -q --detach "$REVISION"
-        base=$(git merge-base FETCH_HEAD "$REVISION" 2>/dev/null || git rev-parse "origin/$TARGET" 2>/dev/null || true)
-        [ -n "$base" ] || base=$(git rev-parse FETCH_HEAD)
-        git diff --name-only "$base" "$REVISION" | tee /workspace/src/changed-files
+        base=$(git merge-base "origin/$TARGET" "$REVISION")
+        git diff --name-only --no-renames "$base" "$REVISION" | tee /workspace/src/changed-files
         rm -f "$HOME/.git-credentials"
     - name: render
       # Parses every changed manifest with the cluster's own oc (client-side only).
