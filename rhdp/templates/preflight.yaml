@@ -178,7 +178,7 @@ data:
     [ "$allowed" = true ] && report ok "argocd controller is cluster-admin" || report FAIL "argocd controller lacks cluster-admin (set ocp4_workload_openshift_gitops_setup_cluster_admin: true)"
 
     {{- if .Values.components.kafka }}
-    {{- if include "box1.profileOn" (dict "root" . "c" .Values.components.kafka) }}
+    {{- if and (include "box1.profileOn" (dict "root" . "c" .Values.components.kafka)) (not (include "box1.skipReason" (dict "root" . "c" .Values.components.kafka))) }}
     served=$(oc get crd kafkas.kafka.strimzi.io -o jsonpath='{range .spec.versions[?(@.served==true)]}{.name}{" "}{end}' 2>/dev/null)
     case " $served " in *" v1 "*) report ok "kafka.strimzi.io/v1 served";; *) report FAIL "kafka.strimzi.io/v1 not served (served: ${served:-none})";; esac
     {{- end }}
