@@ -1,7 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Forgejo proof (box1-docs#164). A self-contained Git server plus an idempotent
-# bootstrap. Replay on another cluster by changing params.env only.
+# Forgejo proof (box1-docs#164). A self-contained Git server, an idempotent
+# bootstrap, and the Forgejo CI/CD lane (ci/). To replay on another cluster,
+# change params.env and the Forgejo host in ci/*.yaml (not yet parameterized).
 labels:
   - pairs:
       app.kubernetes.io/part-of: box1-forgejo
@@ -14,6 +15,11 @@ resources:
   - service.yaml
   - route.yaml
   - bootstrap-jobs.yaml
+  - ci/repository.yaml
+  - ci/rbac.yaml
+  - ci/registrar.yaml
+  - ci/tasks.yaml
+  - ci/argocd.yaml
 configMapGenerator:
   - name: forgejo-params
     namespace: forgejo
@@ -23,6 +29,21 @@ configMapGenerator:
     namespace: forgejo
     files:
       - bootstrap/bootstrap.py
+  # Seed files for workloads-proof; "__" stands for "/". Added only when missing.
+  - name: forgejo-workloads-seed
+    namespace: forgejo
+    files:
+      - seed/.tekton__validate.yaml
+      - seed/apps__README.md
+  - name: fj-ci-scripts
+    namespace: box1-fj-ci
+    files:
+      - ci/validate.py
+      - ci/promote.py
+  - name: fj-registrar
+    namespace: box1-fj-ci
+    files:
+      - ci/registrar.py
 generatorOptions:
   disableNameSuffixHash: true
 replacements:

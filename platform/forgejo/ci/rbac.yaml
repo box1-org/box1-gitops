@@ -1,0 +1,87 @@
+# Runs the promotion Task. Holds no Kubernetes write access except syncing
+# the one Argo CD Application; Git writes use the promote-bot token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fj-promote
+  namespace: box1-fj-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fj-promote-argocd
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [forgejo-proof-workloads]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fj-promote-argocd
+  namespace: openshift-gitops
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: fj-promote-argocd}
+subjects: [{kind: ServiceAccount, name: fj-promote, namespace: box1-fj-ci}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fj-promote-observe
+  namespace: box1-fj-dev
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fj-promote-observe
+  namespace: box1-fj-dev
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: fj-promote-observe}
+subjects: [{kind: ServiceAccount, name: fj-promote, namespace: box1-fj-ci}]
+---
+# Workloads in box1-fj-dev pull the images CI pushed to box1-fj-ci.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-fj-dev-image-puller
+  namespace: box1-fj-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: system:image-puller}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:box1-fj-dev
+---
+# Registrar: creates Repository CRs for new box1-fj repositories.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fj-registrar
+  namespace: box1-fj-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fj-registrar
+  namespace: box1-fj-ci
+rules:
+  - apiGroups: [pipelinesascode.tekton.dev]
+    resources: [repositories]
+    verbs: [get, list, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fj-registrar
+  namespace: box1-fj-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: fj-registrar}
+subjects: [{kind: ServiceAccount, name: fj-registrar, namespace: box1-fj-ci}]

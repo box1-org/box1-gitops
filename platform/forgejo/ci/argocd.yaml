@@ -1,0 +1,24 @@
+# One Application for every proof service: plain manifests under apps/ in the
+# private Forgejo repository. Credentials: openshift-gitops/forgejo-repo-creds
+# (argocd-bot, read-only), written by the bootstrap Job. No automated sync:
+# forgejo-gitops-promote syncs exactly the merge commit it produced.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-proof-workloads
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://forgejo.apps.ocp.box1.org/box1-fj/workloads-proof.git
+    targetRevision: main
+    path: apps
+    directory:
+      recurse: true
+      include: '*.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: box1-fj-dev
+  syncPolicy:
+    syncOptions:
+      - PruneLast=true

@@ -1,0 +1,23 @@
+# Pipelines as Code for the GitOps target repository. Service repositories get
+# their Repository CR from the registrar CronJob (registrar.yaml).
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: workloads-proof
+  namespace: box1-fj-ci
+spec:
+  url: https://forgejo.apps.ocp.box1.org/box1-fj/workloads-proof
+  concurrency_limit: 1
+  git_provider:
+    type: gitea
+    url: https://forgejo.apps.ocp.box1.org
+    user: pac-bot
+    secret:
+      name: forgejo-pac
+      key: provider.token
+    webhook_secret:
+      name: forgejo-pac
+      key: webhook.secret
+  settings:
+    # PipelineRun definitions come from main, never from the PR branch.
+    pipelinerun_provenance: default_branch

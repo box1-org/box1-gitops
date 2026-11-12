@@ -1,0 +1,138 @@
+# Validation of a workloads-proof pull request. Runs as the PR check whose
+# status context branch protection requires before merge.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: forgejo-gitops-validate
+  namespace: box1-fj-ci
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: revision
+      type: string
+    - name: target-branch
+      type: string
+      default: main
+  workspaces:
+    - name: basic-auth
+      description: The PaC-generated git auth Secret (.git-credentials, .gitconfig).
+  volumes:
+    - name: src
+      emptyDir: {}
+    - name: json
+      emptyDir: {}
+    - name: scripts
+      configMap: {name: fj-ci-scripts}
+  stepTemplate:
+    computeResources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities: {drop: [ALL]}
+    volumeMounts:
+      - {name: src, mountPath: /workspace/src}
+      - {name: json, mountPath: /workspace/json}
+      - {name: scripts, mountPath: /opt/scripts, readOnly: true}
+  steps:
+    - name: fetch
+      image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+      env:
+        - {name: HOME, value: /workspace/src/.home}
+        - {name: REPO_URL, value: $(params.repo-url)}
+        - {name: REVISION, value: $(params.revision)}
+        - {name: TARGET, value: $(params.target-branch)}
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        mkdir -p "$HOME" && cp "$(workspaces.basic-auth.path)/.git-credentials" "$HOME/.git-credentials"
+        git config --global credential.helper store
+        cd /workspace/src && git init -q repo && cd repo
+        git remote add origin "$REPO_URL"
+        git fetch -q --depth=50 origin "$REVISION" "$TARGET"
+        git checkout -q --detach "$REVISION"
+        base=$(git merge-base FETCH_HEAD "$REVISION" 2>/dev/null || git rev-parse "origin/$TARGET" 2>/dev/null || true)
+        [ -n "$base" ] || base=$(git rev-parse FETCH_HEAD)
+        git diff --name-only "$base" "$REVISION" | tee /workspace/src/changed-files
+        rm -f "$HOME/.git-credentials"
+    - name: render
+      # Parses every changed manifest with the cluster's own oc (client-side only).
+      image: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        cd /workspace/src/repo
+        while read -r f; do
+          [ -f "$f" ] || continue
+          case "$f" in *.yaml|*.yml) ;; *) continue;; esac
+          mkdir -p "/workspace/json/$(dirname "$f")"
+          oc create --dry-run=client -o json -f "$f" > "/workspace/json/$f.json"
+        done < /workspace/src/changed-files
+    - name: check
+      image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+      env:
+        - {name: IMAGE_PREFIX, value: "image-registry.openshift-image-registry.svc:5000/box1-fj-ci/"}
+        - {name: DEV_NAMESPACE, value: box1-fj-dev}
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        CHANGED_FILES="$(cat /workspace/src/changed-files)" exec python3 -I /opt/scripts/validate.py
+---
+# Opens and safely merges the promotion PR, then verifies the deployment.
+# Logic and guards: promote.py.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: forgejo-gitops-promote
+  namespace: box1-fj-ci
+spec:
+  params:
+    - name: application-name
+      type: string
+    - name: revision
+      type: string
+    - name: image-digest
+      type: string
+    - name: pipeline-run
+      type: string
+    - name: required-contexts
+      type: string
+      description: Comma-separated glob patterns of status contexts required on the PR head.
+      default: "Pipelines as Code CI / workloads-proof-validate*"
+  results:
+    - name: promoted
+    - name: merge-commit
+    - name: pr-url
+  volumes:
+    - name: token
+      secret: {secretName: forgejo-promote}
+    - name: scripts
+      configMap: {name: fj-ci-scripts}
+  steps:
+    - name: promote
+      image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+      command: [python3, -I, /opt/scripts/promote.py]
+      env:
+        - {name: FORGEJO_URL, value: https://forgejo.apps.ocp.box1.org}
+        - {name: FORGEJO_ORG, value: box1-fj}
+        - {name: GITOPS_REPO, value: workloads-proof}
+        - {name: APP_NAME, value: $(params.application-name)}
+        - {name: SOURCE_REVISION, value: $(params.revision)}
+        - {name: IMAGE_DIGEST, value: $(params.image-digest)}
+        - {name: IMAGE_REPOSITORY, value: "image-registry.openshift-image-registry.svc:5000/box1-fj-ci/$(params.application-name)"}
+        - {name: PIPELINE_RUN, value: $(params.pipeline-run)}
+        - {name: REQUIRED_CONTEXTS, value: $(params.required-contexts)}
+        - {name: DEV_NAMESPACE, value: box1-fj-dev}
+        - {name: ARGO_APPLICATION, value: forgejo-proof-workloads}
+      computeResources:
+        requests: {cpu: 20m, memory: 64Mi}
+        limits: {cpu: 500m, memory: 256Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities: {drop: [ALL]}
+      volumeMounts:
+        - {name: token, mountPath: /etc/forgejo, readOnly: true}
+        - {name: scripts, mountPath: /opt/scripts, readOnly: true}

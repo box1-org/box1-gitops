@@ -1,0 +1,49 @@
+# Stock publish:gitea creates the repository but nothing tells Pipelines as Code
+# about it (there is no Forgejo equivalent of PaC's GitHub auto-configure). This
+# CronJob closes that gap for the proof: every box1-fj repository that has a
+# .tekton directory on main gets a Repository CR. The org webhook already
+# delivers its events. Known gap, see box1-docs#164.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fj-registrar
+  namespace: box1-fj-ci
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 100
+      template:
+        spec:
+          serviceAccountName: fj-registrar
+          restartPolicy: Never
+          containers:
+            - name: registrar
+              image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+              command: [python3, -I, /opt/registrar/registrar.py]
+              env:
+                - name: FORGEJO_URL
+                  value: https://forgejo.apps.ocp.box1.org
+                - name: FORGEJO_ORG
+                  value: box1-fj
+                - name: FORGEJO_TOKEN
+                  valueFrom: {secretKeyRef: {name: forgejo-pac, key: provider.token}}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                seccompProfile: {type: RuntimeDefault}
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - name: script
+                  mountPath: /opt/registrar
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap: {name: fj-registrar}
