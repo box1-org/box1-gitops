@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - app-config.yaml
+  - platform-env.yaml
   - branding.yaml
   - dynamic-plugins.yaml
   - lightspeed.yaml

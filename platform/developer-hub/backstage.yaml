@@ -20,6 +20,8 @@ spec:
       configMaps:
         # BOX1_ICON_LOGO data URI for the home banner.
         - name: developer-hub-branding
+        # ${BOX1_*} cluster and org values substituted into app-config.yaml.
+        - name: developer-hub-platform-env
       secrets:
         - name: developer-hub-secrets
         - name: developer-hub-platform-secrets
@@ -121,6 +123,11 @@ spec:
                 command:
                   - python3
                   - /extensions-bootstrap/install-extensions.py
+                # Optional BOX1_ONBOARDING_PLUGIN_PACKAGE override (extensions-seed.yaml).
+                envFrom:
+                  - configMapRef:
+                      name: developer-hub-platform-env
+                      optional: true
                 volumeMounts:
                   - name: extensions-bootstrap
                     mountPath: /extensions-bootstrap

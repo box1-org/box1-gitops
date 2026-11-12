@@ -144,9 +144,11 @@ data:
           backend: sql_default
     registered_resources:
       models:
+        # box1-coder stays the Llama Stack alias that LCS default_model selects;
+        # VLLM_MODEL names the model vLLM actually serves.
         - model_id: box1-coder
           provider_id: vllm
-          provider_model_id: box1-coder
+          provider_model_id: ${env.VLLM_MODEL:=box1-coder}
           model_type: llm
           metadata: {}
         - model_id: sentence-transformers/all-mpnet-base-v2
