@@ -279,7 +279,9 @@ def bootstrap():
     wait_root()
     settings()
     group = ensure_group(GROUP, "developer")
-    gitops = ensure_group(GITOPS_GROUP, "noone")
+    # "noone" also blocks admins, so the GitOps project is created first and
+    # project creation is locked afterwards.
+    gitops = ensure_group(GITOPS_GROUP, "maintainer")
     ci, rhdh, argo = CI_NS, P["RHDH_NAMESPACE"], P["ARGOCD_NAMESPACE"]
     where = {
         "rhdh-bot": (rhdh, "developer-hub-gitlab-secrets", "GITLAB_TOKEN",
@@ -314,6 +316,7 @@ def bootstrap():
             if current.get("provider.token") != token or current.get("webhook.secret") != webhook:
                 put_secret(ns, sname, {"provider.token": token, "webhook.secret": webhook})
     ensure_gitops_repo(gitops, webhook)
+    must(gl("PUT", f"/groups/{gitops['id']}", {"project_creation_level": "noone"}), "lock gitops group")
     log("done")
 
 
