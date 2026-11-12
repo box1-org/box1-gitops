@@ -1,0 +1,219 @@
+{{- if not .Values.deployer.domain }}{{- fail "deployer.domain is required" }}{{- end }}
+{{- $realm := include "box1.realm" . | fromYaml }}
+{{- if $realm.Error }}{{- fail (printf "realm template: %s" $realm.Error) }}{{- end }}
+{{- $scope := include "box1.clientScopeMappings" . | fromYaml }}
+{{- $ns := .Values.keycloak.namespace }}
+# The RHDP authentication role imports its own realm (users, OpenShift
+# OAuth client) with a KeycloakRealmImport, and a realm import is skipped
+# once the realm exists. Box1 clients and roles are therefore reconciled
+# into the existing realm with kcadm partialImport (existing resources are
+# skipped), on every sync.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: box1-realm
+data:
+  partial-import.json: |
+    {{- dict "ifResourceExists" "SKIP" "clients" $realm.clients "roles" $realm.roles | toPrettyJson | nindent 4 }}
+  client-roles: |
+    {{- range $client, $roles := $realm.roles.client }}
+    {{- range $roles }}
+    {{ $client }} {{ .name }}
+    {{- end }}
+    {{- end }}
+  scope-mappings: |
+    {{- range $receiver, $entries := $scope }}
+    {{- range $entries }}
+    {{- $container := .client }}
+    {{- range .roles }}
+    {{ $receiver }} {{ $container }} {{ . }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+  service-account-roles: |
+    {{- range .Values.serviceAccountRoles }}
+    {{- $sa := . }}
+    {{- range .roles }}
+    {{ $sa.user }} {{ $sa.client }} {{ . }}
+    {{- end }}
+    {{- end }}
+  publish-clients: |
+    {{- range .Values.publishClientSecrets }}
+    {{ . }}
+    {{- end }}
+  reconcile.sh: |
+    #!/bin/bash
+    # Runs in the RHBK image. Prints names only, never secret values.
+    set -euo pipefail
+    realm={{ .Values.keycloak.realm | quote }}
+    keytool -importcert -noprompt -alias service-ca \
+      -file /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt \
+      -keystore /tmp/ca.jks -storepass changeit >/dev/null
+    kc() { /opt/keycloak/bin/kcadm.sh "$@" --config /tmp/kcadm.config --truststore /tmp/ca.jks --trustpass changeit; }
+    id_of() { kc get clients -r "$realm" -q "clientId=$1" --fields id --format csv --noquotes | head -n1; }
+
+    for attempt in $(seq 1 60); do
+      if kc config credentials --server {{ .Values.keycloak.adminUrl | quote }} --realm master \
+          --user "$KEYCLOAK_ADMIN_USERNAME" --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null 2>&1; then
+        break
+      fi
+      [ "$attempt" = 60 ] && { echo "Keycloak admin login failed"; exit 1; }
+      sleep 10
+    done
+
+    if ! kc get "realms/$realm" >/dev/null 2>&1; then
+      echo "WARNING: realm $realm did not exist; creating it without users."
+      echo "Set ocp4_workload_authentication_keycloak_default_realm to $realm so RHDP creates its users."
+      kc create realms -s "realm=$realm" -s enabled=true -s displayName=Box1 \
+        -s sslRequired=external -s registrationAllowed=false
+    fi
+
+    kc create partialImport -r "$realm" -f /config/partial-import.json >/dev/null
+    echo "partialImport applied (existing clients and roles skipped)"
+
+    # Client roles may be skipped with their client; create any that are missing.
+    while read -r client role; do
+      [ -z "$client" ] && continue
+      cid=$(id_of "$client")
+      kc get "clients/$cid/roles/$role" -r "$realm" >/dev/null 2>&1 \
+        || kc create "clients/$cid/roles" -r "$realm" -s "name=$role" >/dev/null
+    done </config/client-roles
+
+    # Client scope mappings: receiver container role.
+    while read -r receiver container role; do
+      [ -z "$receiver" ] && continue
+      rid=$(id_of "$receiver"); cid=$(id_of "$container")
+      roleid=$(kc get "clients/$cid/roles/$role" -r "$realm" --fields id --format csv --noquotes)
+      printf '[{"id":"%s","name":"%s"}]' "$roleid" "$role" \
+        | kc create "clients/$rid/scope-mappings/clients/$cid" -r "$realm" -f - >/dev/null
+    done </config/scope-mappings
+
+    # rhtpa-admin: exposed to rhtpa-frontend and granted to the admin users.
+    roleid=$(kc get roles/rhtpa-admin -r "$realm" --fields id --format csv --noquotes)
+    printf '[{"id":"%s","name":"rhtpa-admin"}]' "$roleid" \
+      | kc create "clients/$(id_of rhtpa-frontend)/scope-mappings/realm" -r "$realm" -f - >/dev/null
+    {{- range .Values.keycloak.adminUsers }}
+    if [ -n "$(kc get users -r "$realm" -q username={{ . }} -q exact=true --fields id --format csv --noquotes)" ]; then
+      kc add-roles -r "$realm" --uusername {{ . | quote }} --rolename rhtpa-admin
+    else
+      echo "user {{ . }} not found in $realm; rhtpa-admin not granted"
+    fi
+    {{- end }}
+
+    # Service-account grants: user client role.
+    while read -r user client role; do
+      [ -z "$user" ] && continue
+      kc add-roles -r "$realm" --uusername "$user" --cclientid "$client" --rolename "$role"
+    done </config/service-account-roles
+
+    # Generated client secrets, handed to the publish container in memory.
+    while read -r client; do
+      [ -z "$client" ] && continue
+      cid=$(id_of "$client")
+      value=$(kc get "clients/$cid/client-secret" -r "$realm" --fields value --format csv --noquotes 2>/dev/null || true)
+      if [ -z "$value" ]; then
+        kc create "clients/$cid/client-secret" -r "$realm" >/dev/null
+        value=$(kc get "clients/$cid/client-secret" -r "$realm" --fields value --format csv --noquotes)
+      fi
+      printf '%s' "$value" >"/work/$client"
+    done </config/publish-clients
+    echo "reconcile complete"
+  publish.sh: |
+    #!/bin/bash
+    # Runs in the cli image. Writes keycloak-client-secret-<client> with
+    # Server-Side Apply, so no last-applied annotation holds the value.
+    set -euo pipefail
+    for f in /work/*; do
+      client=$(basename "$f")
+      oc create secret generic "keycloak-client-secret-$client" -n {{ $ns }} \
+        --from-literal=CLIENT_ID="$client" --from-file=CLIENT_SECRET="$f" \
+        --dry-run=client -o yaml \
+        | oc label --local -f - app.kubernetes.io/part-of=box1-rhdp -o yaml \
+        | oc apply --server-side --field-manager=box1-rhdp --force-conflicts -f - >/dev/null
+      echo "published keycloak-client-secret-$client"
+    done
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: box1-realm-reconcile
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-realm-reconcile
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames:
+      {{- range .Values.publishClientSecrets }}
+      - keycloak-client-secret-{{ . }}
+      {{- end }}
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-realm-reconcile
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-realm-reconcile
+subjects:
+  - kind: ServiceAccount
+    name: box1-realm-reconcile
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: box1-realm-reconcile
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: box1-rhdp
+    spec:
+      serviceAccountName: box1-realm-reconcile
+      restartPolicy: OnFailure
+      initContainers:
+        - name: reconcile
+          image: {{ .Values.images.keycloak }}
+          command: [/bin/bash, /config/reconcile.sh]
+          env:
+            - name: KEYCLOAK_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef: {name: keycloak-initial-admin, key: username}
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: keycloak-initial-admin, key: password}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: work, mountPath: /work}
+      containers:
+        - name: publish
+          image: {{ .Values.images.cli }}
+          command: [/bin/bash, /config/publish.sh]
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: work, mountPath: /work}
+      volumes:
+        - name: config
+          configMap:
+            name: box1-realm
+        - name: work
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi

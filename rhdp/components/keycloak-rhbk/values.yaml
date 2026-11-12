@@ -1,7 +1,27 @@
 deployer:
   domain: ""
   apiUrl: ""
-storage:
-  rwoClass: ""
 keycloak:
+  namespace: keycloak
   instanceName: keycloak
+  realm: box1
+  adminUrl: https://keycloak.keycloak.svc:8443
+  adminUsers: [admin]
+images:
+  cli: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+  keycloak: registry.redhat.io/rhbk/keycloak-rhel9@sha256:91937e38d3507d29a4bc5898a77abda62a204b508c77c730cd0bc745dcdb0d03
+# Confidential clients whose generated secret is published as
+# <keycloak.namespace>/keycloak-client-secret-<clientId> (keys CLIENT_ID,
+# CLIENT_SECRET; the format the RH-SSO operator used).
+publishClientSecrets:
+  - developer-hub
+  - langfuse
+  - rhacs-oidc
+  - rhtpa-ci
+# Service-account role grants applied after the import:
+# user (service account) -> client roles.
+serviceAccountRoles:
+  - {user: service-account-developer-hub, client: realm-management, roles: [view-users, query-groups]}
+  - {user: service-account-scenario-controller, client: inventory-service, roles: [inventory-admin]}
+  - {user: service-account-site-east, client: asset-service, roles: [site-reporter]}
+  - {user: service-account-site-west, client: asset-service, roles: [site-reporter]}
