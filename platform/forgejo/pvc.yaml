@@ -1,0 +1,12 @@
+# Repositories, the SQLite database, app.ini and the generated server secrets.
+# Lab scale: one RWO volume, no HA.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-data
+  namespace: forgejo
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi

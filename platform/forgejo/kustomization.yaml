@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Forgejo proof (box1-docs#164). A self-contained Git server plus an idempotent
+# bootstrap. Replay on another cluster by changing params.env only.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: box1-forgejo
+    includeSelectors: false
+resources:
+  - namespaces.yaml
+  - rbac.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - route.yaml
+  - bootstrap-jobs.yaml
+configMapGenerator:
+  - name: forgejo-params
+    namespace: forgejo
+    envs:
+      - params.env
+  - name: forgejo-bootstrap
+    namespace: forgejo
+    files:
+      - bootstrap/bootstrap.py
+generatorOptions:
+  disableNameSuffixHash: true
+replacements:
+  # One place for the public host name: params.env FORGEJO_HOST.
+  - source: {kind: ConfigMap, name: forgejo-params, fieldPath: data.FORGEJO_HOST}
+    targets:
+      - select: {kind: Route, name: forgejo}
+        fieldPaths: [spec.host]
+      - select: {kind: ConfigMap, name: forgejo-config}
+        fieldPaths: [data.FORGEJO__server__DOMAIN]
+      - select: {kind: ConfigMap, name: forgejo-config}
+        fieldPaths: [data.FORGEJO__server__ROOT_URL]
+        options: {delimiter: /, index: 2}

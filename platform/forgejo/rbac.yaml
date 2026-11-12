@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgejo
+  namespace: forgejo
+---
+# Runs the bootstrap Jobs. It talks to Forgejo's API and writes consumer Secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgejo-bootstrap
+  namespace: forgejo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-bootstrap
+  namespace: forgejo
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-bootstrap
+  namespace: forgejo
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap}
+subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
+---
+# Consumer namespaces: only named Secrets, never list or read others.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: box1-fj-ci
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [forgejo-pac, forgejo-promote]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: box1-fj-ci
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: rhdh
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [developer-hub-forgejo-secrets]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: rhdh
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: openshift-gitops
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [forgejo-repo-creds]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: openshift-gitops
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: mike-devspaces
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [forgejo-git-credentials]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-bootstrap-secrets
+  namespace: mike-devspaces
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: forgejo-bootstrap-secrets}
+subjects: [{kind: ServiceAccount, name: forgejo-bootstrap, namespace: forgejo}]
