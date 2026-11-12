@@ -1,0 +1,55 @@
+# Example AgnosticV catalog variables for a Box1 RHDP deployment.
+# Workload order matters: GitOps, Keycloak, (ODF), LiteMaaS keys, then
+# field-content. Roles are in the agnosticd.core_workloads collection
+# (github.com/rhpds/core_workloads); the LiteMaaS key workload is separate.
+
+workloads:
+  - agnosticd.core_workloads.ocp4_workload_openshift_gitops
+  - agnosticd.core_workloads.ocp4_workload_authentication_keycloak
+  # Only for storage.objectStore: odf (logging, RHTPA, Langfuse): a workload
+  # that provides ODF Multicloud Object Gateway and the
+  # openshift-storage.noobaa.io class (not chosen or tested here).
+  # LiteMaaS virtual key (fills the field_content litemaas vars below).
+  # - <litellm virtual keys workload>
+  - agnosticd.core_workloads.ocp4_workload_field_content
+
+# Argo CD must manage operators and cluster-scoped configuration.
+ocp4_workload_openshift_gitops_setup_cluster_admin: true
+# Do not add an argoproj.io/Application health check: the field-content root
+# Application has no retry, and one slow child would stop later sync waves.
+
+# RHBK at https://sso.<domain>. Name the realm box1 so its users exist in
+# the realm the Box1 clients are reconciled into.
+ocp4_workload_authentication_keycloak_default_realm: box1
+ocp4_workload_authentication_keycloak_num_users: 2
+
+# Leave OpenShift Pipelines to Box1 (channel latest), or install it with
+# ocp4_workload_pipelines and set operators.subscriptions.pipelines.manage: false.
+
+ocp4_workload_field_content_gitops_repo_url: https://github.com/<demo-org>/box1-gitops.git
+ocp4_workload_field_content_gitops_repo_revision: rhdp
+ocp4_workload_field_content_gitops_repo_path: rhdp
+# ocp4_workload_field_content_litemaas_api_url: "{{ <from the LiteMaaS workload> }}"
+# ocp4_workload_field_content_litemaas_api_key: "{{ <from the LiteMaaS workload> }}"
+# ocp4_workload_field_content_litemaas_model: llama-scout-17b
+
+# Never put credentials here: the role prints these values and stores them
+# in the field-content Application. External credentials go in the
+# box1-rhdp-inputs Secret (see rhdp/README.md).
+ocp4_workload_field_content_helm_values:
+  profiles:
+    core: true
+    rhbk: true
+    developer: true
+    operate: false
+    security: false
+    ai: false
+  git:
+    org: <demo-org>
+  storage:
+    rwoClass: gp3-csi
+    objectStore: none
+  ci:
+    builderImage: quay.io/<demo-org>/box1-builder@sha256:<digest>
+  developerHub:
+    onboardingPluginPackage: oci://quay.io/<demo-org>/box1-onboarding-plugin@sha256:<digest>!box1-scaffolder-onboarding
