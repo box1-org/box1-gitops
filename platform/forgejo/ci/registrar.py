@@ -17,7 +17,7 @@ def http(url, method="GET", body=None, headers=None, ctx=None):
         with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             return r.status, json.loads(r.read() or b"null")
     except urllib.error.HTTPError as e:
-        return e.code, None
+        return e.code, e.read().decode(errors="replace")[:500]
 
 
 def fj(path):
@@ -62,6 +62,6 @@ while True:
                 "settings": {"pipelinerun_provenance": "default_branch"},
             },
         }
-        code, _ = kube("POST", f"/apis/pipelinesascode.tekton.dev/v1alpha1/namespaces/{NS}/repositories", cr)
-        print(f"{repo['name']}: Repository CR create -> HTTP {code}", flush=True)
+        code, body = kube("POST", f"/apis/pipelinesascode.tekton.dev/v1alpha1/namespaces/{NS}/repositories", cr)
+        print(f"{repo['name']}: Repository CR create -> HTTP {code}" + ("" if code == 201 else f" {body}"), flush=True)
     page += 1

@@ -77,6 +77,11 @@ rules:
   - apiGroups: [pipelinesascode.tekton.dev]
     resources: [repositories]
     verbs: [get, list, create]
+  # PaC's admission webhook only admits a Repository from someone who may
+  # create PipelineRuns in its namespace.
+  - apiGroups: [tekton.dev]
+    resources: [pipelineruns]
+    verbs: [create]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
