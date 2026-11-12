@@ -1,6 +1,16 @@
-# These are supplied automatically by ocp4_workload_field_content. They are
-# intentionally blank here so this chart cannot be mistaken for a homelab
-# bootstrap entry point.
+# Box1 RHDP entry chart.
+#
+# ocp4_workload_field_content renders this chart from the Application's
+# inline values. It never reads a values file, so these defaults are the
+# RHDP defaults. A catalog overrides them through
+# ocp4_workload_field_content_helm_values.
+#
+# The role owns, and overwrites as whole keys, `deployer`, `gitops`,
+# `litemaas` and `multi_user`. Every other setting lives under its own key.
+
+# ---------------------------------------------------------------------------
+# Injected by ocp4_workload_field_content (blank here so a stray render fails)
+# ---------------------------------------------------------------------------
 deployer:
   domain: ""
   apiUrl: ""
@@ -8,9 +18,16 @@ gitops:
   repoURL: ""
   revision: main
   path: ""
+litemaas:
+  enabled: false
+  apiUrl: ""
+  apiKey: ""
+  model: ""
+multi_user: {}
 
-# Start a new RHDP cluster with core + rhbk. The other profiles are opt-in
-# because they need additional operators, credentials, and capacity.
+# ---------------------------------------------------------------------------
+# Profiles. A component is rendered when any one of its profiles is on.
+# ---------------------------------------------------------------------------
 profiles:
   core: true
   rhbk: true
@@ -19,232 +36,170 @@ profiles:
   security: false
   ai: false
 
-storage:
-  rwoClass: ""
-  objectBucketClass: ""
+# Namespace for the plan/status ConfigMaps, the preflight CronJob and the
+# box1-rhdp-inputs Secret (external credentials; see README).
+system:
+  namespace: box1-rhdp-system
+  inputsSecret: box1-rhdp-inputs
 
-endpoints:
-  registryHost: ""
-  objectStorageEndpoint: ""
+images:
+  # Replaces the homelab's OpenShift 5.0 rc ART "cli" image. The imagestream
+  # in the openshift namespace exists on every cluster with the internal
+  # registry enabled.
+  cli: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
+  keycloak: registry.redhat.io/rhbk/keycloak-rhel9@sha256:91937e38d3507d29a4bc5898a77abda62a204b508c77c730cd0bc745dcdb0d03
+
+sync:
+  defaultSyncOptions:
+    - CreateNamespace=true
+    - PruneLast=true
+    - SkipDryRunOnMissingResource=true
+  # Argo CD does not retry a failed automated sync for the same revision.
+  # Children converge on their own (operators, CRDs and inputs arrive late).
+  retry:
+    limit: -1
+    backoff:
+      duration: 30s
+      factor: 2
+      maxDuration: 5m
+
+# Source control for the developer golden path. RHDP deployments should use
+# their own organization holding forks of the repos below, so promotions
+# never touch the homelab's repositories.
+git:
+  host: github.com
+  org: box1-org
+  repos:
+    workloadsDev: box1-workloads-dev
+    templates: box1-templates
+    quarkusReference: quarkus-reference
+    build: box1-build
+    devspaces: box1-devspaces
+    erpSimulator: box1-ops-erp-simulator
+    legacyErp: legacy-erp
+    docs: box1-docs
+  workloadsRevision: main
 
 keycloak:
-  # RHBK instance supplied by the RHDP cluster. It is backed by the existing
-  # keycloak-pgsql-user and keycloak-initial-admin Secrets.
+  namespace: keycloak
   instanceName: keycloak
+  # ocp4_workload_authentication_keycloak publishes https://<hostPrefix>.<domain>
+  hostPrefix: sso
+  realm: box1
+  # In-cluster admin endpoint (service CA). Service name created by the RHDP role.
+  adminUrl: https://keycloak.keycloak.svc:8443
+  # Realm users that receive the rhtpa-admin role.
+  adminUsers: [admin]
 
-# A child Application reads the same repo/revision as this chart. Components
-# are profile-gated; setting one to false is the supported way to omit it.
+storage:
+  # "" uses the cluster default StorageClass (storageClassName removed).
+  # LokiStack needs an explicit class, so observability logging is skipped
+  # while this is empty.
+  rwoClass: ""
+  # odf: ObjectBucketClaims on objectBucketClass (ODF/MCG must be installed).
+  # none: components that need S3 (logging, RHTPA, Langfuse) are skipped.
+  objectStore: none
+  objectBucketClass: openshift-storage.noobaa.io
+  # Public S3 endpoint for clients outside the cluster network (RHTPA, Langfuse
+  # media). Default: https://s3-openshift-storage.<domain>
+  s3PublicEndpoint: ""
+
+registry:
+  # Externally reachable registry host used by builds and plugin pulls.
+  # Default: the internal registry default route.
+  host: ""
+  # Turn on the internal registry's default route (Server-Side Apply of
+  # spec.defaultRoute only) when host is empty.
+  manageDefaultRoute: true
+
+operators:
+  defaults:
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+  # name/namespace identify the Subscription in platform/. startingCSV ""
+  # removes the homelab pin. manage: false leaves an operator the cluster
+  # already provides (its Application is skipped).
+  subscriptions:
+    pipelines: {name: openshift-pipelines-operator, namespace: openshift-operators, channel: latest, startingCSV: "", manage: true}
+    rhdh: {name: rhdh, namespace: rhdh-operator, channel: fast-1.9, startingCSV: ""}
+    devspaces: {name: devspaces, namespace: openshift-devspaces, channel: stable, startingCSV: ""}
+    amqStreams: {name: amq-streams, namespace: openshift-operators, channel: stable, startingCSV: ""}
+    acs: {name: rhacs-operator, namespace: rhacs-operator, channel: rhacs-4.11, startingCSV: ""}
+    rhtpa: {name: rhtpa-operator, namespace: trusted-profile-analyzer, channel: stable-v3, startingCSV: ""}
+    lightspeed: {name: lightspeed-operator, namespace: openshift-lightspeed, channel: stable, startingCSV: ""}
+    servicemesh: {name: servicemeshoperator3, namespace: openshift-service-mesh-operator, channel: stable-3.5, startingCSV: ""}
+    kiali: {name: kiali-ossm, namespace: openshift-kiali-operator, channel: stable, startingCSV: ""}
+    coo: {name: cluster-observability-operator, namespace: openshift-cluster-observability-operator, channel: stable, startingCSV: ""}
+    logging: {name: cluster-logging, namespace: openshift-logging, channel: stable-6.7, startingCSV: ""}
+    loki: {name: loki-operator, namespace: openshift-operators-redhat, channel: stable-6.7, startingCSV: ""}
+    otel: {name: opentelemetry-product, namespace: openshift-opentelemetry-operator, channel: stable, startingCSV: ""}
+    tempo: {name: tempo-product, namespace: openshift-tempo-operator, channel: stable, startingCSV: ""}
+
+ci:
+  # Builder image for the Quarkus/Maven Tasks. The homelab pins a digest in
+  # its own internal registry, which does not exist elsewhere. Set this to a
+  # published copy (for example quay.io/<org>/box1-builder@sha256:...).
+  # Empty: the Tasks keep the homelab reference and box1-rhdp-plan warns.
+  builderImage: ""
+  # CI Repositories that need RHEL entitlements, SSH keys or extra repos.
+  optionalRepositories:
+    devspaces: false
+    bootc: false
+    erpSimulator: false
+    siteImages: false
+
+developerHub:
+  # Replacement OCI reference for the onboarding plugin package
+  # (oci://<registry>/<path>@sha256:...!box1-scaffolder-onboarding).
+  # "" drops the plugin; the rest of Developer Hub still works.
+  onboardingPluginPackage: ""
+  # auto: Developer Hub Lightspeed is on when litemaas.enabled is true.
+  lightspeed: auto
+
+devSpaces:
+  # Create <user>-sandbox namespaces for multi_user.users.
+  sandboxes: false
+
+security:
+  acs:
+    clusterName: rhdp
+  rhtpa:
+    # router: default router certificate. certManager: Certificate from clusterIssuer.
+    tls: router
+    clusterIssuer: letsencrypt-production
+    # Fixed bucket name, so the TrustedProfileAnalyzer CR can name it.
+    bucketName: box1-rhtpa
+    # true keeps the homelab's pinned rhtpa CatalogSource.
+    customCatalog: false
+
+ai:
+  lightspeed:
+    rhokpEphemeralStorage: 20Gi
+    contextWindowSize: 32768
+
+# ---------------------------------------------------------------------------
+# Components. Each becomes one Argo CD Application in openshift-gitops.
+#
+#   profiles        rendered when any listed profile is on
+#   enabled         false opts out
+#   requires        profiles (all on), objectStore, rwoClass, litemaas,
+#                   value (dotted value path that must be truthy)
+#   path            repository path (overlays reference platform/ as base)
+#   helm            pass chart values (rhdp/components charts)
+#   repoURL/targetRevision  override the chart's repository (tpl)
+#   subscriptions   operators.subscriptions keys to patch
+#   routeHosts      Route/<name> -> <prefix>.<domain>
+#   pvcs / obcs     PersistentVolumeClaim / ObjectBucketClaim names to patch
+#   settings        patch the overlay's box1-platform-settings ConfigMap
+#   kustomizeTemplate  named template adding component-specific patches
+#   syncOptions / ignoreDifferences / annotations   per Application
+# ---------------------------------------------------------------------------
 components:
-  keycloakRhbK:
-    enabled: true
-    profiles: [core, rhbk]
+  keycloakRhbk:
+    profiles: [rhbk]
     name: keycloak-rhbk
     path: rhdp/components/keycloak-rhbk
     helm: true
     namespace: keycloak
     syncWave: "1"
-  kafkaOperator:
-    enabled: false
-    profiles: [core]
-    name: kafka-operator
-    path: platform/kafka/operator
-    namespace: openshift-operators
-    syncWave: "0"
-  kafka:
-    enabled: false
-    profiles: [core]
-    name: box1-kafka
-    path: platform/kafka
-    namespace: box1-kafka
-    syncWave: "1"
-  pipelinesOperator:
-    enabled: false
-    profiles: [developer]
-    name: pipelines-operator
-    path: platform/pipelines/operator
-    namespace: openshift-operators
-    syncWave: "0"
-  pipelinesConfig:
-    enabled: false
-    profiles: [developer]
-    name: pipelines-config
-    path: platform/pipelines/config
-    namespace: openshift-pipelines
-    syncWave: "1"
-  pipelinesCi:
-    enabled: false
-    profiles: [developer]
-    name: pipelines-ci
-    path: platform/pipelines/ci
-    namespace: box1-ci
-    syncWave: "2"
-  developerHubOperator:
-    enabled: false
-    profiles: [developer]
-    name: developer-hub-operator
-    path: platform/developer-hub/operator
-    namespace: rhdh-operator
-    syncWave: "0"
-  developerHub:
-    enabled: false
-    profiles: [developer]
-    name: developer-hub
-    path: platform/developer-hub
-    namespace: rhdh
-    syncWave: "2"
-  devSpacesOperator:
-    enabled: false
-    profiles: [developer]
-    name: dev-spaces-operator
-    path: platform/dev-spaces/operator
-    namespace: openshift-devspaces
-    syncWave: "0"
-  devSpaces:
-    enabled: false
-    profiles: [developer]
-    name: dev-spaces
-    path: platform/dev-spaces/instance
-    namespace: openshift-devspaces
-    syncWave: "2"
-  reposilite:
-    enabled: false
-    profiles: [developer]
-    name: reposilite
-    path: platform/reposilite
-    namespace: box1-maven
-    syncWave: "1"
-  mailhog:
-    enabled: false
-    profiles: [developer]
-    name: mailhog
-    path: platform/mailhog
-    namespace: mailhog
-    syncWave: "1"
-  serviceMeshOperators:
-    enabled: false
-    profiles: [operate]
-    name: service-mesh-operators
-    path: platform/service-mesh/operators
-    namespace: openshift-operators
-    syncWave: "0"
-  serviceMeshNetwork:
-    enabled: false
-    profiles: [operate]
-    name: service-mesh-network
-    path: platform/service-mesh/network
-    namespace: openshift-gitops
-    syncWave: "0"
-  serviceMesh:
-    enabled: false
-    profiles: [operate]
-    name: service-mesh-control-plane
-    path: platform/service-mesh/mesh
-    namespace: istio-system
-    syncWave: "1"
-  kiali:
-    enabled: false
-    profiles: [operate]
-    name: service-mesh-kiali
-    path: platform/service-mesh/kiali
-    namespace: istio-system
-    syncWave: "2"
-  observabilityOperators:
-    enabled: false
-    profiles: [operate]
-    name: observability-operators
-    path: platform/observability/operators
-    namespace: openshift-operators
-    syncWave: "0"
-  observabilityLogging:
-    enabled: false
-    profiles: [operate]
-    name: observability-logging
-    path: platform/observability/logging
-    namespace: openshift-logging
-    syncWave: "1"
-  observabilityTracing:
-    enabled: false
-    profiles: [operate]
-    name: observability-tracing
-    path: platform/observability/tracing
-    namespace: box1-observability
-    syncWave: "1"
-  acsOperator:
-    enabled: false
-    profiles: [security]
-    name: acs-operator
-    path: platform/advanced-cluster-security/operator
-    namespace: rhacs-operator
-    syncWave: "0"
-  acs:
-    enabled: false
-    profiles: [security]
-    name: acs
-    path: platform/advanced-cluster-security/instance
-    namespace: stackrox
-    syncWave: "1"
-  rhtpaOperator:
-    enabled: false
-    profiles: [security]
-    name: rhtpa-operator
-    path: platform/trusted-profile-analyzer/operator
-    namespace: trusted-profile-analyzer
-    syncWave: "0"
-  rhtpaPrerequisites:
-    enabled: false
-    profiles: [security]
-    name: rhtpa-prerequisites
-    path: platform/trusted-profile-analyzer/prerequisites
-    namespace: trusted-profile-analyzer
-    syncWave: "1"
-  rhtpa:
-    enabled: false
-    profiles: [security]
-    name: rhtpa
-    path: platform/trusted-profile-analyzer/instance
-    namespace: trusted-profile-analyzer
-    syncWave: "2"
-  lightspeedOperator:
-    enabled: false
-    profiles: [ai]
-    name: lightspeed-operator
-    path: platform/lightspeed/operator
-    namespace: openshift-lightspeed
-    syncWave: "0"
-  lightspeed:
-    enabled: false
-    profiles: [ai]
-    name: lightspeed
-    path: platform/lightspeed/config
-    namespace: openshift-lightspeed
-    syncWave: "1"
-  langfuse:
-    enabled: false
-    profiles: [ai]
-    name: langfuse
-    path: platform/langfuse
-    namespace: langfuse
-    syncWave: "2"
-  operate:
-    enabled: false
-    profiles: [operate]
-    name: box1-operate
-    path: rhdp/components/operate
-    namespace: openshift-gitops
-    syncWave: "2"
-    helm: true
-  operateOperators:
-    enabled: false
-    profiles: [operate]
-    name: box1-operate-operators
-    path: rhdp/components/operate-operators
-    namespace: openshift-gitops
-    syncWave: "0"
-    helm: true
-  operateNetwork:
-    enabled: false
-    profiles: [operate]
-    name: box1-operate-network
-    path: platform/service-mesh/network
-    namespace: openshift-gitops
-    syncWave: "0"

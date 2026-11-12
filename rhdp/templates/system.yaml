@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.system.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    app.kubernetes.io/part-of: box1-rhdp
+---
+# What this render decided. The preflight CronJob writes live checks to
+# box1-rhdp-status next to it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: box1-rhdp-plan
+  namespace: {{ .Values.system.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+  labels:
+    app.kubernetes.io/part-of: box1-rhdp
+data:
+  profiles: |
+    {{- range $p, $on := .Values.profiles }}
+    {{ $p }}: {{ $on }}
+    {{- end }}
+  rendered: |
+    {{- range $key, $c := .Values.components }}
+    {{- if and (include "box1.profileOn" (dict "root" $ "c" $c)) (not (include "box1.skipReason" (dict "root" $ "c" $c))) }}
+    {{ $c.name }}: {{ $c.path }}
+    {{- end }}
+    {{- end }}
+  skipped: |
+    {{- range $key, $c := .Values.components }}
+    {{- if include "box1.profileOn" (dict "root" $ "c" $c) }}
+    {{- with include "box1.skipReason" (dict "root" $ "c" $c) }}
+    {{ $c.name }}: {{ . }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+  warnings: |
+    {{- if and .Values.profiles.developer (not .Values.ci.builderImage) }}
+    ci.builderImage is empty: Quarkus/Maven Tasks keep the homelab builder digest and fail until it is published and set.
+    {{- end }}
+    {{- if and .Values.profiles.developer (not .Values.developerHub.onboardingPluginPackage) }}
+    developerHub.onboardingPluginPackage is empty: the onboarding scaffolder plugin is not installed.
+    {{- end }}
+    {{- if and .Values.profiles.developer (eq .Values.git.org "box1-org") }}
+    git.org is box1-org: CI and promotions would act on the homelab repositories.
+    {{- end }}
+  settings: |
+    {{- include "box1.settings" . | nindent 4 }}
+{{- if .Values.litemaas.apiKey }}
+---
+# ocp4_workload_field_content already exposes this key in the root
+# Application; this Secret only gives in-cluster consumers a stable source.
+# Prefer LITEMAAS_API_KEY in the inputs Secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: box1-rhdp-litemaas
+  namespace: {{ .Values.system.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+  labels:
+    app.kubernetes.io/part-of: box1-rhdp
+type: Opaque
+stringData:
+  apiUrl: {{ .Values.litemaas.apiUrl | quote }}
+  apiKey: {{ .Values.litemaas.apiKey | quote }}
+  model: {{ .Values.litemaas.model | quote }}
+{{- end }}

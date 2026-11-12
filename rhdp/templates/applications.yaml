@@ -1,50 +1,88 @@
 {{- if not .Values.gitops.repoURL }}
 {{- fail "gitops.repoURL is injected by ocp4_workload_field_content and is required" }}
 {{- end }}
-{{- range $key, $component := .Values.components }}
-{{- $profileEnabled := true }}
-{{- range $profile := $component.profiles }}
-{{- if not (index $.Values.profiles $profile) }}{{- $profileEnabled = false }}{{- end }}
+{{- $domain := include "box1.domain" . }}
+{{- range $key, $c := .Values.components }}
+{{- if and (include "box1.profileOn" (dict "root" $ "c" $c)) (not (include "box1.skipReason" (dict "root" $ "c" $c))) }}
+{{- $patches := list }}
+{{- $images := list }}
+{{- range $c.subscriptions }}
+{{- $patches = append $patches (include "box1.patch.subscription" (dict "root" $ "key" .) | fromYaml) }}
 {{- end }}
-{{- if and $component.enabled $profileEnabled }}
+{{- range $c.routeHosts }}
+{{- $patches = append $patches (include "box1.patch.routeHost" (dict "root" $ "name" .name "prefix" .prefix) | fromYaml) }}
+{{- end }}
+{{- range $c.pvcs }}
+{{- $patches = append $patches (include "box1.patch.pvc" (dict "root" $ "name" .) | fromYaml) }}
+{{- end }}
+{{- range $c.obcs }}
+{{- $patches = append $patches (include "box1.patch.obc" (dict "root" $ "name" .) | fromYaml) }}
+{{- end }}
+{{- if $c.settings }}
+{{- $patches = append $patches (include "box1.patch.settings" $ | fromYaml) }}
+{{- end }}
+{{- if $c.cliImage }}
+{{- $images = append $images (include "box1.image.cli" $) }}
+{{- end }}
+{{- if $c.kustomizeTemplate }}
+{{- $k := include $c.kustomizeTemplate (dict "root" $ "c" $c) | fromYaml }}
+{{- if $k.Error }}{{- fail (printf "%s: %s" $c.kustomizeTemplate $k.Error) }}{{- end }}
+{{- $patches = concat $patches ($k.patches | default list) }}
+{{- $images = concat $images ($k.images | default list) }}
+{{- end }}
+{{- $syncOptions := concat $.Values.sync.defaultSyncOptions ($c.syncOptions | default list) }}
+{{- if $c.ignoreDifferences }}{{- $syncOptions = append $syncOptions "RespectIgnoreDifferences=true" }}{{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ $component.name }}
+  name: {{ $c.name }}
   namespace: openshift-gitops
   annotations:
-    argocd.argoproj.io/sync-wave: {{ $component.syncWave | quote }}
+    argocd.argoproj.io/sync-wave: {{ $c.syncWave | default "0" | quote }}
+    {{- range $k, $v := $c.annotations }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
   labels:
     app.kubernetes.io/part-of: box1-rhdp
-    box1.org/profile: {{ join "-" $component.profiles | quote }}
+    box1.org/component: {{ $key | quote }}
+    box1.org/profile: {{ join "-" $c.profiles | quote }}
 spec:
   project: default
   source:
-    repoURL: {{ $.Values.gitops.repoURL | quote }}
-    targetRevision: {{ $.Values.gitops.revision | quote }}
-    path: {{ $component.path | quote }}
-    {{- if $component.helm }}
+    repoURL: {{ tpl ($c.repoURL | default $.Values.gitops.repoURL) $ | quote }}
+    targetRevision: {{ tpl ($c.targetRevision | default $.Values.gitops.revision) $ | quote }}
+    path: {{ $c.path | quote }}
+    {{- if $c.helm }}
     helm:
       values: |
-        deployer:
-          domain: {{ $.Values.deployer.domain | quote }}
-          apiUrl: {{ $.Values.deployer.apiUrl | quote }}
-        storage:
-          rwoClass: {{ $.Values.storage.rwoClass | quote }}
-          objectBucketClass: {{ $.Values.storage.objectBucketClass | quote }}
-        keycloak:
-          instanceName: {{ $.Values.keycloak.instanceName | quote }}
+        {{- dict "deployer" (dict "domain" $domain "apiUrl" (include "box1.apiUrl" $)) "storage" $.Values.storage "keycloak" $.Values.keycloak "images" $.Values.images "system" $.Values.system "git" $.Values.git "profiles" $.Values.profiles "multi_user" $.Values.multi_user "devSpaces" $.Values.devSpaces "issuer" (include "box1.issuer" $) | toYaml | nindent 8 }}
+    {{- end }}
+    {{- if or $patches $images }}
+    kustomize:
+      {{- if $patches }}
+      patches:
+        {{- toYaml $patches | nindent 8 }}
+      {{- end }}
+      {{- if $images }}
+      images:
+        {{- toYaml $images | nindent 8 }}
+      {{- end }}
     {{- end }}
   destination:
     server: https://kubernetes.default.svc
-    namespace: {{ $component.namespace | quote }}
+    namespace: {{ $c.namespace | quote }}
+  {{- with $c.ignoreDifferences }}
+  ignoreDifferences:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   syncPolicy:
     automated:
       selfHeal: true
       prune: false
     syncOptions:
-      - CreateNamespace=true
-      - PruneLast=true
+      {{- toYaml (uniq $syncOptions) | nindent 6 }}
+    retry:
+      {{- toYaml ($c.retry | default $.Values.sync.retry) | nindent 6 }}
 {{- end }}
 {{- end }}
