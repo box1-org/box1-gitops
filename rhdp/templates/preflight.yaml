@@ -1,0 +1,226 @@
+{{- $ns := .Values.system.namespace }}
+{{- $required := list }}
+{{- if .Values.profiles.developer }}
+{{- $required = concat $required (list "PAC_GITHUB_APP_ID" "PAC_GITHUB_APP_PRIVATE_KEY" "PAC_WEBHOOK_SECRET" "RHDH_GITHUB_APP_ID" "RHDH_GITHUB_APP_CLIENT_ID" "RHDH_GITHUB_APP_CLIENT_SECRET" "RHDH_GITHUB_APP_PRIVATE_KEY") }}
+{{- end }}
+{{- $subs := list }}
+{{- range $key, $c := .Values.components }}
+{{- if and (include "box1.profileOn" (dict "root" $ "c" $c)) (not (include "box1.skipReason" (dict "root" $ "c" $c))) }}
+{{- range $c.subscriptions }}
+{{- $s := index $.Values.operators.subscriptions . }}
+{{- $subs = append $subs (printf "%s %s %s" $s.namespace $s.name $s.channel) }}
+{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: box1-rhdp-preflight
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: box1-rhdp-preflight
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+rules:
+  - apiGroups: [operators.coreos.com]
+    resources: [subscriptions, clusterserviceversions]
+    verbs: [get, list]
+  - apiGroups: [packages.operators.coreos.com]
+    resources: [packagemanifests]
+    verbs: [get, list]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  - apiGroups: [imageregistry.operator.openshift.io]
+    resources: [configs]
+    verbs: [get]
+  - apiGroups: [k8s.keycloak.org]
+    resources: [keycloaks]
+    verbs: [get, list]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: box1-rhdp-preflight
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: box1-rhdp-preflight
+subjects:
+  - kind: ServiceAccount
+    name: box1-rhdp-preflight
+    namespace: {{ $ns }}
+---
+# Reads only the inputs Secret's key names and writes the status ConfigMaps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-rhdp-preflight
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ .Values.system.inputsSecret }}]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-rhdp-preflight
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-rhdp-preflight
+subjects:
+  - kind: ServiceAccount
+    name: box1-rhdp-preflight
+    namespace: {{ $ns }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: box1-rhdp-preflight
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-9"
+data:
+  required-inputs: |
+    {{- range $required }}
+    {{ . }}
+    {{- end }}
+  subscriptions: |
+    {{- range $subs }}
+    {{ . }}
+    {{- end }}
+  preflight.sh: |
+    #!/bin/bash
+    # Live prerequisite checks. Never prints Secret values: only key names.
+    set -uo pipefail
+    ns={{ $ns }}
+    out=$(mktemp)
+    fail=0
+    report() { printf '%-5s %s\n' "$1" "$2" >>"$out"; [ "$1" = FAIL ] && fail=1; return 0; }
+
+    # Inputs Secret: key names only.
+    keys=$(oc get secret {{ .Values.system.inputsSecret }} -n "$ns" -o go-template='{{"{{"}}range $k, $v := .data{{"}}"}}{{"{{"}}$k{{"}}"}} {{"{{"}}end{{"}}"}}' 2>/dev/null || true)
+    while read -r key; do
+      [ -z "$key" ] && continue
+      case " $keys " in *" $key "*) report ok "input $key";; *) report FAIL "input $key missing from secret/{{ .Values.system.inputsSecret }}";; esac
+    done </config/required-inputs
+
+    # Operator channels exist in the catalog.
+    while read -r sns sname channel; do
+      [ -z "$sname" ] && continue
+      pkg=$(oc get subscription "$sname" -n "$sns" -o jsonpath='{.spec.name}' 2>/dev/null)
+      [ -z "$pkg" ] && { report wait "subscription $sns/$sname not created yet"; continue; }
+      if oc get packagemanifest "$pkg" -n openshift-marketplace -o jsonpath='{.status.channels[*].name}' 2>/dev/null | tr ' ' '\n' | grep -qx "$channel"; then
+        report ok "channel $pkg/$channel"
+      else
+        report FAIL "channel $channel not offered for package $pkg"
+      fi
+      csv=$(oc get subscription "$sname" -n "$sns" -o jsonpath='{.status.installedCSV}' 2>/dev/null)
+      [ -n "$csv" ] && report ok "installed $csv" || report wait "$pkg has no installed CSV yet"
+    done </config/subscriptions
+
+    {{- if not .Values.operators.subscriptions.pipelines.manage }}
+    oc get csv -n openshift-operators -o name 2>/dev/null | grep -q openshift-pipelines-operator \
+      && report ok "OpenShift Pipelines provided by the cluster" \
+      || report FAIL "operators.subscriptions.pipelines.manage is false but no Pipelines CSV exists"
+    {{- end }}
+
+    # Storage.
+    {{- if .Values.storage.rwoClass }}
+    oc get storageclass {{ .Values.storage.rwoClass }} >/dev/null 2>&1 && report ok "storageclass {{ .Values.storage.rwoClass }}" || report FAIL "storageclass {{ .Values.storage.rwoClass }} not found"
+    {{- else }}
+    oc get storageclass -o jsonpath='{range .items[*]}{.metadata.annotations.storageclass\.kubernetes\.io/is-default-class}{"\n"}{end}' | grep -qx true \
+      && report ok "default storageclass" || report FAIL "no default storageclass and storage.rwoClass is empty"
+    {{- end }}
+    {{- if eq .Values.storage.objectStore "odf" }}
+    oc get storageclass {{ .Values.storage.objectBucketClass }} >/dev/null 2>&1 && report ok "object bucket class {{ .Values.storage.objectBucketClass }}" || report FAIL "object bucket class {{ .Values.storage.objectBucketClass }} not found (install ODF/MCG or set storage.objectStore: none)"
+    {{- end }}
+
+    # Internal registry (cli image and in-cluster builds).
+    state=$(oc get configs.imageregistry.operator.openshift.io cluster -o jsonpath='{.spec.managementState}' 2>/dev/null)
+    [ "$state" = Managed ] && report ok "image registry Managed" || report FAIL "image registry managementState is '${state:-unknown}'; Jobs use the openshift/cli imagestream"
+
+    # Keycloak.
+    {{- if .Values.profiles.rhbk }}
+    ready=$(oc get keycloaks.k8s.keycloak.org {{ .Values.keycloak.instanceName }} -n {{ .Values.keycloak.namespace }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+    [ "$ready" = True ] && report ok "keycloak {{ .Values.keycloak.namespace }}/{{ .Values.keycloak.instanceName }} Ready" || report FAIL "keycloak {{ .Values.keycloak.namespace }}/{{ .Values.keycloak.instanceName }} not Ready (${ready:-missing})"
+    {{- end }}
+
+    # Argo CD application controller needs cluster-admin for operators and cluster-scoped config.
+    allowed=$(oc create -o jsonpath='{.status.allowed}' -f - <<'SAR' 2>/dev/null
+    {"apiVersion":"authorization.k8s.io/v1","kind":"SubjectAccessReview","spec":{"user":"system:serviceaccount:openshift-gitops:openshift-gitops-argocd-application-controller","resourceAttributes":{"verb":"*","group":"*","resource":"*"}}}
+    SAR
+    )
+    [ "$allowed" = true ] && report ok "argocd controller is cluster-admin" || report FAIL "argocd controller lacks cluster-admin (set ocp4_workload_openshift_gitops_setup_cluster_admin: true)"
+
+    {{- if .Values.components.kafka }}
+    {{- if include "box1.profileOn" (dict "root" . "c" .Values.components.kafka) }}
+    served=$(oc get crd kafkas.kafka.strimzi.io -o jsonpath='{range .spec.versions[?(@.served==true)]}{.name}{" "}{end}' 2>/dev/null)
+    case " $served " in *" v1 "*) report ok "kafka.strimzi.io/v1 served";; *) report FAIL "kafka.strimzi.io/v1 not served (served: ${served:-none})";; esac
+    {{- end }}
+    {{- end }}
+
+    overall=ready; [ $fail = 1 ] && overall=blocked
+    oc create configmap box1-rhdp-status -n "$ns" --from-file=checks="$out" \
+      --from-literal=overall="$overall" --from-literal=checkedAt="$(date -u +%FT%TZ)" \
+      --dry-run=client -o yaml | oc apply -f - >/dev/null
+    cat "$out"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: box1-rhdp-preflight
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-8"
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: box1-rhdp-preflight
+          restartPolicy: Never
+          containers:
+            - name: preflight
+              image: {{ .Values.images.cli }}
+              command: [/bin/bash, /config/preflight.sh]
+              resources:
+                requests: {cpu: 10m, memory: 64Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: config, mountPath: /config}
+          volumes:
+            - name: config
+              configMap:
+                name: box1-rhdp-preflight
