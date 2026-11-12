@@ -4,6 +4,8 @@
 # source of truth; the mirror projects are overwritten on every run.
 #
 # Run on demand:  oc create job -n gitlab --from=cronjob/github-mirror github-mirror-manual-$(date +%s)
+# concurrencyPolicy only covers scheduled runs: start a manual run only when no
+# github-mirror Job is active (two runs racing fail on ref locks and creates).
 #
 # Private GitHub repositories need a read-only token in the hand-made Secret
 # gitlab/github-mirror (key: token; fine-grained PAT with Contents: read on
