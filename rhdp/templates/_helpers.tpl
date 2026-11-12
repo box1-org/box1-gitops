@@ -84,6 +84,9 @@ Args: dict root c
 {{- if and $r.objectStore (ne $root.Values.storage.objectStore "odf") -}}{{- $reasons = append $reasons "needs storage.objectStore: odf" -}}{{- end -}}
 {{- if and $r.rwoClass (not $root.Values.storage.rwoClass) -}}{{- $reasons = append $reasons "needs storage.rwoClass" -}}{{- end -}}
 {{- if and $r.litemaas (not (include "box1.litemaasEnabled" $root)) -}}{{- $reasons = append $reasons "needs LiteMaaS (litemaas.enabled and apiUrl)" -}}{{- end -}}
+{{- range $r.unset -}}
+{{- if include "box1.valueSet" (dict "root" $root "path" .) -}}{{- $reasons = append $reasons (printf "%s is set" .) -}}{{- end -}}
+{{- end -}}
 {{- range $r.values -}}
 {{- if not (include "box1.valueSet" (dict "root" $root "path" .)) -}}{{- $reasons = append $reasons (printf "needs %s" .) -}}{{- end -}}
 {{- end -}}
@@ -109,6 +112,19 @@ BOX1_REGISTRY_HOST: {{ include "box1.registryHost" . | quote }}
 BOX1_TPA_URL: {{ printf "https://tpa.%s" $d | quote }}
 BOX1_ACS_URL: {{ printf "https://acs.%s" $d | quote }}
 BOX1_ARGOCD_URL: {{ printf "https://openshift-gitops-server-openshift-gitops.%s" $d | quote }}
+BOX1_OIDC_METADATA_URL: {{ printf "%s/.well-known/openid-configuration" (include "box1.issuer" .) | quote }}
+BOX1_TEMPLATES_CATALOG_URL: {{ printf "%s/blob/main/catalog-info.yaml" (include "box1.gitUrl" (dict "root" . "repo" "templates")) | quote }}
+BOX1_DEVSPACES_URL: {{ printf "https://devspaces.%s" $d | quote }}
+BOX1_KIALI_URL: {{ printf "https://kiali-istio-system.%s" $d | quote }}
+BOX1_OPERATIONS_CONSOLE_URL: {{ printf "https://operations-console-dev.%s" $d | quote }}
+{{- $on := list -}}
+{{- range $p, $v := .Values.profiles -}}{{- if $v -}}{{- $on = append $on $p -}}{{- end -}}{{- end }}
+BOX1_PROFILES: {{ join "," $on | quote }}
+{{- $opt := list -}}
+{{- range $k, $v := .Values.ci.optionalRepositories -}}{{- if $v -}}{{- $opt = append $opt $k -}}{{- end -}}{{- end }}
+BOX1_CI_OPTIONAL: {{ join "," $opt | quote }}
+BOX1_SYSTEM_NAMESPACE: {{ .Values.system.namespace | quote }}
+BOX1_INPUTS_SECRET: {{ .Values.system.inputsSecret | quote }}
 {{- end -}}
 
 {{/*
@@ -157,12 +173,13 @@ target:
 patch: {{ toYaml $p | quote }}
 {{- end -}}
 
-{{/* Args: root (the chart context) */}}
+{{/* Args: dict root name - settings data into a ConfigMap (default box1-platform-settings) */}}
 {{- define "box1.patch.settings" -}}
-{{- $p := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" "box1-platform-settings") "data" (include "box1.settings" . | fromYaml) -}}
+{{- $name := .name | default "box1-platform-settings" -}}
+{{- $p := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" $name) "data" (include "box1.settings" .root | fromYaml) -}}
 target:
   kind: ConfigMap
-  name: box1-platform-settings
+  name: {{ $name }}
 patch: {{ toYaml $p | quote }}
 {{- end -}}
 

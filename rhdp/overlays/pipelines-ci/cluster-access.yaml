@@ -1,0 +1,102 @@
+# Read-only access for the box1-ci credential reconciler (run.py). The root
+# chart removes the keycloak and stackrox pairs when their profiles are off.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-ci-credentials
+  namespace: openshift-config
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [pull-secret]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-ci-credentials
+  namespace: openshift-config
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-ci-credentials
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-ci-credentials
+  namespace: openshift-config-managed
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [etc-pki-entitlement]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-ci-credentials
+  namespace: openshift-config-managed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-ci-credentials
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-ci-credentials-keycloak
+  namespace: keycloak
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [keycloak-client-secret-rhtpa-ci]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-ci-credentials-keycloak
+  namespace: keycloak
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-ci-credentials-keycloak
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: box1-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-ci-credentials-stackrox
+  namespace: stackrox
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [central-tls, central-htpasswd]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-ci-credentials-stackrox
+  namespace: stackrox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-ci-credentials-stackrox
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: box1-ci

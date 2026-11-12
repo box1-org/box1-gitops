@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Expose the internal registry (default route) for builds that push and for
+# Developer Hub plugin pulls. Applied with Server-Side Apply, so Argo CD owns
+# only spec.defaultRoute of the cluster-wide Config.
+resources:
+  - config.yaml

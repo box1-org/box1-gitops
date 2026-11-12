@@ -48,6 +48,8 @@ images:
   # registry enabled.
   cli: image-registry.openshift-image-registry.svc:5000/openshift/cli:latest
   keycloak: registry.redhat.io/rhbk/keycloak-rhel9@sha256:91937e38d3507d29a4bc5898a77abda62a204b508c77c730cd0bc745dcdb0d03
+  # Credential reconcilers (the same image the pipeline Tasks use).
+  python: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
 
 sync:
   defaultSyncOptions:
@@ -184,7 +186,8 @@ ai:
 #   profiles        rendered when any listed profile is on
 #   enabled         false opts out
 #   requires        profiles (all on), objectStore, rwoClass, litemaas,
-#                   value (dotted value path that must be truthy)
+#                   values (dotted paths that must be truthy),
+#                   unset (dotted paths that must be empty)
 #   path            repository path (overlays reference platform/ as base)
 #   helm            pass chart values (rhdp/components charts)
 #   repoURL/targetRevision  override the chart's repository (tpl)
@@ -254,7 +257,6 @@ components:
     path: rhdp/overlays/user-workload-monitoring
     namespace: openshift-monitoring
     syncWave: "0"
-    cliImage: true
   observabilityLogging:
     profiles: [operate]
     requires: {objectStore: true, rwoClass: true}
@@ -263,7 +265,6 @@ components:
     namespace: openshift-logging
     syncWave: "1"
     obcs: [logging-loki]
-    cliImage: true
     kustomizeTemplate: box1.k.observabilityLogging
   observabilityTracing:
     profiles: [operate]
@@ -283,3 +284,41 @@ components:
     path: platform/observability/dashboards
     namespace: box1-observability
     syncWave: "2"
+
+  # ----- developer ------------------------------------------------------------
+  pipelinesOperator:
+    profiles: [developer]
+    requires: {values: [operators.subscriptions.pipelines.manage]}
+    name: pipelines-operator
+    path: platform/pipelines/operator
+    namespace: openshift-operators
+    syncWave: "0"
+    subscriptions: [pipelines]
+  registryRoute:
+    profiles: [developer]
+    requires: {values: [registry.manageDefaultRoute], unset: [registry.host]}
+    name: registry-default-route
+    path: rhdp/overlays/registry-route
+    namespace: openshift-image-registry
+    syncWave: "0"
+    syncOptions: [ServerSideApply=true]
+  pipelinesConfig:
+    profiles: [developer]
+    name: pipelines-config
+    path: rhdp/overlays/pipelines-config
+    namespace: openshift-pipelines
+    syncWave: "1"
+    settings: true
+    # The operator owns most of TektonConfig; apply and diff only our fields.
+    syncOptions: [ServerSideApply=true]
+    annotations:
+      argocd.argoproj.io/compare-options: ServerSideDiff=true
+    kustomizeTemplate: box1.k.pipelinesConfig
+  pipelinesCi:
+    profiles: [developer]
+    name: pipelines-ci
+    path: rhdp/overlays/pipelines-ci
+    namespace: box1-ci
+    syncWave: "2"
+    settings: true
+    kustomizeTemplate: box1.k.pipelinesCi

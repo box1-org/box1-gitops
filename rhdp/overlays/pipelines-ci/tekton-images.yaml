@@ -1,0 +1,9 @@
+# Let the images transformer (Argo CD kustomize.images) rewrite Tekton Task
+# step images, such as the box1-builder reference.
+images:
+  - kind: Task
+    path: spec/steps/image
+  - kind: Task
+    path: spec/stepTemplate/image
+  - kind: Task
+    path: spec/sidecars/image

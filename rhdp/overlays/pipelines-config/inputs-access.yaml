@@ -1,0 +1,25 @@
+# Lets this overlay's credential reconciler read the inputs Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-inputs-reader-openshift-pipelines
+  namespace: box1-rhdp-system
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [box1-rhdp-inputs]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-inputs-reader-openshift-pipelines
+  namespace: box1-rhdp-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-inputs-reader-openshift-pipelines
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: openshift-pipelines

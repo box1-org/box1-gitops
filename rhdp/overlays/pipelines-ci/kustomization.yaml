@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# CI namespaces, PaC Repositories and Tasks from platform/. The root chart
+# patches Repository URLs and token scopes (git.org), drops optional
+# Repositories, and maps the builder image (ci.builderImage).
+resources:
+  - ../../../platform/pipelines/ci
+  - inputs-access.yaml
+  - cluster-access.yaml
+components:
+  - ../_components/platform-settings
+  - ../_components/credentials
+configurations:
+  - tekton-images.yaml
+configMapGenerator:
+  - name: box1-credentials-script
+    files:
+      - run.py
+    options:
+      disableNameSuffixHash: true
+patches:
+  # The shared credentials Component cannot know its namespace.
+  - target: {kind: RoleBinding, name: box1-credentials}
+    patch: |
+      - {op: add, path: /subjects/0/namespace, value: box1-ci}
+  # The homelab Central CA does not apply here; run.py publishes this
+  # cluster's CA from stackrox/central-tls when the security profile is on.
+  - target: {kind: ConfigMap, name: rhacs-central-ca}
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: rhacs-central-ca
+  # quarkus-reference is created by the workloads repository; apply this
+  # RBAC last so the rest of the CI setup does not wait for it.
+  - target: {kind: Role, name: quarkus-release-observer}
+    patch: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: quarkus-release-observer
+        annotations:
+          argocd.argoproj.io/sync-wave: "10"
+  - target: {kind: RoleBinding, name: quarkus-release-observer}
+    patch: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: quarkus-release-observer
+        annotations:
+          argocd.argoproj.io/sync-wave: "10"

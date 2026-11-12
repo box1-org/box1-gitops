@@ -51,6 +51,7 @@ FORBIDDEN = [
     r"rhtpa-redhat-current",
     r"letsencrypt-production",
     r"box1-rhtpa-89c9420e",
+    r"%!",  # malformed Helm printf output
 ]
 
 
