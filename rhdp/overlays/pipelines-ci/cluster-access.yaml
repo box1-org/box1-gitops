@@ -6,6 +6,8 @@ kind: Role
 metadata:
   name: box1-ci-credentials
   namespace: openshift-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 rules:
   - apiGroups: [""]
     resources: [secrets]
@@ -17,6 +19,8 @@ kind: RoleBinding
 metadata:
   name: box1-ci-credentials
   namespace: openshift-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -31,6 +35,8 @@ kind: Role
 metadata:
   name: box1-ci-credentials
   namespace: openshift-config-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 rules:
   - apiGroups: [""]
     resources: [secrets]
@@ -42,6 +48,8 @@ kind: RoleBinding
 metadata:
   name: box1-ci-credentials
   namespace: openshift-config-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -56,6 +64,8 @@ kind: Role
 metadata:
   name: box1-ci-credentials-keycloak
   namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 rules:
   - apiGroups: [""]
     resources: [secrets]
@@ -67,6 +77,8 @@ kind: RoleBinding
 metadata:
   name: box1-ci-credentials-keycloak
   namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -81,6 +93,8 @@ kind: Role
 metadata:
   name: box1-ci-credentials-stackrox
   namespace: stackrox
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 rules:
   - apiGroups: [""]
     resources: [secrets]
@@ -92,6 +106,8 @@ kind: RoleBinding
 metadata:
   name: box1-ci-credentials-stackrox
   namespace: stackrox
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

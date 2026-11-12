@@ -47,6 +47,23 @@ def developer_hub(litemaas):
     return check
 
 
+def rhtpa_auth(apps, built):
+    """rhtpa-auth must equal platform/ except for the issuer."""
+    import json
+    import os
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    with open(os.path.join(root, "platform/trusted-profile-analyzer/instance/auth.yaml")) as f:
+        want = json.loads(json.load(f)["data"]["auth.yaml"])
+    cm = _find(built.get("rhtpa", ""), "ConfigMap", "rhtpa-auth")
+    if not cm:
+        return ["rhtpa: rhtpa-auth not built"]
+    got = json.loads(cm["data"]["auth.yaml"])
+    issuer = "https://sso.apps.cluster-test.example.com/realms/box1"
+    for c in want["authentication"]["clients"]:
+        c["issuerUrl"] = issuer
+    return [] if got == want else ["rhtpa: rhtpa-auth differs from platform/ beyond the issuer"]
+
+
 def sandboxes(users):
     def check(apps, built):
         names = sorted(d["metadata"]["name"] for d in _docs(built.get("box1-sandboxes", "")) if d["kind"] == "Namespace")
@@ -62,6 +79,8 @@ DEVELOPER = ["box1-service-namespaces", "pipelines-operator", "registry-default-
              "pipelines-config", "pipelines-ci", "developer-hub-operator", "developer-hub",
              "dev-spaces-operator", "dev-spaces", "reposilite", "mailhog", "box1-workloads-dev"]
 
+SECURITY_BASE = ["acs-operator", "acs", "rhtpa-operator"]
+
 # Text in built manifests that legitimately mentions homelab values.
 DEV_ALLOW = {
     # Homelab defaults inside Task scripts and param descriptions; RHDP
@@ -75,8 +94,45 @@ DEV_ALLOW = {
 
 
 def SCENARIOS(Scenario, sentinel):
+    allp = {"core": True, "rhbk": True, "developer": True, "operate": True, "security": True, "ai": True}
+    litemaas = {"enabled": True, "apiUrl": "https://litemaas.example.com/v1", "apiKey": sentinel, "model": "llama-scout-17b"}
     return [
         Scenario("default (core + rhbk)", {}, expect=["keycloak-rhbk"]),
+        Scenario(
+            "security, no object store",
+            {"profiles": {"security": True}},
+            expect=SECURITY_BASE,
+            absent=["rhtpa-prerequisites", "rhtpa"],
+        ),
+        Scenario(
+            "security, odf, cert-manager TLS",
+            {"profiles": {"security": True}, "storage": {"objectStore": "odf"},
+             "security": {"rhtpa": {"tls": "certManager", "clusterIssuer": "rhdp-issuer"}}},
+            expect=SECURITY_BASE + ["rhtpa-prerequisites", "rhtpa"],
+            check=rhtpa_auth,
+        ),
+        Scenario(
+            "ai without LiteMaaS",
+            {"profiles": {"ai": True}, "storage": {"objectStore": "odf"}},
+            expect=["langfuse"],
+            absent=["lightspeed-operator", "lightspeed"],
+        ),
+        Scenario(
+            "all profiles, odf, LiteMaaS, demo org",
+            {"profiles": allp, "git": {"org": "box1-rhdp"}, "litemaas": litemaas,
+             "storage": {"objectStore": "odf", "rwoClass": "gp3-csi"},
+             "ci": {"builderImage": "quay.io/box1-rhdp/box1-builder@sha256:" + "b" * 64},
+             "developerHub": {"onboardingPluginPackage": "oci://quay.io/box1-rhdp/box1-onboarding-plugin@sha256:" + "c" * 64 + "!box1-scaffolder-onboarding"}},
+            expect=DEVELOPER + OPERATE + SECURITY_BASE + ["observability-logging", "rhtpa-prerequisites", "rhtpa",
+                                                         "lightspeed-operator", "lightspeed", "langfuse"],
+            allow=DEV_ALLOW,
+            check=lambda a, b: developer_hub(litemaas=True)(a, b) + rhtpa_auth(a, b),
+        ),
+        Scenario(
+            "kafka enabled",
+            {"components": {"kafkaOperator": {"enabled": True}, "kafka": {"enabled": True}}},
+            expect=["kafka-operator", "box1-kafka"],
+        ),
         Scenario(
             "operate, no object store",
             {"profiles": {"operate": True}},

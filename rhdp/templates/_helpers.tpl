@@ -125,6 +125,7 @@ BOX1_PROFILES: {{ join "," $on | quote }}
 BOX1_CI_OPTIONAL: {{ join "," $opt | quote }}
 BOX1_LITEMAAS: {{ ternary "true" "false" (eq (include "box1.litemaasEnabled" .) "true") | quote }}
 BOX1_ONBOARDING_PLUGIN_PACKAGE: {{ .Values.developerHub.onboardingPluginPackage | quote }}
+BOX1_ADMIN_USERS: {{ join "," .Values.keycloak.adminUsers | quote }}
 BOX1_SYSTEM_NAMESPACE: {{ .Values.system.namespace | quote }}
 BOX1_INPUTS_SECRET: {{ .Values.system.inputsSecret | quote }}
 {{- end -}}

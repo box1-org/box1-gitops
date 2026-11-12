@@ -382,3 +382,98 @@ components:
     path: applications
     namespace: openshift-gitops
     syncWave: "4"
+
+  # ----- security -------------------------------------------------------------
+  acsOperator:
+    profiles: [security]
+    name: acs-operator
+    path: platform/advanced-cluster-security/operator
+    namespace: rhacs-operator
+    syncWave: "0"
+    subscriptions: [acs]
+  acs:
+    profiles: [security]
+    requires: {profiles: [rhbk]}
+    name: acs
+    path: rhdp/overlays/acs
+    namespace: stackrox
+    syncWave: "1"
+    settings: true
+    kustomizeTemplate: box1.k.acs
+  rhtpaOperator:
+    profiles: [security]
+    name: rhtpa-operator
+    path: platform/trusted-profile-analyzer/operator
+    namespace: trusted-profile-analyzer
+    syncWave: "0"
+    subscriptions: [rhtpa]
+    kustomizeTemplate: box1.k.rhtpaOperator
+  rhtpaPrerequisites:
+    profiles: [security]
+    requires: {profiles: [rhbk], objectStore: true}
+    name: rhtpa-prerequisites
+    path: rhdp/overlays/rhtpa-prerequisites
+    namespace: trusted-profile-analyzer
+    syncWave: "1"
+    settings: true
+    pvcs: [postgres-data]
+    obcs: [rhtpa-documents]
+    kustomizeTemplate: box1.k.rhtpaPrerequisites
+  rhtpa:
+    profiles: [security]
+    requires: {profiles: [rhbk], objectStore: true}
+    name: rhtpa
+    path: rhdp/overlays/rhtpa
+    namespace: trusted-profile-analyzer
+    syncWave: "2"
+    kustomizeTemplate: box1.k.rhtpa
+
+  # ----- ai -------------------------------------------------------------------
+  lightspeedOperator:
+    profiles: [ai]
+    requires: {litemaas: true}
+    name: lightspeed-operator
+    path: platform/lightspeed/operator
+    namespace: openshift-lightspeed
+    syncWave: "0"
+    subscriptions: [lightspeed]
+  lightspeed:
+    profiles: [ai]
+    requires: {litemaas: true}
+    name: lightspeed
+    path: rhdp/overlays/lightspeed
+    namespace: openshift-lightspeed
+    syncWave: "1"
+    settings: true
+    kustomizeTemplate: box1.k.lightspeed
+  langfuse:
+    profiles: [ai]
+    requires: {profiles: [rhbk], objectStore: true}
+    name: langfuse
+    path: platform/langfuse
+    namespace: langfuse
+    syncWave: "2"
+    routeHosts:
+      - {name: langfuse, prefix: langfuse}
+      - {name: langfuse-signup-disabled, prefix: langfuse}
+      - {name: langfuse-signup-verify-disabled, prefix: langfuse}
+    pvcs: [langfuse-clickhouse-data, langfuse-postgres-data, langfuse-redis-data]
+    obcs: [langfuse-bucket]
+    kustomizeTemplate: box1.k.langfuse
+
+  # ----- core: Kafka (off until AMQ Streams serving kafka.strimzi.io/v1 is confirmed)
+  kafkaOperator:
+    enabled: false
+    profiles: [core]
+    name: kafka-operator
+    path: platform/kafka/operator
+    namespace: openshift-operators
+    syncWave: "0"
+    subscriptions: [amqStreams]
+  kafka:
+    enabled: false
+    profiles: [core]
+    name: box1-kafka
+    path: platform/kafka
+    namespace: box1-kafka
+    syncWave: "1"

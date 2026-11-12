@@ -1,0 +1,30 @@
+# Read access to the LiteMaaS key the root chart stores from the role's values.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: box1-lightspeed-litemaas
+  namespace: box1-rhdp-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [box1-rhdp-litemaas]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: box1-lightspeed-litemaas
+  namespace: box1-rhdp-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: box1-lightspeed-litemaas
+subjects:
+  - kind: ServiceAccount
+    name: box1-credentials
+    namespace: openshift-lightspeed

@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# PostgreSQL, the documents bucket and TLS for RHTPA from platform/. run.py
+# generates rhtpa-database once and copies the rhtpa-ci client (replacing the
+# homelab's validation/bootstrap.py). The root chart patches storage classes,
+# the bucket name and the certificate (or removes it for router TLS).
+resources:
+  - ../../../platform/trusted-profile-analyzer/prerequisites
+  - cluster-access.yaml
+components:
+  - ../_components/platform-settings
+  - ../_components/credentials
+configMapGenerator:
+  - name: box1-credentials-script
+    files:
+      - run.py
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        argocd.argoproj.io/sync-wave: "-5"
+patches:
+  # The shared credentials Component cannot know its namespace.
+  - target: {kind: RoleBinding, name: box1-credentials}
+    patch: |
+      - {op: add, path: /subjects/0/namespace, value: trusted-profile-analyzer}
+  # The grants Job waits for the operator's schema migration; give it time.
+  - target: {kind: Job, name: rhtpa-database-grants}
+    patch: |
+      - {op: replace, path: /spec/backoffLimit, value: 20}

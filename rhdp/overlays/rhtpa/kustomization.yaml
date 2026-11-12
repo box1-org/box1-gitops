@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# TrustedProfileAnalyzer from platform/. The root chart patches the domain,
+# bucket, S3 endpoint, issuer and ingress, and re-renders rhtpa-auth with the
+# RHDP issuer (a test checks it matches platform/ otherwise).
+resources:
+  - ../../../platform/trusted-profile-analyzer/instance
+patches:
+  # Argo CD has no health check for the RHTPA CR, so this PostSync Job can
+  # start before the operator's migration creates the importer table.
+  - target: {kind: Job, name: rhtpa-configure-importers}
+    patch: |
+      - {op: replace, path: /spec/backoffLimit, value: 20}

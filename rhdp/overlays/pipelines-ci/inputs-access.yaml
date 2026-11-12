@@ -4,6 +4,8 @@ kind: Role
 metadata:
   name: box1-inputs-reader-box1-ci
   namespace: box1-rhdp-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 rules:
   - apiGroups: [""]
     resources: [secrets]
@@ -15,6 +17,8 @@ kind: RoleBinding
 metadata:
   name: box1-inputs-reader-box1-ci
   namespace: box1-rhdp-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
