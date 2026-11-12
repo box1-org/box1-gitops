@@ -160,15 +160,27 @@ def settings():
     log("instance settings applied")
 
 
-def ensure_group(name, creation_level):
+# New service projects: rhdh-bot (Developer) makes the initial push, after
+# which main is protected (Maintainers push and merge).
+SERVICE_BRANCH_DEFAULTS = {
+    "allowed_to_push": [{"access_level": MAINTAINER}],
+    "allowed_to_merge": [{"access_level": MAINTAINER}],
+    "allow_force_push": False,
+    "developer_can_initial_push": True,
+}
+
+
+def ensure_group(name, creation_level, branch_defaults=None):
     code, g = gl("GET", f"/groups/{enc(name)}")
     if code == 404:
         g = must(gl("POST", "/groups", {"name": name, "path": name, "visibility": "private",
                                         "project_creation_level": creation_level,
                                         "auto_devops_enabled": False}), f"create group {name}")
         log(f"group {name} created")
-    else:
-        must(gl("PUT", f"/groups/{g['id']}", {"project_creation_level": creation_level}), f"group {name}")
+    body = {"project_creation_level": creation_level}
+    if branch_defaults:
+        body["default_branch_protection_defaults"] = branch_defaults
+    must(gl("PUT", f"/groups/{g['id']}", body), f"group {name}")
     return g
 
 
@@ -278,7 +290,7 @@ def ensure_hook(pid, secret):
 def bootstrap():
     wait_root()
     settings()
-    group = ensure_group(GROUP, "developer")
+    group = ensure_group(GROUP, "developer", SERVICE_BRANCH_DEFAULTS)
     # "noone" also blocks admins, so the GitOps project is created first and
     # project creation is locked afterwards.
     gitops = ensure_group(GITOPS_GROUP, "maintainer")
