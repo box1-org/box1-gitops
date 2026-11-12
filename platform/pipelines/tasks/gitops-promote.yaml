@@ -68,9 +68,25 @@ spec:
       value: "$(params.disk-digest)"
     - name: INSTANCE_NAME
       value: "$(params.instance-name)"
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/usr/bin/env python3
-      import base64, datetime, json, os, re, ssl, time, urllib.request, urllib.error
+      import base64, datetime, json, os, re, ssl, time, urllib.parse, urllib.request, urllib.error
+
+      GIT_ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
+      WORKLOADS_REPO_URL=os.environ.get('BOX1_WORKLOADS_REPO_URL','https://github.com/box1-org/box1-workloads-dev')
+
+      def repo_slug(url):
+          """owner/name of a repository URL: https://github.com/box1-org/x(.git) -> box1-org/x."""
+          return urllib.parse.urlsplit(url).path.strip('/').removesuffix('.git')
+
+      def tracks_workloads(source):
+          """True when an Argo source is the promotion (workloads) repository."""
+          return source.get('repoURL','').rstrip('/').removesuffix('.git')==WORKLOADS_REPO_URL.rstrip('/').removesuffix('.git')
 
       def github(path, method='GET', body=None):
           request=urllib.request.Request('https://api.github.com'+path, method=method,
@@ -92,7 +108,7 @@ spec:
       assert environment in ['development','approval'], 'Unsupported promotion policy'
       name=os.environ['APPLICATION_NAME']
       assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name), 'Invalid application name'
-      application='/repos/box1-org/'+name
+      application='/repos/'+GIT_ORG+'/'+name
       # vm-instance (box1-docs#139): application-name is the source OS image repository and
       # gates supersession through `application`; from here on `name` is the instance, so
       # the files, branch, PR and Argo sync below all target workloads/<instance>/ only.
@@ -102,7 +118,7 @@ spec:
           source_image,name=name,instance
       else:
           assert not instance, 'instance-name is only valid with workload-profile vm-instance'
-      gitops='/repos/box1-org/box1-workloads-dev'
+      gitops='/repos/'+repo_slug(WORKLOADS_REPO_URL)
 
       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
 
@@ -276,7 +292,7 @@ spec:
           if sources is None: sources=[spec.get('source',{})]
           # Workload Applications track the promotion repository. The platform
           # repository owns the Task and RBAC, but is not the desired-state source.
-          direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-workloads-dev']
+          direct=[source for source in sources if tracks_workloads(source)]
           active=(app.get('status',{}).get('operationState') or {}).get('phase') in ['Running','Terminating']
           if not active and settled(app,expected,direct):
               print('Argo Application already at the expected revision and Healthy')

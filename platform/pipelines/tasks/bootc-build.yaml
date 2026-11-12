@@ -114,11 +114,18 @@ spec:
         secretKeyRef:
           name: $(params.git-auth-secret)
           key: git-provider-token
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/bin/sh
       set -eu
       echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
-      echo "$SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
+      org="${BOX1_GIT_ORG:-box1-org}"
+      echo "$org" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'
+      echo "$SOURCE_REPO" | grep -Eq "^$org/[a-z][a-z0-9-]{2,39}\$"
       echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}$'
       case "$PUSH_IMAGE" in true|false) ;; *) echo "push-image must be true or false"; exit 1 ;; esac
       mkdir -p source
@@ -127,7 +134,7 @@ spec:
         | tar -xz --strip-components=1 -C source
       printf 'Fetched %s at %s\n' "$SOURCE_REPO" "$REVISION"
       if [ -n "$EXTRA_SOURCE_REPO" ]; then
-        echo "$EXTRA_SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
+        echo "$EXTRA_SOURCE_REPO" | grep -Eq "^$org/[a-z][a-z0-9-]{2,39}\$"
         echo "$EXTRA_SOURCE_REVISION" | grep -Eq '^[a-f0-9]{40}$'
         echo "$EXTRA_SOURCE_PATH" | grep -Eq '^[a-z][a-z0-9-]{1,39}$'
         test ! -e "source/$EXTRA_SOURCE_PATH" || { echo "source/$EXTRA_SOURCE_PATH already exists"; exit 1; }
@@ -142,10 +149,16 @@ spec:
     - name: bundle-pull
       mountPath: /etc/box1-bundle-pull
       readOnly: true
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/bin/sh
       set -eu
-      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME:$REVISION"
+      registry="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}"
+      image="$registry/box1-ci/$IMAGE_NAME:$REVISION"
       # Pulls from box1-ci (for example a code-only repository's bundle, named in a
       # COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:... line) use this
       # task's ServiceAccount; the Red Hat registry entry is kept. The file stays in the step.
@@ -166,7 +179,7 @@ spec:
       fi
       if [ -n "$login" ]; then
         cp /etc/redhat-registry/.dockerconfigjson /tmp/box1-auth.json
-        printf '%s' "$login" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin registry.apps.ocp.box1.org >/dev/null
+        printf '%s' "$login" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin "$registry" >/dev/null
         export REGISTRY_AUTH_FILE=/tmp/box1-auth.json
         login=
       fi
@@ -186,4 +199,4 @@ spec:
       digest=$(cat /workspace/digest)
       echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
       printf '%s' "$digest" > "$(results.image-digest.path)"
-      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s@%s\n' "$IMAGE_NAME" "$digest"
+      printf 'Published %s/box1-ci/%s@%s\n' "$registry" "$IMAGE_NAME" "$digest"

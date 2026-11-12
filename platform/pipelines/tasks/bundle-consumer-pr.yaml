@@ -89,13 +89,21 @@ spec:
         secretKeyRef:
           name: "$(params.git-auth-secret)"
           key: git-provider-token
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/usr/bin/env python3
       import base64, json, os, pathlib, re, urllib.parse, urllib.request, urllib.error
 
-      ORG='box1-org'
+      ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
       NAME=r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*'
-      PROTECTED=('box1-gitops','box1-workloads-dev')
+      # The GitOps repositories never receive a bundle PR.
+      PROTECTED=tuple(urllib.parse.urlsplit(url).path.strip('/').removesuffix('.git').split('/')[-1] for url in (
+          os.environ.get('BOX1_GITOPS_REPO_URL','https://github.com/box1-org/box1-gitops'),
+          os.environ.get('BOX1_WORKLOADS_REPO_URL','https://github.com/box1-org/box1-workloads-dev')))
       MARKER='box1-bundle-source: '
       PATH=re.compile(r'(?!/)(?!.*(?:^|/)\.\.?(?:/|$))[A-Za-z0-9._/-]{1,200}')
 
@@ -147,11 +155,11 @@ spec:
               raise SystemExit('The security gate did not pass (policy=%s); a bundle that fails policy is never proposed' % (env['GATE_POLICY'] or 'empty'))
           if not re.fullmatch('[a-f0-9]{40}',revision): raise SystemExit('Immutable source revision required')
           if not re.fullmatch('sha256:[a-f0-9]{64}',digest): raise SystemExit('Immutable bundle digest required')
-          if not re.fullmatch(ORG+'/'+NAME,source): raise SystemExit('Source repository must be box1-org/<name>')
+          if not re.fullmatch(re.escape(ORG)+'/'+NAME,source): raise SystemExit('Source repository must be %s/<name>' % ORG)
           repo=source.split('/')[1]
           if bundle!=repo+'-bundle': raise SystemExit('bundle-name must be %s-bundle' % repo)
           if not re.fullmatch(NAME,consumer) or consumer in PROTECTED or consumer==repo:
-              raise SystemExit('consumer-repository must be another box1-org repository name, not %r (and never box1-gitops or box1-workloads-dev)' % consumer)
+              raise SystemExit('consumer-repository must be another %s repository name, not %r (and never %s)' % (ORG,consumer,' or '.join(PROTECTED)))
           if not PATH.fullmatch(path): raise SystemExit('consumer-path must be a relative path without . or .. segments')
           return revision,digest,source,repo,consumer,bundle,path
 

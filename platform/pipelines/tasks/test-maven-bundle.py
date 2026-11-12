@@ -12,18 +12,36 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import pathlib
 import re
+import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).parent
 BUNDLE_TASK = ROOT / "maven-bundle.yaml"
 CONSUMER_TASK = ROOT / "bundle-consumer-pr.yaml"
 QUARKUS_MAVEN = ROOT / "quarkus-maven.yaml"
 # box1-quarkus-maven must stay byte-identical for services (box1-docs#137 guardrail).
-QUARKUS_MAVEN_SHA256 = "f656c259f4119243fef277c80cfa7c189c9b50be6eeabca53053c7bbbe685318"
+# Re-pinned for box1-docs#165: optional box1-platform-settings org/registry with homelab defaults.
+QUARKUS_MAVEN_SHA256 = "dc217d28e8e485c5de642223b922789d32ce39281dcbdf4dfdc0f6279880e145"
+# box1-docs#165: keys of the optional box1-platform-settings ConfigMap the Tasks read.
+PLATFORM_SETTINGS = ["BOX1_APPS_DOMAIN", "BOX1_GIT_HOST", "BOX1_GIT_ORG", "BOX1_GITOPS_REPO_URL", "BOX1_WORKLOADS_REPO_URL",
+                     "BOX1_TEMPLATES_REPO_URL", "BOX1_REGISTRY_HOST", "BOX1_OIDC_ISSUER", "BOX1_TPA_URL", "BOX1_ACS_URL"]
+RHDP_SETTINGS = {"BOX1_GIT_ORG": "box1-rhdp", "BOX1_GITOPS_REPO_URL": "https://github.com/box1-rhdp/box1-gitops",
+                 "BOX1_WORKLOADS_REPO_URL": "https://github.com/box1-rhdp/box1-workloads-dev",
+                 "BOX1_REGISTRY_HOST": "default-route-openshift-image-registry.apps.cluster-abcde.dynamic.redhatworkshops.io"}
+ENVFROM = "    envFrom:\n    - configMapRef:\n        name: box1-platform-settings\n        optional: true\n"
+
+
+def settings_env(settings=None):
+    """The process environment without any BOX1_* platform setting, plus `settings`."""
+    env = {k: v for k, v in os.environ.items() if k not in PLATFORM_SETTINGS}
+    env.update(settings or {})
+    return env
 
 
 def step_script(task, step):
@@ -37,11 +55,13 @@ def step_script(task, step):
     return "\n".join(body)
 
 
-def load(task, step):
+def load(task, step, settings=None):
+    """Load a step script; `settings` stands in for the box1-platform-settings ConfigMap."""
     script = step_script(task, step)
     ast.parse(script)
     namespace = {"__name__": "box1_contract_test"}
-    exec(compile(script, str(task) + ":" + step, "exec"), namespace)
+    with mock.patch.dict(os.environ, settings_env(settings), clear=True):
+        exec(compile(script, str(task) + ":" + step, "exec"), namespace)
     return script, namespace
 
 
@@ -158,7 +178,7 @@ class MavenBundleTask(unittest.TestCase):
                         "pull requests (ci-test, no token) must exit before reading a token")
         self.assertIn("--digestfile /workspace/pushed-digest", self.push)
         self.assertIn("--preserve-digests", self.push)
-        self.assertIn('image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"', self.push)
+        self.assertIn('image="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME"', self.push)
         self.assertIn('"$(cat /workspace/expected-digest)"', self.push)
         self.assertNotIn("tls-verify=false", self.push)
         push_env = BUNDLE_TASK.read_text().split("  - name: push\n", 1)[1]
@@ -399,6 +419,58 @@ class ConsumerPullRequestTask(unittest.TestCase):
         self.assertNotIn("/merge", self.script)
         task = CONSUMER_TASK.read_text()
         self.assertIn("name: \"$(params.git-auth-secret)\"", task)
+
+
+class PlatformSettings(unittest.TestCase):
+    """box1-docs#165: RHDP org and registry route come from box1-platform-settings; without it the homelab literals apply."""
+
+    def push_image(self, settings=None):
+        line = [l for l in step_script(BUNDLE_TASK, "push").splitlines() if l.startswith("image=")]
+        self.assertEqual(len(line), 1)
+        return subprocess.run(["sh", "-euc", line[0] + '\nprintf %s "$image"'], env=settings_env(settings) | {"IMAGE_NAME": "site-gateway-bundle"},
+                              text=True, capture_output=True, check=True).stdout
+
+    def source_label(self, ns, source):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            (work / "application").mkdir()
+            (work / "application" / "pom.xml").write_text(pom(["gateway"]))
+            fast_jar(work / "application", "gateway")
+            ns["stage"](work / "application", ["gateway"], work / "bundle")
+            ns["make_layout"](work / "bundle", work / "oci", "a" * 40, source, ["gateway"])
+            index = json.loads((work / "oci" / "index.json").read_text())
+            digest = index["manifests"][0]["digest"].split(":")[1]
+            manifest = json.loads((work / "oci" / "blobs" / "sha256" / digest).read_text())
+            return manifest["annotations"]["org.opencontainers.image.source"]
+
+    def test_steps_read_the_optional_settings_configmap(self):
+        self.assertEqual(BUNDLE_TASK.read_text().count(ENVFROM), 3)
+        self.assertEqual(CONSUMER_TASK.read_text().count(ENVFROM), 1)
+        self.assertEqual(QUARKUS_MAVEN.read_text().count(ENVFROM), 2)
+        quarkus = QUARKUS_MAVEN.read_text()
+        self.assertIn("repo=os.environ['SOURCE_REPO'] or org+'/quarkus-reference'", quarkus)
+        self.assertIn('-Dquarkus.container-image.registry="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}"', quarkus)
+
+    def test_homelab_defaults_without_the_configmap(self):
+        _, bundle = load(BUNDLE_TASK, "verify-and-package")
+        self.assertEqual(self.source_label(bundle, "box1-org/site-gateway"), "https://github.com/box1-org/site-gateway")
+        self.assertEqual(self.push_image(), "registry.apps.ocp.box1.org/box1-ci/site-gateway-bundle")
+        _, consumer = load(CONSUMER_TASK, "propose")
+        self.assertEqual((consumer["ORG"], consumer["PROTECTED"]), ("box1-org", ("box1-gitops", "box1-workloads-dev")))
+
+    def test_rhdp_org_and_registry_route_come_from_the_configmap(self):
+        _, bundle = load(BUNDLE_TASK, "verify-and-package", RHDP_SETTINGS)
+        self.assertEqual(bundle["GIT_ORG"], "box1-rhdp")
+        self.assertEqual(self.source_label(bundle, "box1-rhdp/site-gateway"), "https://github.com/box1-rhdp/site-gateway")
+        self.assertEqual(self.push_image(RHDP_SETTINGS), RHDP_SETTINGS["BOX1_REGISTRY_HOST"] + "/box1-ci/site-gateway-bundle")
+        _, consumer = load(CONSUMER_TASK, "propose", RHDP_SETTINGS)
+        rhdp = env(SOURCE_REPOSITORY="box1-rhdp/site-gateway")
+        self.assertEqual(consumer["check_inputs"](rhdp)[2:4], ("box1-rhdp/site-gateway", "site-gateway"))
+        with self.assertRaisesRegex(SystemExit, "Source repository must be box1-rhdp/<name>"):
+            consumer["check_inputs"](env())
+        for protected in ["box1-gitops", "box1-workloads-dev"]:
+            with self.assertRaisesRegex(SystemExit, "never box1-gitops or box1-workloads-dev"):
+                consumer["check_inputs"](env(SOURCE_REPOSITORY="box1-rhdp/site-gateway", CONSUMER_REPOSITORY=protected))
 
 
 if __name__ == "__main__":

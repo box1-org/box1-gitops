@@ -1,0 +1,515 @@
+--- origin/main:platform/pipelines/ci
++++ rhdp-tekton-settings:platform/pipelines/ci
+@@ -982,12 +982,18 @@
+         secretKeyRef:
+           key: git-provider-token
+           name: $(params.git-auth-secret)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     name: fetch
+     script: |
+       #!/bin/sh
+       set -eu
+       echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
+-      echo "$SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
++      org="${BOX1_GIT_ORG:-box1-org}"
++      echo "$org" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'
++      echo "$SOURCE_REPO" | grep -Eq "^$org/[a-z][a-z0-9-]{2,39}\$"
+       echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}$'
+       case "$PUSH_IMAGE" in true|false) ;; *) echo "push-image must be true or false"; exit 1 ;; esac
+       mkdir -p source
+@@ -996,7 +1002,7 @@
+         | tar -xz --strip-components=1 -C source
+       printf 'Fetched %s at %s\n' "$SOURCE_REPO" "$REVISION"
+       if [ -n "$EXTRA_SOURCE_REPO" ]; then
+-        echo "$EXTRA_SOURCE_REPO" | grep -Eq '^box1-org/[a-z][a-z0-9-]{2,39}$'
++        echo "$EXTRA_SOURCE_REPO" | grep -Eq "^$org/[a-z][a-z0-9-]{2,39}\$"
+         echo "$EXTRA_SOURCE_REVISION" | grep -Eq '^[a-f0-9]{40}$'
+         echo "$EXTRA_SOURCE_PATH" | grep -Eq '^[a-z][a-z0-9-]{1,39}$'
+         test ! -e "source/$EXTRA_SOURCE_PATH" || { echo "source/$EXTRA_SOURCE_PATH already exists"; exit 1; }
+@@ -1007,11 +1013,16 @@
+         printf 'Fetched %s at %s into %s/\n' "$EXTRA_SOURCE_REPO" "$EXTRA_SOURCE_REVISION" "$EXTRA_SOURCE_PATH"
+       fi
+     workingDir: /workspace
+-  - name: build
++  - envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
++    name: build
+     script: |
+       #!/bin/sh
+       set -eu
+-      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME:$REVISION"
++      registry="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}"
++      image="$registry/box1-ci/$IMAGE_NAME:$REVISION"
+       # Pulls from box1-ci (for example a code-only repository's bundle, named in a
+       # COPY --from=registry.apps.ocp.box1.org/box1-ci/<repo>-bundle@sha256:... line) use this
+       # task's ServiceAccount; the Red Hat registry entry is kept. The file stays in the step.
+@@ -1032,7 +1043,7 @@
+       fi
+       if [ -n "$login" ]; then
+         cp /etc/redhat-registry/.dockerconfigjson /tmp/box1-auth.json
+-        printf '%s' "$login" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin registry.apps.ocp.box1.org >/dev/null
++        printf '%s' "$login" | buildah login --authfile /tmp/box1-auth.json -u serviceaccount --password-stdin "$registry" >/dev/null
+         export REGISTRY_AUTH_FILE=/tmp/box1-auth.json
+         login=
+       fi
+@@ -1052,7 +1063,7 @@
+       digest=$(cat /workspace/digest)
+       echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+       printf '%s' "$digest" > "$(results.image-digest.path)"
+-      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s@%s\n' "$IMAGE_NAME" "$digest"
++      printf 'Published %s/box1-ci/%s@%s\n' "$registry" "$IMAGE_NAME" "$digest"
+     volumeMounts:
+     - mountPath: /etc/box1-bundle-pull
+       name: bundle-pull
+@@ -1173,7 +1184,11 @@
+     - mountPath: /store
+       name: osbuild-store
+   steps:
+-  - image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
++  - envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
++    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+     name: prepare
+     script: |
+       #!/bin/sh
+@@ -1183,7 +1198,7 @@
+       echo "$IMAGE_DIGEST" | grep -Eq '^sha256:[a-f0-9]{64}$'
+       echo "$CHANNEL" | grep -Eq '^(development|approval|production)$'
+       token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+-      source="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME@$IMAGE_DIGEST"
++      source="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME@$IMAGE_DIGEST"
+       tracked="image-registry.openshift-image-registry.svc:5000/box1-ci/$IMAGE_NAME:$CHANNEL"
+       buildah pull --creds "serviceaccount:$token" "$source"
+       # bootc-image-builder records this reference as the installed system's update source.
+@@ -1198,12 +1213,16 @@
+       set -eu
+       exec /usr/bin/bootc-image-builder --type qcow2 --rootfs xfs \
+         --config /workspace/config.toml --output /workspace/output "$(cat /workspace/tracked)"
+-  - image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
++  - envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
++    image: registry.access.redhat.com/ubi9/buildah@sha256:12ab6d225aef49ceed4c7b39e7ab207c4b7f4a67b7dba04a61efbac92c01b8b8
+     name: package-push
+     script: |
+       #!/bin/sh
+       set -eu
+-      disk="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME-disk:$REVISION"
++      disk="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME-disk:$REVISION"
+       ls -lsh output/qcow2/
+       # KubeVirt containerDisk layout: the disk under /disk, owned by qemu (107).
+       ctr=$(buildah from scratch)
+@@ -1217,7 +1236,7 @@
+       digest=$(cat /workspace/disk-digest)
+       echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+       printf '%s' "$digest" > "$(results.disk-digest.path)"
+-      printf 'Published registry.apps.ocp.box1.org/box1-ci/%s-disk@%s\n' "$IMAGE_NAME" "$digest"
++      printf 'Published %s/box1-ci/%s-disk@%s\n' "${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}" "$IMAGE_NAME" "$digest"
+     workingDir: /workspace
+   volumes:
+   - emptyDir: {}
+@@ -1410,15 +1429,22 @@
+         secretKeyRef:
+           key: git-provider-token
+           name: $(params.git-auth-secret)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+     name: propose
+     script: |
+       #!/usr/bin/env python3
+       import base64, json, os, pathlib, re, urllib.parse, urllib.request, urllib.error
+ 
+-      ORG='box1-org'
++      ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
+       NAME=r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*'
+-      PROTECTED=('box1-gitops','box1-workloads-dev')
++      # The GitOps repositories never receive a bundle PR.
++      PROTECTED=tuple(urllib.parse.urlsplit(url).path.strip('/').removesuffix('.git').split('/')[-1] for url in (
++          os.environ.get('BOX1_GITOPS_REPO_URL','https://github.com/box1-org/box1-gitops'),
++          os.environ.get('BOX1_WORKLOADS_REPO_URL','https://github.com/box1-org/box1-workloads-dev')))
+       MARKER='box1-bundle-source: '
+       PATH=re.compile(r'(?!/)(?!.*(?:^|/)\.\.?(?:/|$))[A-Za-z0-9._/-]{1,200}')
+ 
+@@ -1470,11 +1496,11 @@
+               raise SystemExit('The security gate did not pass (policy=%s); a bundle that fails policy is never proposed' % (env['GATE_POLICY'] or 'empty'))
+           if not re.fullmatch('[a-f0-9]{40}',revision): raise SystemExit('Immutable source revision required')
+           if not re.fullmatch('sha256:[a-f0-9]{64}',digest): raise SystemExit('Immutable bundle digest required')
+-          if not re.fullmatch(ORG+'/'+NAME,source): raise SystemExit('Source repository must be box1-org/<name>')
++          if not re.fullmatch(re.escape(ORG)+'/'+NAME,source): raise SystemExit('Source repository must be %s/<name>' % ORG)
+           repo=source.split('/')[1]
+           if bundle!=repo+'-bundle': raise SystemExit('bundle-name must be %s-bundle' % repo)
+           if not re.fullmatch(NAME,consumer) or consumer in PROTECTED or consumer==repo:
+-              raise SystemExit('consumer-repository must be another box1-org repository name, not %r (and never box1-gitops or box1-workloads-dev)' % consumer)
++              raise SystemExit('consumer-repository must be another %s repository name, not %r (and never %s)' % (ORG,consumer,' or '.join(PROTECTED)))
+           if not PATH.fullmatch(path): raise SystemExit('consumer-path must be a relative path without . or .. segments')
+           return revision,digest,source,repo,consumer,bundle,path
+ 
+@@ -1636,12 +1662,27 @@
+       value: $(params.disk-digest)
+     - name: INSTANCE_NAME
+       value: $(params.instance-name)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+     name: promote
+     script: |
+       #!/usr/bin/env python3
+-      import base64, datetime, json, os, re, ssl, time, urllib.request, urllib.error
++      import base64, datetime, json, os, re, ssl, time, urllib.parse, urllib.request, urllib.error
+ 
++      GIT_ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
++      WORKLOADS_REPO_URL=os.environ.get('BOX1_WORKLOADS_REPO_URL','https://github.com/box1-org/box1-workloads-dev')
++
++      def repo_slug(url):
++          """owner/name of a repository URL: https://github.com/box1-org/x(.git) -> box1-org/x."""
++          return urllib.parse.urlsplit(url).path.strip('/').removesuffix('.git')
++
++      def tracks_workloads(source):
++          """True when an Argo source is the promotion (workloads) repository."""
++          return source.get('repoURL','').rstrip('/').removesuffix('.git')==WORKLOADS_REPO_URL.rstrip('/').removesuffix('.git')
++
+       def github(path, method='GET', body=None):
+           request=urllib.request.Request('https://api.github.com'+path, method=method,
+               data=None if body is None else json.dumps(body).encode(),
+@@ -1662,7 +1703,7 @@
+       assert environment in ['development','approval'], 'Unsupported promotion policy'
+       name=os.environ['APPLICATION_NAME']
+       assert re.fullmatch('[a-z][a-z0-9-]{2,39}',name), 'Invalid application name'
+-      application='/repos/box1-org/'+name
++      application='/repos/'+GIT_ORG+'/'+name
+       # vm-instance (box1-docs#139): application-name is the source OS image repository and
+       # gates supersession through `application`; from here on `name` is the instance, so
+       # the files, branch, PR and Argo sync below all target workloads/<instance>/ only.
+@@ -1672,7 +1713,7 @@
+           source_image,name=name,instance
+       else:
+           assert not instance, 'instance-name is only valid with workload-profile vm-instance'
+-      gitops='/repos/box1-org/box1-workloads-dev'
++      gitops='/repos/'+repo_slug(WORKLOADS_REPO_URL)
+ 
+       def result(name,value): pathlib.Path('/tekton/results/'+name).write_text(str(value))
+ 
+@@ -1846,7 +1887,7 @@
+           if sources is None: sources=[spec.get('source',{})]
+           # Workload Applications track the promotion repository. The platform
+           # repository owns the Task and RBAC, but is not the desired-state source.
+-          direct=[source for source in sources if source.get('repoURL','').rstrip('/').removesuffix('.git')=='https://github.com/box1-org/box1-workloads-dev']
++          direct=[source for source in sources if tracks_workloads(source)]
+           active=(app.get('status',{}).get('operationState') or {}).get('phase') in ['Running','Terminating']
+           if not active and settled(app,expected,direct):
+               print('Argo Application already at the expected revision and Healthy')
+@@ -1963,11 +2004,27 @@
+         secretKeyRef:
+           key: git-provider-token
+           name: $(params.git-auth-secret)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+     name: validate
+     script: |
+       #!/usr/bin/env python3
+-      import base64, json, os, re, time, urllib.request, urllib.error
++      import base64, json, os, re, time, urllib.parse, urllib.request, urllib.error
++
++      GIT_HOST=os.environ.get('BOX1_GIT_HOST','github.com')
++      GIT_ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
++      GITOPS_REPO_URL=os.environ.get('BOX1_GITOPS_REPO_URL','https://github.com/box1-org/box1-gitops')
++      WORKLOADS_REPO_URL=os.environ.get('BOX1_WORKLOADS_REPO_URL','https://github.com/box1-org/box1-workloads-dev')
++
++      def repo_slug(url):
++          """owner/name of a repository URL: https://github.com/box1-org/x(.git) -> box1-org/x."""
++          return urllib.parse.urlsplit(url).path.strip('/').removesuffix('.git')
++
++      # A code-only repository's PaC token may never reach the GitOps repositories.
++      PROTECTED_SCOPES=tuple(GIT_ORG+'/'+repo_slug(url).split('/')[-1] for url in (GITOPS_REPO_URL,WORKLOADS_REPO_URL))
+ 
+       def github(path, method='GET', body=None):
+           request=urllib.request.Request('https://api.github.com'+path, method=method,
+@@ -2291,14 +2348,15 @@
+               assert scalar(section(t,'metadata'),'namespace')==CI_NAMESPACE, 'CI bundle resources must be in namespace box1-ci: %s/%s' % (kind,n)
+           repositories=[t for k,_,t in docs if k=='Repository']
+           assert [n for k,n,_ in docs if k=='Repository']==[repo], 'CI bundle %s must declare exactly one PaC Repository named %s' % (where,repo)
+-          assert scalar(section(repositories[0],'spec'),'url')=='https://github.com/box1-org/'+repo, 'PaC Repository %s must point at https://github.com/box1-org/%s' % (repo,repo)
++          expected_url='https://'+GIT_HOST+'/'+GIT_ORG+'/'+repo
++          assert scalar(section(repositories[0],'spec'),'url')==expected_url, 'PaC Repository %s must point at %s' % (repo,expected_url)
+           spec=section(repositories[0],'spec'); settings=nested(spec,'settings')
+           assert set(keys(spec))<=set(CI_REPOSITORY_SPEC), 'PaC Repository %s spec may set only %s; found %s' % (repo,', '.join(CI_REPOSITORY_SPEC),', '.join(keys(spec)))
+           assert set(keys(settings))<=set(CI_REPOSITORY_SETTINGS), 'PaC Repository %s settings may set only %s; found %s' % (repo,', '.join(CI_REPOSITORY_SETTINGS),', '.join(keys(settings)))
+           assert scalar(settings,'pipelinerun_provenance')=='default_branch', 'PaC Repository %s must set settings.pipelinerun_provenance: default_branch' % repo
+           for scope in sequence(settings,'github_app_token_scope_repos'):
+-              assert re.fullmatch('box1-org/[a-z][a-z0-9-]{2,39}',scope) and scope not in ['box1-org/box1-gitops','box1-org/box1-workloads-dev'], (
+-                  'PaC Repository %s github_app_token_scope_repos may list only box1-org consumer repositories, not %s: a code-only repository deploys nothing' % (repo,scope))
++              assert re.fullmatch(re.escape(GIT_ORG)+'/[a-z][a-z0-9-]{2,39}',scope) and scope not in PROTECTED_SCOPES, (
++                  'PaC Repository %s github_app_token_scope_repos may list only %s consumer repositories, not %s: a code-only repository deploys nothing' % (repo,GIT_ORG,scope))
+           for kind,n,_ in docs:
+               if kind=='ImageStream': assert n==repo+'-bundle', 'ImageStream must be named %s-bundle; found %s' % (repo,n)
+               elif kind!='Repository': assert n.startswith(repo+'-'), '%s %s in %s must be named %s-<purpose>' % (kind,n,where,repo)
+@@ -2338,7 +2396,7 @@
+ 
+       if __name__=='__main__':
+           sha=os.environ['REVISION']; assert re.fullmatch('[a-f0-9]{40}',sha)
+-          req=urllib.request.Request('https://api.github.com/repos/box1-org/box1-workloads-dev/zipball/'+sha,
++          req=urllib.request.Request('https://api.github.com/repos/'+repo_slug(WORKLOADS_REPO_URL)+'/zipball/'+sha,
+               headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-gitops-validator'})
+           with urllib.request.urlopen(req,timeout=60) as response: archive=zipfile.ZipFile(io.BytesIO(response.read()))
+           root=pathlib.Path('/tmp/gitops-validation'); root.mkdir()
+@@ -2405,14 +2463,19 @@
+         secretKeyRef:
+           key: git-provider-token
+           name: $(params.git-auth-secret)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: fetch
+     script: |
+       #!/usr/bin/env python3
+       import io, os, pathlib, re, shutil, urllib.request, zipfile
++      org=os.environ.get('BOX1_GIT_ORG','box1-org')
+       revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
+       assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+-      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
++      assert re.fullmatch(re.escape(org)+'/[a-z0-9-]+',repo), 'Source repository outside '+org
+       req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
+           headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
+       with urllib.request.urlopen(req,timeout=60) as response:
+@@ -2448,6 +2511,10 @@
+       value: $(params.push-image)
+     - name: IMAGE_NAME
+       value: $(params.image-name)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: verify-and-package
+     script: |
+@@ -2461,6 +2528,8 @@
+       import gzip, hashlib, io, json, os, pathlib, re, shutil, subprocess, tarfile
+       import xml.etree.ElementTree as ET
+ 
++      GIT_HOST=os.environ.get('BOX1_GIT_HOST','github.com')
++      GIT_ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
+       EPOCH=315532800  # 1980-01-01, as for reproducible wheels and jars
+       POM='{http://maven.apache.org/POM/4.0.0}'
+       MODULE=re.compile(r'[a-z][a-z0-9]{1,19}')
+@@ -2533,7 +2602,7 @@
+           raw=layer_tar(bundle)
+           layer_digest,layer_size=blob(layout,gzip.compress(raw,compresslevel=9,mtime=0))
+           labels={'org.opencontainers.image.revision':revision,
+-                  'org.opencontainers.image.source':'https://github.com/'+source,
++                  'org.opencontainers.image.source':'https://'+GIT_HOST+'/'+source,
+                   'org.opencontainers.image.title':source.split('/')[-1]+' module bundle',
+                   'org.box1.bundle.modules':','.join(modules),
+                   'org.box1.bundle.layout':'/<module>/quarkus-app/'}
+@@ -2558,7 +2627,7 @@
+       if __name__=='__main__':
+           revision,source=os.environ['REVISION'],os.environ['SOURCE_REPO']
+           assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+-          assert re.fullmatch('box1-org/[a-z0-9-]+',source), 'Source repository outside box1-org'
++          assert re.fullmatch(re.escape(GIT_ORG)+'/[a-z0-9-]+',source), 'Source repository outside '+GIT_ORG
+           application=pathlib.Path('/workspace/application')
+           modules=modules_of((application/'pom.xml').read_text())
+           print('Bundle modules (pom.xml order): '+', '.join(modules))
+@@ -2595,6 +2664,10 @@
+       value: $(params.push-image)
+     - name: IMAGE_NAME
+       value: $(params.image-name)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: registry.access.redhat.com/ubi9/skopeo@sha256:fd3d5c37f5d204af77d02e2743a10e538a9d1e8b67d8736eff86b9be4c564e1f
+     name: push
+     script: |
+@@ -2606,7 +2679,7 @@
+       fi
+       echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
+       echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}-bundle$'
+-      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"
++      image="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME"
+       mkdir -p "$HOME" && : > "$CONTAINERS_REGISTRIES_CONF"
+       token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+       # --preserve-digests: fail rather than rewrite the manifest, so the pushed digest is the built one.
+@@ -2635,7 +2708,9 @@
+   - default: ""
+     name: revision
+     type: string
+-  - default: box1-org/quarkus-reference
++  - default: ""
++    description: owner/name of the source repository; empty means <BOX1_GIT_ORG>/quarkus-reference
++      (box1-org/quarkus-reference on the homelab).
+     name: source-repo
+     type: string
+   - default: ""
+@@ -2663,14 +2738,19 @@
+         secretKeyRef:
+           key: git-provider-token
+           name: $(params.git-auth-secret)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: fetch
+     script: |
+       #!/usr/bin/env python3
+       import hashlib, io, os, pathlib, re, shutil, urllib.request, zipfile
+-      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
++      org=os.environ.get('BOX1_GIT_ORG','box1-org')
++      revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO'] or org+'/quarkus-reference'
+       assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
+-      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
++      assert re.fullmatch(re.escape(org)+'/[a-z0-9-]+',repo), 'Source repository outside '+org
+       req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
+           headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
+       with urllib.request.urlopen(req,timeout=60) as response:
+@@ -2704,6 +2784,10 @@
+       value: $(params.push-image)
+     - name: IMAGE_NAME
+       value: $(params.image-name)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: verify-and-publish
+     script: |
+@@ -2722,7 +2806,7 @@
+         export QUARKUS_CONTAINER_IMAGE_PASSWORD="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+         mvn -B -ntp -s "$BOX1_MAVEN_SETTINGS" -Dmaven.repo.local=/workspace/m2 -Dmaven.repo.local.tail="$BOX1_MAVEN_TAIL" package -DskipTests \
+           -Dquarkus.container-image.build=true -Dquarkus.container-image.push=true \
+-          -Dquarkus.container-image.registry=registry.apps.ocp.box1.org \
++          -Dquarkus.container-image.registry="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}" \
+           -Dquarkus.container-image.group=box1-ci -Dquarkus.container-image.name="$IMAGE_NAME" \
+           -Dquarkus.container-image.tag="$REVISION"
+         unset QUARKUS_CONTAINER_IMAGE_PASSWORD
+@@ -2771,11 +2855,16 @@
+       value: $(params.application-name)
+     - name: APPLICATION_NAMESPACE
+       value: $(params.application-namespace)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: registry.access.redhat.com/ubi9/python-311@sha256:d0b35f779ca0ae87deaf17cd1923461904f52d3ef249a53dbd487e02bdabdde6
+     name: observe-and-smoke
+     script: |
+       #!/usr/bin/env python3
+       import json, os, pathlib, re, ssl, time, urllib.error, urllib.request
++      APPS_DOMAIN=os.environ.get('BOX1_APPS_DOMAIN','apps.ocp.box1.org')
+       revision=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']
+       assert re.fullmatch('[a-f0-9]{40}',revision) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
+       name=os.environ['APPLICATION_NAME']
+@@ -2831,7 +2920,7 @@
+               (desired,source,available,ready,(status.get('sync') or {}).get('status'),
+                (status.get('health') or {}).get('status'),', '.join(drift) or 'none'))
+       if orphans: print('Tolerating generated ConfigMaps that await pruning (box1-docs#42): '+', '.join(orphans))
+-      base='https://'+namespace+'.apps.ocp.box1.org'
++      base='https://'+namespace+'.'+APPS_DOMAIN
+ 
+       def get(path,accept='application/json'):
+           req=urllib.request.Request(base+path,headers={'Accept':accept})
+@@ -2895,10 +2984,13 @@
+       or policy failure.
+     name: enforcement
+     type: string
+-  - default: https://tpa.apps.ocp.box1.org
++  - default: ""
++    description: RHTPA base URL; empty means BOX1_TPA_URL, else https://tpa.apps.ocp.box1.org.
+     name: rhtpa-url
+     type: string
+-  - default: https://keycloak.apps.ocp.box1.org/auth/realms/box1
++  - default: ""
++    description: OIDC issuer for the rhtpa-ci client; empty means BOX1_OIDC_ISSUER,
++      else https://keycloak.apps.ocp.box1.org/auth/realms/box1.
+     name: rhtpa-issuer
+     type: string
+   - name: rhtpa-secret
+@@ -2908,9 +3000,9 @@
+     type: string
+   - name: rhacs-secret
+     type: string
+-  - default: https://acs.apps.ocp.box1.org
++  - default: ""
+     description: ACS Central console base URL, used to build a link to the scanned
+-      image.
++      image; empty means BOX1_ACS_URL, else https://acs.apps.ocp.box1.org.
+     name: rhacs-console-url
+     type: string
+   results:
+@@ -2970,11 +3062,18 @@
+           optional: true
+     - name: ENFORCEMENT
+       value: $(params.enforcement)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: sbom-and-rhtpa
+     script: |
+       #!/usr/bin/env python3
+       import hashlib, io, json, os, pathlib, re, shutil, tarfile, urllib.parse, urllib.request
++      # Param, then the box1-platform-settings ConfigMap, then the homelab endpoint.
++      rhtpa_url=os.environ['RHTPA_URL'] or os.environ.get('BOX1_TPA_URL','https://tpa.apps.ocp.box1.org')
++      rhtpa_issuer=os.environ['RHTPA_ISSUER'] or os.environ.get('BOX1_OIDC_ISSUER','https://keycloak.apps.ocp.box1.org/auth/realms/box1')
+       if os.environ['ENFORCEMENT']=='disabled':
+           pathlib.Path('/tekton/results/sbom-id').write_text('disabled')
+           pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text('disabled')
+@@ -2997,15 +3096,15 @@
+       if document.get('bomFormat')!='CycloneDX' or document.get('specVersion')!='1.5': raise SystemExit('Syft did not produce CycloneDX 1.5')
+       labels={'labels.image-digest':digest,'labels.source-revision':revision,'labels.service':os.environ['APPLICATION_NAME'],'labels.source-repository':os.environ['SOURCE_REPOSITORY'],'labels.pipeline-run':os.environ['PIPELINE_RUN']}
+       form=urllib.parse.urlencode({'grant_type':'client_credentials','client_id':os.environ['RHTPA_CLIENT_ID'],'client_secret':os.environ['RHTPA_CLIENT_SECRET']}).encode()
+-      with urllib.request.urlopen(os.environ['RHTPA_ISSUER']+'/protocol/openid-connect/token', data=form, timeout=60) as response: token=json.load(response)['access_token']
+-      endpoint=os.environ['RHTPA_URL']+'/api/v3/sbom?format=cyclonedx&cache=Wait&'+urllib.parse.urlencode(labels)
++      with urllib.request.urlopen(rhtpa_issuer+'/protocol/openid-connect/token', data=form, timeout=60) as response: token=json.load(response)['access_token']
++      endpoint=rhtpa_url+'/api/v3/sbom?format=cyclonedx&cache=Wait&'+urllib.parse.urlencode(labels)
+       request=urllib.request.Request(endpoint, data=json.dumps(document).encode(), method='POST', headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+       with urllib.request.urlopen(request, timeout=300) as response:
+           if response.status!=201: raise SystemExit('RHTPA rejected the SBOM')
+           result=json.loads(response.read())
+       sbom_id=result.get('id') or result.get('sbomId') or 'accepted'
+       pathlib.Path('/tekton/results/sbom-id').write_text(sbom_id)
+-      sbom_url=os.environ['RHTPA_URL'].rstrip('/')+'/sboms'+('' if sbom_id=='accepted' else '/'+urllib.parse.quote(sbom_id, safe=':'))
++      sbom_url=rhtpa_url.rstrip('/')+'/sboms'+('' if sbom_id=='accepted' else '/'+urllib.parse.quote(sbom_id, safe=':'))
+       pathlib.Path('/tekton/results/rhtpa-sbom-url').write_text(sbom_url)
+       pathlib.Path('/tekton/results/LINK_TO_SBOM').write_text(sbom_url)
+       print('RHTPA SBOM: '+sbom_url)
+@@ -3034,6 +3133,10 @@
+       value: /etc/rhacs-ca/ca.pem
+     - name: RHACS_CONSOLE_URL
+       value: $(params.rhacs-console-url)
++    envFrom:
++    - configMapRef:
++        name: box1-platform-settings
++        optional: true
+     image: image-registry.openshift-image-registry.svc:5000/box1-build/box1-builder@sha256:358c338ab8f5972dba2886e35ae7b0804c48abbcbe639a687b7587f09d7ca79e
+     name: rhacs-scan-and-check
+     script: |
+@@ -3076,7 +3179,8 @@
+       # The ACS console addresses images by a UUIDv5 of (image full name, digest),
+       # not by digest (stackrox pkg/images/utils NewImageV2ID). Ask Central for the
+       # scanned image; use its id if it is already a UUID, otherwise derive it.
+-      console=env['RHACS_CONSOLE_URL'].rstrip('/')
++      # Param, then the box1-platform-settings ConfigMap, then the homelab console.
++      console=(env['RHACS_CONSOLE_URL'] or env.get('BOX1_ACS_URL','https://acs.apps.ocp.box1.org')).rstrip('/')
+       rhacs_url=console+'/main/vulnerabilities/all-images'
+       try:
+           import json, re, ssl, urllib.parse, uuid

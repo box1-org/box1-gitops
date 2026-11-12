@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).parent
 TASK = ROOT / "gitops-validate.yaml"
@@ -24,9 +25,28 @@ OS_DIGEST = "sha256:" + "a" * 64
 DISK_DIGEST = "sha256:" + "b" * 64
 SOURCE = "c" * 40
 KUSTOMIZE = shutil.which("kubectl") or shutil.which("oc")
+# box1-docs#165: keys of the optional box1-platform-settings ConfigMap the Tasks read.
+PLATFORM_SETTINGS = ["BOX1_APPS_DOMAIN", "BOX1_GIT_HOST", "BOX1_GIT_ORG", "BOX1_GITOPS_REPO_URL", "BOX1_WORKLOADS_REPO_URL",
+                     "BOX1_TEMPLATES_REPO_URL", "BOX1_REGISTRY_HOST", "BOX1_OIDC_ISSUER", "BOX1_TPA_URL", "BOX1_ACS_URL"]
+RHDP_SETTINGS = {"BOX1_GIT_ORG": "box1-rhdp", "BOX1_GITOPS_REPO_URL": "https://github.com/box1-rhdp/box1-gitops",
+                 "BOX1_WORKLOADS_REPO_URL": "https://github.com/box1-rhdp/box1-workloads-dev",
+                 "BOX1_REGISTRY_HOST": "default-route-openshift-image-registry.apps.cluster-abcde.dynamic.redhatworkshops.io"}
 
 
-def load_validator():
+def settings_env(settings=None):
+    """The process environment without any BOX1_* platform setting, plus `settings`."""
+    env = {k: v for k, v in os.environ.items() if k not in PLATFORM_SETTINGS}
+    env.update(settings or {})
+    return env
+
+
+def load_validator(settings=None):
+    """Load the Task script as the step would run it; `settings` stands in for box1-platform-settings."""
+    with mock.patch.dict(os.environ, settings_env(settings), clear=True):
+        return exec_validator()
+
+
+def exec_validator():
     text = TASK.read_text()
     start = text.index("    script: |")
     body = []
@@ -1149,6 +1169,101 @@ class CiBundle(unittest.TestCase):
                     roleRef: {{apiGroup: rbac.authorization.k8s.io, kind: Role, name: site-gateway-release-observer}}
                     subjects: [{subject}]
                 """))
+
+
+@unittest.skipUnless(KUSTOMIZE, "kubectl or oc is required to render fixtures")
+class CiBundlePlatformSettings(unittest.TestCase):
+    """box1-docs#165: on RHDP the CI bundle allowlist follows BOX1_GIT_ORG and the GitOps repository URLs."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.homelab = load_validator()
+        cls.rhdp = load_validator(RHDP_SETTINGS)
+
+    def rhdp_bundle(self):
+        repo, files = ci_bundle()
+        return repo, edit(edit(files, "repository.yaml", "url: https://github.com/box1-org/", "url: https://github.com/box1-rhdp/"),
+                          "repository.yaml", "- box1-org/site-gateway-os", "- box1-rhdp/site-gateway-os")
+
+    def test_homelab_defaults_without_the_configmap(self):
+        self.assertEqual(self.homelab["GIT_ORG"], "box1-org")
+        self.assertEqual(self.homelab["PROTECTED_SCOPES"], ("box1-org/box1-gitops", "box1-org/box1-workloads-dev"))
+        self.assertEqual(self.homelab["repo_slug"](self.homelab["WORKLOADS_REPO_URL"]), "box1-org/box1-workloads-dev")
+        repo, files = self.rhdp_bundle()
+        with self.assertRaisesRegex(AssertionError, "must point at https://github.com/box1-org/site-gateway"):
+            self.homelab["check_ci"](repo, render(files))
+
+    def test_rhdp_org_bundle_is_accepted_and_homelab_or_gitops_scopes_are_rejected(self):
+        self.assertEqual(self.rhdp["repo_slug"](self.rhdp["WORKLOADS_REPO_URL"]), "box1-rhdp/box1-workloads-dev")
+        repo, files = self.rhdp_bundle()
+        self.rhdp["check_ci"](repo, render(files))
+        repo, homelab = ci_bundle()
+        with self.assertRaisesRegex(AssertionError, "must point at https://github.com/box1-rhdp/site-gateway"):
+            self.rhdp["check_ci"](repo, render(homelab))
+        for scope in ["box1-rhdp/box1-gitops", "box1-rhdp/box1-workloads-dev", "box1-org/site-gateway-os"]:
+            with self.subTest(scope=scope):
+                with self.assertRaisesRegex(AssertionError, "may list only box1-rhdp consumer repositories"):
+                    self.rhdp["check_ci"](repo, render(edit(files, "repository.yaml", "- box1-rhdp/site-gateway-os", "- " + scope)))
+
+
+def step_script(task, step):
+    text = (ROOT / task).read_text()
+    start = text.index("    script: |", text.index("  - name: " + step + "\n"))
+    body = []
+    for line in text[start:].splitlines()[1:]:
+        if line and not line.startswith("      "):
+            break
+        body.append(line[6:] if line else "")
+    return "\n".join(body)
+
+
+def run_shell(lines, settings=None, **env):
+    """Run selected lines of a step script under sh -eu; returns (exit code, stdout)."""
+    done = subprocess.run(["sh", "-euc", "\n".join(lines)], env=settings_env(settings) | env, text=True, capture_output=True)
+    return done.returncode, done.stdout
+
+
+class BootcPlatformSettings(unittest.TestCase):
+    """box1-docs#165: bootc Tasks take the org and registry route from box1-platform-settings."""
+
+    ENVFROM = "    envFrom:\n    - configMapRef:\n        name: box1-platform-settings\n        optional: true\n"
+
+    def fetch_check(self, settings=None, **env):
+        script = step_script("bootc-build.yaml", "fetch").splitlines()
+        lines = [l for l in script if l.startswith(("org=", 'echo "$org"', 'echo "$SOURCE_REPO"'))]
+        self.assertEqual(len(lines), 3)
+        return run_shell(lines, settings, **env)[0]
+
+    def references(self, settings=None):
+        build = [l for l in step_script("bootc-build.yaml", "build").splitlines() if l.startswith(("registry=", "image="))]
+        disk = [l for l in step_script("bootc-disk.yaml", "prepare").splitlines() if l.startswith("source=")]
+        disk += [l for l in step_script("bootc-disk.yaml", "package-push").splitlines() if l.startswith("disk=")]
+        self.assertEqual((len(build), len(disk)), (2, 2))
+        return run_shell(build + disk + ['printf "%s|%s|%s" "$image" "$source" "$disk"'], settings,
+                         IMAGE_NAME="site-gateway-os", REVISION="c" * 40, IMAGE_DIGEST="sha256:" + "a" * 64)[1]
+
+    def test_steps_read_the_optional_settings_configmap(self):
+        self.assertEqual((ROOT / "bootc-build.yaml").read_text().count(self.ENVFROM), 2)
+        self.assertEqual((ROOT / "bootc-disk.yaml").read_text().count(self.ENVFROM), 2)
+
+    def test_homelab_defaults_without_the_configmap(self):
+        self.assertEqual(self.fetch_check(SOURCE_REPO="box1-org/site-gateway-os"), 0)
+        self.assertNotEqual(self.fetch_check(SOURCE_REPO="box1-rhdp/site-gateway-os"), 0)
+        self.assertEqual(self.references(), "|".join([
+            "registry.apps.ocp.box1.org/box1-ci/site-gateway-os:" + "c" * 40,
+            "registry.apps.ocp.box1.org/box1-ci/site-gateway-os@sha256:" + "a" * 64,
+            "registry.apps.ocp.box1.org/box1-ci/site-gateway-os-disk:" + "c" * 40]))
+
+    def test_rhdp_org_and_registry_route_come_from_the_configmap(self):
+        self.assertEqual(self.fetch_check(RHDP_SETTINGS, SOURCE_REPO="box1-rhdp/site-gateway-os"), 0)
+        self.assertNotEqual(self.fetch_check(RHDP_SETTINGS, SOURCE_REPO="box1-org/site-gateway-os"), 0)
+        # An org value that is not a GitHub org name never reaches the grep pattern.
+        self.assertNotEqual(self.fetch_check({"BOX1_GIT_ORG": ".*"}, SOURCE_REPO="evil/site-gateway-os"), 0)
+        route = RHDP_SETTINGS["BOX1_REGISTRY_HOST"]
+        self.assertEqual(self.references(RHDP_SETTINGS), "|".join([
+            route + "/box1-ci/site-gateway-os:" + "c" * 40,
+            route + "/box1-ci/site-gateway-os@sha256:" + "a" * 64,
+            route + "/box1-ci/site-gateway-os-disk:" + "c" * 40]))
 
 
 @unittest.skipUnless(KUSTOMIZE, "kubectl or oc is required to render fixtures")

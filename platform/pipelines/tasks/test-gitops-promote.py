@@ -6,7 +6,10 @@ state decisions executable without needing cluster credentials or GitHub access.
 """
 import ast
 import pathlib
+import re
+import types
 import unittest
+import urllib.parse
 
 
 ROOT = pathlib.Path(__file__).parent
@@ -278,7 +281,7 @@ class VmInstancePromotionPlan(unittest.TestCase):
         self.assertIn('value: "$(params.instance-name)"', task)
         script = script_text()
         # Supersession is judged on the source repository (application-name) ...
-        source_repo = script.index("application='/repos/box1-org/'+name")
+        source_repo = script.index("application='/repos/'+GIT_ORG+'/'+name")
         retarget = script.index("source_image,name=name,instance")
         self.assertLess(source_repo, retarget)
         # ... and every later use of `name` (files, branch, PR, Argo sync) is the instance.
@@ -423,6 +426,57 @@ class GeneratedConfigMapOrphans(unittest.TestCase):
         script = smoke_script_text()
         self.assertIn("synced,orphans=converged(app.get('status',{}))", script)
         self.assertNotIn("get('status')=='Synced'", script)
+
+
+def settings_namespace(script, env, names, functions=()):
+    """Run only the named top-level assignments and helpers of a Task script against `env`.
+
+    `env` stands in for the step's environment, including the optional
+    box1-platform-settings ConfigMap (box1-docs#165); no network code runs.
+    """
+    tree = ast.parse(script)
+    keep = [n for n in tree.body if (isinstance(n, ast.FunctionDef) and n.name in functions)
+            or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") in names for t in n.targets))]
+    namespace = {"os": types.SimpleNamespace(environ=dict(env)), "re": re, "urllib": urllib, "name": "order-service"}
+    exec(compile(ast.Module(body=keep, type_ignores=[]), "settings", "exec"), namespace)
+    return namespace
+
+
+ENVFROM = "    envFrom:\n    - configMapRef:\n        name: box1-platform-settings\n        optional: true\n"
+
+
+class PlatformSettings(unittest.TestCase):
+    """box1-docs#165: RHDP values come from box1-platform-settings; without it the homelab literals apply."""
+
+    NAMES = ("GIT_ORG", "WORKLOADS_REPO_URL", "application", "gitops")
+    RHDP = {"BOX1_GIT_ORG": "box1-rhdp", "BOX1_WORKLOADS_REPO_URL": "https://github.com/box1-rhdp/box1-workloads-dev.git",
+            "BOX1_APPS_DOMAIN": "apps.cluster-abcde.dynamic.redhatworkshops.io"}
+
+    def promote(self, env):
+        return settings_namespace(script_text(), env, self.NAMES, ("repo_slug", "tracks_workloads"))
+
+    def test_steps_read_the_optional_settings_configmap(self):
+        for task in [TASK, SMOKE]:
+            self.assertEqual(task.read_text().count(ENVFROM), 1, task.name)
+
+    def test_homelab_defaults_are_unchanged_without_the_configmap(self):
+        ns = self.promote({})
+        self.assertEqual(ns["application"], "/repos/box1-org/order-service")
+        self.assertEqual(ns["gitops"], "/repos/box1-org/box1-workloads-dev")
+        self.assertTrue(ns["tracks_workloads"]({"repoURL": "https://github.com/box1-org/box1-workloads-dev.git"}))
+        self.assertFalse(ns["tracks_workloads"]({"repoURL": "https://github.com/box1-org/box1-gitops"}))
+        smoke = settings_namespace(smoke_script_text(), {}, ("APPS_DOMAIN",))
+        self.assertEqual(smoke["APPS_DOMAIN"], "apps.ocp.box1.org")
+
+    def test_rhdp_org_workloads_repository_and_domain_come_from_the_configmap(self):
+        ns = self.promote(self.RHDP)
+        self.assertEqual(ns["application"], "/repos/box1-rhdp/order-service")
+        self.assertEqual(ns["gitops"], "/repos/box1-rhdp/box1-workloads-dev")
+        self.assertTrue(ns["tracks_workloads"]({"repoURL": "https://github.com/box1-rhdp/box1-workloads-dev/"}))
+        self.assertFalse(ns["tracks_workloads"]({"repoURL": "https://github.com/box1-org/box1-workloads-dev"}))
+        smoke = settings_namespace(smoke_script_text(), self.RHDP, ("APPS_DOMAIN",))
+        self.assertEqual(smoke["APPS_DOMAIN"], "apps.cluster-abcde.dynamic.redhatworkshops.io")
+        self.assertIn("base='https://'+namespace+'.'+APPS_DOMAIN", smoke_script_text())
 
 
 if __name__ == "__main__":

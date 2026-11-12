@@ -62,15 +62,21 @@ spec:
         secretKeyRef:
           name: "$(params.git-auth-secret)"
           key: git-provider-token
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: source
       mountPath: "/workspace"
     script: |
       #!/usr/bin/env python3
       import io, os, pathlib, re, shutil, urllib.request, zipfile
+      org=os.environ.get('BOX1_GIT_ORG','box1-org')
       revision=os.environ['REVISION']; repo=os.environ['SOURCE_REPO']
       assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
-      assert re.fullmatch('box1-org/[a-z0-9-]+',repo), 'Source repository outside box1-org'
+      assert re.fullmatch(re.escape(org)+'/[a-z0-9-]+',repo), 'Source repository outside '+org
       req=urllib.request.Request('https://api.github.com/repos/'+repo+'/zipball/'+revision,
           headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'User-Agent':'box1-tekton'})
       with urllib.request.urlopen(req,timeout=60) as response:
@@ -106,6 +112,11 @@ spec:
       value: "$(params.push-image)"
     - name: IMAGE_NAME
       value: "$(params.image-name)"
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: source
       mountPath: "/workspace"
@@ -120,6 +131,8 @@ spec:
       import gzip, hashlib, io, json, os, pathlib, re, shutil, subprocess, tarfile
       import xml.etree.ElementTree as ET
 
+      GIT_HOST=os.environ.get('BOX1_GIT_HOST','github.com')
+      GIT_ORG=os.environ.get('BOX1_GIT_ORG','box1-org')
       EPOCH=315532800  # 1980-01-01, as for reproducible wheels and jars
       POM='{http://maven.apache.org/POM/4.0.0}'
       MODULE=re.compile(r'[a-z][a-z0-9]{1,19}')
@@ -192,7 +205,7 @@ spec:
           raw=layer_tar(bundle)
           layer_digest,layer_size=blob(layout,gzip.compress(raw,compresslevel=9,mtime=0))
           labels={'org.opencontainers.image.revision':revision,
-                  'org.opencontainers.image.source':'https://github.com/'+source,
+                  'org.opencontainers.image.source':'https://'+GIT_HOST+'/'+source,
                   'org.opencontainers.image.title':source.split('/')[-1]+' module bundle',
                   'org.box1.bundle.modules':','.join(modules),
                   'org.box1.bundle.layout':'/<module>/quarkus-app/'}
@@ -217,7 +230,7 @@ spec:
       if __name__=='__main__':
           revision,source=os.environ['REVISION'],os.environ['SOURCE_REPO']
           assert re.fullmatch('[a-f0-9]{40}',revision), 'Immutable source SHA required'
-          assert re.fullmatch('box1-org/[a-z0-9-]+',source), 'Source repository outside box1-org'
+          assert re.fullmatch(re.escape(GIT_ORG)+'/[a-z0-9-]+',source), 'Source repository outside '+GIT_ORG
           application=pathlib.Path('/workspace/application')
           modules=modules_of((application/'pom.xml').read_text())
           print('Bundle modules (pom.xml order): '+', '.join(modules))
@@ -256,6 +269,11 @@ spec:
       value: "$(params.push-image)"
     - name: IMAGE_NAME
       value: "$(params.image-name)"
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     volumeMounts:
     - name: source
       mountPath: "/workspace"
@@ -268,7 +286,7 @@ spec:
       fi
       echo "$REVISION" | grep -Eq '^[a-f0-9]{40}$'
       echo "$IMAGE_NAME" | grep -Eq '^[a-z][a-z0-9-]{2,39}-bundle$'
-      image="registry.apps.ocp.box1.org/box1-ci/$IMAGE_NAME"
+      image="${BOX1_REGISTRY_HOST:-registry.apps.ocp.box1.org}/box1-ci/$IMAGE_NAME"
       mkdir -p "$HOME" && : > "$CONTAINERS_REGISTRIES_CONF"
       token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
       # --preserve-digests: fail rather than rewrite the manifest, so the pushed digest is the built one.

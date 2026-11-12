@@ -32,9 +32,15 @@ spec:
       value: "$(params.application-name)"
     - name: APPLICATION_NAMESPACE
       value: "$(params.application-namespace)"
+    # Optional cluster/org settings (RHDP); absent on the homelab, so the defaults apply.
+    envFrom:
+    - configMapRef:
+        name: box1-platform-settings
+        optional: true
     script: |
       #!/usr/bin/env python3
       import json, os, pathlib, re, ssl, time, urllib.error, urllib.request
+      APPS_DOMAIN=os.environ.get('BOX1_APPS_DOMAIN','apps.ocp.box1.org')
       revision=os.environ['REVISION']; digest=os.environ['IMAGE_DIGEST']
       assert re.fullmatch('[a-f0-9]{40}',revision) and re.fullmatch('sha256:[a-f0-9]{64}',digest)
       name=os.environ['APPLICATION_NAME']
@@ -90,7 +96,7 @@ spec:
               (desired,source,available,ready,(status.get('sync') or {}).get('status'),
                (status.get('health') or {}).get('status'),', '.join(drift) or 'none'))
       if orphans: print('Tolerating generated ConfigMaps that await pruning (box1-docs#42): '+', '.join(orphans))
-      base='https://'+namespace+'.apps.ocp.box1.org'
+      base='https://'+namespace+'.'+APPS_DOMAIN
 
       def get(path,accept='application/json'):
           req=urllib.request.Request(base+path,headers={'Accept':accept})
