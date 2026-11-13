@@ -9,15 +9,28 @@ data:
     app:
       title: Box1 Developer Hub
       baseUrl: https://developer-hub.apps.ocp.box1.org
-      # Home page (RHDH 2.1 New Frontend System). The homepage plugin replaces
-      # dynamic-home-page; hide its Onboarding card, as Box1 did before 2.1.
-      # The Box1 Operations banner (a dynamic-home-page Markdown card) has no 2.1
-      # widget yet; it needs a small Box1 NFS widget plugin (box1-docs#169).
+      # Home page (RHDH 2.1 New Frontend System). The homepage layout is
+      # read-only so it forwards widgetLayout props into widgets; the Box1
+      # Operations banner (box1-templates plugins/box1-home-banner) renders
+      # props.content. Card choice and order are in homepage.defaultWidgets.
       # Arrays replace rather than merge, and this file loads after the plugin
       # defaults, so restate the TechDocs default add-on entries from the 2.1
       # catalog index. Re-check them on RHDH upgrades.
       extensions:
-        - home-page-widget:homepage/rhdh-onboarding-section: false
+        - home-page-layout:homepage/dynamic-homepage-layout:
+            config:
+              customizable: false
+              widgetLayout:
+                box1-operations-banner:
+                  props:
+                    content: |
+                      ## Box1 Operations Hub
+                      Self-service delivery and day-2 operations for the Box1 OpenShift lab, powered by Red Hat Developer Hub.
+
+                      | ![Box1](${BOX1_ICON_LOGO}) | **Build** | **Deliver** | **Operate** |
+                      | :---: | --- | --- | --- |
+                      | | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](https://devspaces.apps.ocp.box1.org). | Pipelines as Code runs Tekton checks; [Argo CD](https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](https://operations-console-dev.apps.ocp.box1.org), trace traffic in [Kiali](https://kiali-istio-system.apps.ocp.box1.org), and ask the Intelligent Assistant. |
+                      | | [Software Catalog →](/catalog) | [OpenShift Console →](https://console-openshift-console.apps.ocp.box1.org) | [Box1 backlog →](https://github.com/box1-org/box1-docs/issues) |
         - addon:techdocs/expandable-navigation: false
         - addon:techdocs/report-issue
         - addon:techdocs/text-size: false
@@ -87,6 +100,74 @@ data:
               resolvers:
                 - resolver: emailMatchingUserEntityProfileEmail
     signInPage: oidc
+    # Homepage cards, in order, with the pre-2.1 Box1 layouts (homepage-backend
+    # homepage.defaultWidgets). Unlisted cards (Onboarding, Quick Access, Search)
+    # are not shown. The grid does not compact, so y is the sum of the cards above.
+    homepage:
+      defaultWidgets:
+        - id: box1-operations-banner
+          ref: box1-operations-banner
+          layout:
+            xl: { w: 12, h: 6 }
+            lg: { w: 12, h: 6 }
+            md: { w: 12, h: 7 }
+            sm: { w: 12, h: 8 }
+            xs: { w: 12, h: 9 }
+            xxs: { w: 12, h: 14 }
+        - id: rhdh-entity-section
+          ref: rhdh-entity-section
+          layout:
+            xl: { w: 12, h: 7 }
+            lg: { w: 12, h: 7 }
+            md: { w: 12, h: 8 }
+            sm: { w: 12, h: 9 }
+            xs: { w: 12, h: 11 }
+            xxs: { w: 12, h: 15 }
+        - id: rhdh-template-section
+          ref: rhdh-template-section
+          layout:
+            xl: { w: 12, h: 5 }
+            lg: { w: 12, h: 5 }
+            md: { w: 12, h: 5 }
+            sm: { w: 12, h: 5 }
+            xs: { w: 12, h: 7.5 }
+            xxs: { w: 12, h: 13.5 }
+        - id: catalog-starred-entities-card
+          ref: catalog-starred-entities-card
+          layout:
+            xl: { x: 0, y: 18, w: 6, h: 5 }
+            lg: { x: 0, y: 18, w: 6, h: 5 }
+            md: { x: 0, y: 20, w: 6, h: 5 }
+            sm: { x: 0, y: 22, w: 6, h: 5 }
+            xs: { x: 0, y: 27.5, w: 12, h: 5 }
+            xxs: { x: 0, y: 42.5, w: 12, h: 5 }
+        - id: recently-visited-card
+          ref: recently-visited-card
+          layout:
+            xl: { x: 6, y: 18, w: 6, h: 5 }
+            lg: { x: 6, y: 18, w: 6, h: 5 }
+            md: { x: 6, y: 20, w: 6, h: 5 }
+            sm: { x: 6, y: 22, w: 6, h: 5 }
+            xs: { x: 0, y: 32.5, w: 12, h: 5 }
+            xxs: { x: 0, y: 47.5, w: 12, h: 5 }
+        - id: top-visited-card
+          ref: top-visited-card
+          layout:
+            xl: { x: 0, y: 23, w: 6, h: 5 }
+            lg: { x: 0, y: 23, w: 6, h: 5 }
+            md: { x: 0, y: 25, w: 6, h: 5 }
+            sm: { x: 0, y: 27, w: 6, h: 5 }
+            xs: { x: 0, y: 37.5, w: 12, h: 5 }
+            xxs: { x: 0, y: 52.5, w: 12, h: 5 }
+        - id: featured-docs-card
+          ref: featured-docs-card
+          layout:
+            xl: { x: 6, y: 23, w: 6, h: 5 }
+            lg: { x: 6, y: 23, w: 6, h: 5 }
+            md: { x: 6, y: 25, w: 6, h: 5 }
+            sm: { x: 6, y: 27, w: 6, h: 5 }
+            xs: { x: 0, y: 42.5, w: 12, h: 5 }
+            xxs: { x: 0, y: 57.5, w: 12, h: 5 }
     # Developer Lightspeed was renamed Intelligent Assistant in RHDH 2.1. The
     # Operator's intelligent-assistant flavour runs Lightspeed Core as a sidecar;
     # its stack config (lightspeed.yaml) names the MCP server mcp-integration-tools.
