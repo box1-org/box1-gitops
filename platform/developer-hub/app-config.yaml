@@ -23,14 +23,18 @@ data:
               widgetLayout:
                 box1-operations-banner:
                   props:
+                    # Rendered as its own image beside the Markdown: RHDH 2.1's
+                    # MarkdownContent strips data: URIs from Markdown images.
+                    logo: ${BOX1_ICON_LOGO}
+                    logoAlt: Box1
                     content: |
                       ## Box1 Operations Hub
                       Self-service delivery and day-2 operations for the Box1 OpenShift lab, powered by Red Hat Developer Hub.
 
-                      | ![Box1](${BOX1_ICON_LOGO}) | **Build** | **Deliver** | **Operate** |
-                      | :---: | --- | --- | --- |
-                      | | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](https://devspaces.apps.ocp.box1.org). | Pipelines as Code runs Tekton checks; [Argo CD](https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](https://operations-console-dev.apps.ocp.box1.org), trace traffic in [Kiali](https://kiali-istio-system.apps.ocp.box1.org), and ask the Intelligent Assistant. |
-                      | | [Software Catalog →](/catalog) | [OpenShift Console →](https://console-openshift-console.apps.ocp.box1.org) | [Box1 backlog →](https://github.com/box1-org/box1-docs/issues) |
+                      | **Build** | **Deliver** | **Operate** |
+                      | --- | --- | --- |
+                      | Scaffold a service from a [golden-path template](/create) and code it in [OpenShift Dev Spaces](https://devspaces.apps.ocp.box1.org). | Pipelines as Code runs Tekton checks; [Argo CD](https://openshift-gitops-server-openshift-gitops.apps.ocp.box1.org) reconciles `box1-gitops` to the cluster. | Drive scenarios from the [Operations Console](https://operations-console-dev.apps.ocp.box1.org), trace traffic in [Kiali](https://kiali-istio-system.apps.ocp.box1.org), and ask the Intelligent Assistant. |
+                      | [Software Catalog →](/catalog) | [OpenShift Console →](https://console-openshift-console.apps.ocp.box1.org) | [Box1 backlog →](https://github.com/box1-org/box1-docs/issues) |
         - addon:techdocs/expandable-navigation: false
         - addon:techdocs/report-issue
         - addon:techdocs/text-size: false
