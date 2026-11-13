@@ -23,7 +23,9 @@ data:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-topology
         disabled: false
-      - package: ./dynamic-plugins/dist/backstage-community-plugin-tekton
+      # RHDH 1.10 removed the bundled Tekton wrapper (now Community support). Same package
+      # string as the 1.10 catalog index default, so this entry enables that default.
+      - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-tekton@sha256:a26ed788824fbd29e65b02f956dad8f35275a8ccd1110b23fc17957104d38a01
         disabled: false
       - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-argocd:bs_1.45.3__2.4.3!backstage-community-plugin-argocd
         disabled: false
@@ -31,7 +33,7 @@ data:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
         disabled: false
-      # Developer Lightspeed for RHDH 1.9 (Developer Preview). Sidecars: backstage.yaml, lightspeed.yaml.
+      # Developer Lightspeed (Developer Preview; 1.9-era pins kept on 1.10, Operator lightspeed flavour disabled). Sidecars: backstage.yaml, lightspeed.yaml.
       - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-lightspeed:bs_1.45.3__1.2.3!red-hat-developer-hub-backstage-plugin-lightspeed
         disabled: false
         pluginConfig:

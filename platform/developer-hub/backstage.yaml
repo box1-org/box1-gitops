@@ -4,6 +4,13 @@ metadata:
   name: developer-hub
   namespace: rhdh
 spec:
+  # RHDH 1.10 Operator enables a lightspeed flavour by default. It adds its own
+  # lightspeed-core and init-rag-data containers and registry.access lightspeed
+  # plugins, which collide with the Box1 Lightspeed sidecars below. Keep it off
+  # until the 2.1 Intelligent Assistant migration (box1-docs#169).
+  flavours:
+    - name: lightspeed
+      enabled: false
   application:
     appConfig:
       mountPath: /opt/app-root/src
