@@ -1,0 +1,21 @@
+# Pipelines as Code for the GitOps target. Service repositories get their
+# Repository CR and project webhook from the registrar (registrar.yaml).
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: workloads-proof
+  namespace: box1-gl-ci
+spec:
+  url: https://gitlab.apps.ocp.box1.org/box1-gl-gitops/workloads-proof
+  concurrency_limit: 1
+  git_provider:
+    type: gitlab
+    url: https://gitlab.apps.ocp.box1.org
+    secret:
+      name: gitlab-pac
+      key: provider.token
+    webhook_secret:
+      name: gitlab-pac
+      key: webhook.secret
+  settings:
+    pipelinerun_provenance: default_branch

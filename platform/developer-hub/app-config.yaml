@@ -86,6 +86,12 @@ data:
               clientId: ${GITHUB_APP_CLIENT_ID}
               clientSecret: ${GITHUB_APP_CLIENT_SECRET}
               privateKey: ${GITHUB_APP_PRIVATE_KEY}
+      # GitLab CE (platform/gitlab). rhdh-bot token, written by the gitlab
+      # bootstrap Job into developer-hub-gitlab-secrets.
+      gitlab:
+        - host: gitlab.apps.ocp.box1.org
+          apiBaseUrl: https://gitlab.apps.ocp.box1.org/api/v4
+          token: ${GITLAB_TOKEN}
     kubernetes:
       serviceLocatorMethod:
         type: multiTenant
