@@ -23,8 +23,11 @@ OpenShift 5.0 release candidate is **not** established as supported.
   `rhdh-plugin-export-overlays` `bs_1.54.9__*` artifacts. Sign-in providers
   (OIDC, GitHub) are now explicit dynamic plugins.
 - **Frontend:** the New Frontend System is the default. Entity tabs are
-  discovered from the plugin packages. The home page uses the `homepage` plugin
-  with `app.extensions`. The Box1 Operations banner has no 2.1 widget yet.
+  discovered from the plugin packages. The home page uses the `homepage` plugin.
+  `homepage.defaultWidgets` sets the cards and their order, and the read-only
+  `home-page-layout` passes the banner Markdown to the Box1 Operations banner
+  widget (`box1-org/box1-templates` `plugins/box1-home-banner`, installed by
+  digest).
 - **Intelligent Assistant** (formerly Developer Lightspeed) comes from the
   Operator flavour; see below.
 - **Extensions UI** plugin installation is retired; see below.
