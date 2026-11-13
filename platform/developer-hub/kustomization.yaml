@@ -7,8 +7,8 @@ resources:
   - branding.yaml
   - dynamic-plugins.yaml
   - lightspeed.yaml
-  - extensions-seed.yaml
   - dynamic-plugins-pvc.yaml
   - kubernetes-access.yaml
+  - networkpolicy.yaml
   - onboarding/access.yaml
   - backstage.yaml

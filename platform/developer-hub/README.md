@@ -7,7 +7,33 @@ Neither child has automated sync. The existing root Application reads
 There is deliberately no recursive directory source or shared Kustomization that
 installs the Operator and the Backstage resource together.
 
-## Compatibility checked on 2026-10-24
+## Current release: RHDH 2.1 (2026-11-12)
+
+The Subscription follows `redhat-operators` / `fast-2.1` with manual InstallPlan
+approval (box1-org/box1-docs#169). The path was 1.9.7 → 1.10.7 → 2.1.0, because
+the 2.1 Operator requires the previous minor version. The original
+`redhat-operators-v422` snapshot catalog stopped at 1.9.7. Running RHDH on the
+OpenShift 5.0 release candidate is **not** established as supported.
+
+2.1 changes reflected in this directory:
+
+- **Plugins:** every bundled `./dynamic-plugins/dist/...` wrapper is gone.
+  Supported plugins use `ref://<name>` from the 2.1 catalog index. Community
+  plugins (Tekton, Argo CD, GitHub pull requests, MCP) use
+  `rhdh-plugin-export-overlays` `bs_1.54.9__*` artifacts. Sign-in providers
+  (OIDC, GitHub) are now explicit dynamic plugins.
+- **Frontend:** the New Frontend System is the default. Entity tabs are
+  discovered from the plugin packages. The home page uses the `homepage` plugin
+  with `app.extensions`. The Box1 Operations banner has no 2.1 widget yet.
+- **Intelligent Assistant** (formerly Developer Lightspeed) comes from the
+  Operator flavour; see below.
+- **Extensions UI** plugin installation is retired; see below.
+- **Network policies:** the Operator creates default-deny NetworkPolicies.
+  `networkpolicy.yaml` adds the Box1 flows they don't cover.
+- **Database:** the Operator's local database is PostgreSQL 18, migrated from 15
+  with the Operator's documented dump-and-restore procedure.
+
+## Initial compatibility check (2026-10-24, RHDH 1.9)
 
 Read-only checks against `api.ocp.box1.org` found:
 
@@ -110,29 +136,33 @@ If a secret manager already owns these Secrets, use its provisioning workflow
 instead. Restart the Developer Hub deployment after updating environment-backed
 Secrets so the application reads the new values.
 
-## Developer Lightspeed and MCP (Developer Preview)
+## Intelligent Assistant and MCP
 
-Developer Lightspeed for RHDH 1.9 answers in a chat drawer (and at `/lightspeed`)
-using the in-cluster vLLM model and RHDH's own MCP tools.
+RHDH 2.1 renamed Developer Lightspeed to the Intelligent Assistant. It answers
+in a chat drawer and at `/intelligent-assistant`, using the in-cluster vLLM
+model and RHDH's own MCP tools.
 
 | Piece | Configuration |
 | --- | --- |
-| Plugins | `red-hat-developer-hub-backstage-plugin-lightspeed`/`-backend` `bs_1.45.3__1.2.3`; `backstage-plugin-mcp-actions-backend` `bs_1.45.3__0.1.5`; `software-catalog-mcp-tool` `bs_1.45.3__0.4.1`; `techdocs-mcp-tool` `bs_1.45.3__0.3.2` (`dynamic-plugins.yaml`) |
-| Sidecars | `lightspeed-core` (LCS 0.4.0, port 8080) and `llama-stack` (0.1.4, port 8321) in the developer-hub pod; `init-rag-data` copies the RHDH product-docs vector DB (`backstage.yaml`) |
-| Model | Llama Stack `remote::vllm` → `http://vllm-test-2.vllm.svc.cluster.local:8000/v1`, model `box1-coder` (`lightspeed.yaml`) |
-| Safety shield | **None registered.** The image default Llama Guard shield needs a separate guard model server, so `developer-hub-llama-stack` registers no shield or guard model (lab-only choice). The `inline::llama-guard` safety provider stays configured because the agents provider requires a safety API |
-| MCP | LCS `mcp::backstage` → `http://localhost:7007/api/mcp-actions/v1`; the Lightspeed backend sends `lightspeed.mcpServers[].token` (`MCP_TOKEN`), accepted by `backend.auth.externalAccess` type `static`, subject `mcp-clients` |
-| Data | Feedback and conversation cache on a pod `emptyDir` (lost on restart); transcripts off |
+| Plugins | `intelligent-assistant` / `-backend` from the Operator's default `intelligent-assistant` flavour (`backstage.yaml`); not repeated in `dynamic-plugins.yaml` (RHDHBUGS-3928). `backstage-plugin-mcp-actions-backend` `bs_1.54.9__0.2.1`, `software-catalog-mcp-extras` `0.2.5`, `techdocs-mcp-extras` `0.2.6` (`dynamic-plugins.yaml`) |
+| Sidecar | The flavour's `lightspeed-core` (Lightspeed Core 0.7.3, Llama Stack in library mode, port 8080) |
+| Model | `vllm` provider → `http://vllm-test-2.vllm.svc.cluster.local:8000/v1`, model `box1-coder`. `lightspeed.yaml` holds a user-managed copy of the flavour's `lightspeed-stack.yaml`, mounted over the bundled file, plus the `developer-hub-lightspeed-env` settings. `networkpolicy.yaml` allows the egress. |
+| MCP | The Lightspeed Core `mcp-integration-tools` server → `http://localhost:7007/api/mcp-actions/v1`. The backend sends `intelligent-assistant.mcpServers[].token` (`MCP_TOKEN`), which `backend.auth.externalAccess` accepts as type `static`, subject `mcp-clients`. `backend.actions.pluginSources` lists the `*-mcp-extras` IDs. |
+| Data | Feedback and conversation cache on the sidecar's `emptyDir` (lost on restart) |
 
-Create the token Secret once, before syncing (value never printed or committed):
+Re-copy `lightspeed-stack.yaml` from the Operator's
+`flavours/intelligent-assistant/configmap-files.yaml` on RHDH upgrades, then
+enable the `vllm` provider again.
+
+Create the token Secret once, before syncing (the value is never printed or committed):
 
 ```bash
 oc -n rhdh create secret generic developer-hub-lightspeed-secrets \
   --from-literal=MCP_TOKEN="$(openssl rand -base64 33 | tr -d '\n')"
 ```
 
-Rotate by replacing the Secret and restarting the Hub pod. External MCP clients
-(for example an IDE) can use the same endpoint at
+Rotate the token by replacing the Secret and restarting the Hub pod. External
+MCP clients, such as an IDE, can use the same endpoint at
 `https://developer-hub.apps.ocp.box1.org/api/mcp-actions/v1` with this token.
 The TechDocs tool returns only entities that have published TechDocs.
 
@@ -140,9 +170,8 @@ Limits: vLLM serves one request at a time (`--max-num-seqs 1`) on the shared GPU
 The agentic-operations MCP server is **not** connected; its Keycloak-only auth
 needs a decision first (box1-org/box1-docs#106).
 
-Rollback: remove the five plugin entries, the `lightspeed`/`backend.actions`/
-`backend.csp`/static `externalAccess` keys, the sidecars, init container and
-volumes, and `lightspeed.yaml`, then sync. The Secret can then be deleted.
+To turn the assistant off, set the `intelligent-assistant` flavour to
+`enabled: false` and sync.
 
 ## Staged rollout, only when authorized
 
@@ -184,73 +213,32 @@ objects alone do not provide a dependable OLM/CRD readiness barrier. Do not add
 Pruning is not automatic; do not delete the namespace or database PVC as part of
 a routine upgrade.
 
-## Install plugins through Extensions (lab environment)
+## Plugin cache and Extensions
 
-This setup follows Red Hat's [Extensions installation procedure](https://docs.redhat.com/en/documentation/red_hat_developer_hub/1.9/html/installing_and_viewing_plugins_in_red_hat_developer_hub/extensions-in-rhdh_plugins-in-rhdh#configure-rhdh-to-install-plugins-by-using-extensions_extensions-in-rhdh).
-The feature is Technology Preview and plugin installation through the UI requires
-`NODE_ENV=development`. GitHub authentication remains explicitly configured with
-`auth.environment=production`; guest access is not enabled.
+All plugins are declared in `dynamic-plugins.yaml`. Plugin installation through
+the Extensions UI was retired for RHDH 2.1 (box1-docs#169). It needed
+`NODE_ENV=development` and a Box1 adapter around the 1.x Python installer,
+which 2.1 replaced with a Node CLI. The Extensions catalog stays available for
+browsing. Plugins previously chosen in the UI were moved into git, except
+`immobiliarelabs` GitLab, which has no 2.1 build.
 
-`dynamic-plugins-root` is a dedicated 5 GiB ReadWriteOnce PVC on `lvms-vg1`.
-The Backstage deployment patch clears the default ephemeral volume source and
-mounts this claim in both the installer and application containers. The claim is
-in the same sync wave as Backstage because `WaitForFirstConsumer` needs the Pod
-to schedule before binding the volume. It is excluded from Argo CD pruning.
-The Deployment uses `Recreate` so only one Pod writes this shared cache; restarts
-and upgrades cause a short outage. The PostgreSQL PVC is independent.
+`dynamic-plugins-root` is a dedicated 5 GiB ReadWriteOnce PVC on `lvms-vg1`. It
+caches downloaded plugins across restarts. The Deployment patch replaces the
+default ephemeral volume with it, and the Deployment uses `Recreate` so only one
+Pod writes the cache at a time; restarts cause a short outage. The claim is
+excluded from Argo CD pruning. The pre-2.1
+`dynamic-plugins.extensions.yaml` left on the PVC is no longer read.
 
-The installer copies `developer-hub-extensions-seed` into the PVC **only if**
-`dynamic-plugins.extensions.yaml` is absent. This automates the documentation's
-manual `oc cp` bootstrap before the installer loads the file, including on a
-fresh installation. The seed enables GitHub discovery and the Extensions UI and
-backend; existing frontend wiring is inherited from the bundled defaults.
-The backend writes future UI changes to
-`/opt/app-root/src/dynamic-plugins-root/dynamic-plugins.extensions.yaml`; the
-installer sees that same file at `/dynamic-plugins-root/dynamic-plugins.extensions.yaml`.
-
-The 1.9.7 installer rejects duplicate plugin entries between included files,
-including overrides of plugins already present in its defaults. The startup
-adapter therefore stages the writable file's plugin entries as the main plugin
-list and includes the defaults once. It runs the image's installer from its
-original working directory so npm retains bundled dependencies. Only the
-input-config assignment is redirected in memory to the staged file; the image
-is unchanged. The adapter fails clearly if that assignment changes in a future
-image, so revalidate it with Operator upgrades. This preserves default frontend
-wiring and supports enabling/disabling bundled plugins.
-
-Git manages the bootstrap, environment, base app configuration, and storage.
-After bootstrap, the PVC file owns UI-managed plugin choices. Editing the seed
-ConfigMap does **not** overwrite an existing file or apply new plugin choices.
-Back up this file with the PVC and avoid putting plaintext credentials in plugin
-configuration. Continue to use environment variables backed by Secrets.
-The main `dynamic-plugins.yaml` requires the GitHub scaffolder backend for the
-Quarkus golden path. Other plugin choices come from the UI file; the installer
-merges entries by package name and gives platform requirements precedence. Enabling/disabling discovery plugins through the UI can affect
-GitHub catalog imports and sign-in identity provisioning.
-
-To use it:
-
-1. Sign in with GitHub and open **Administration > Extensions**.
-2. Select a plugin and choose **Install**, or use its Actions to configure or
-   enable/disable it. Save the configuration.
-3. Restart the application with
-   `oc -n rhdh rollout restart deployment/backstage-developer-hub`.
-4. Wait for readiness and verify the plugin on the Installed tab. Plugin changes
-   are loaded at startup; saving in the UI does not hot-reload the backend.
-
-RBAC is currently disabled. If RBAC is enabled later, grant the appropriate
-administrators the Extensions **Create** and **Read** permissions as described in
-section 6.5.1 of the linked procedure.
+RBAC is currently disabled.
 
 ## Manifest validation
 
-The GitHub catalog plugin package in the 1.9.7 image is
-`./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-github-dynamic`.
-Omitting `-dynamic` causes the plugin init container to fail with `npm pack`
-ENOENT because that alternate directory does not exist. The installer logs list
-the correct package among the default disabled plugins. After publishing a
-correction, sync the ConfigMap through the `developer-hub` Argo CD application
-and verify that its replacement Pod completes `install-dynamic-plugins`.
+Each `ref://<name>` in `dynamic-plugins.yaml` must exist in the 2.1 catalog
+index (`registry.access.redhat.com/rhdh/plugin-catalog-index:2.1`,
+`index.json`). Community `oci://` artifacts must exist in the
+`rhdh-plugin-export-overlays` registry. After publishing a correction, sync
+the ConfigMap through the `developer-hub` Argo CD application and verify that
+the replacement Pod completes `install-dynamic-plugins`.
 
 The GitHub discovery provider key is `providerId` to match the bundled plugin's
 default configuration. A different key adds another provider rather than
@@ -297,8 +285,7 @@ Primary references:
 Phase 4 registers `box1-org/box1-templates/catalog-info.yaml` and its
 `quarkus-rest-service` template. Open **Create → Create Quarkus Service**.
 The required GitHub scaffolder backend module is managed in
-`dynamic-plugins.yaml`; the installer deduplicates platform and UI entries by
-package, with platform settings taking precedence. The Developer Hub App now
+`dynamic-plugins.yaml`. The Developer Hub App now
 has Administration, Contents, and Pull requests write permissions and an
 all-repositories installation. See [the golden-path guide](../pipelines/GOLDEN-PATH.md).
 
@@ -351,9 +338,8 @@ then restart Hub. TLS verification stays enabled; `NODE_EXTRA_CA_CERTS` adds the
 cluster ingress CA for the Argo HTTPS route. Secret values and CA material are
 provisioned from the live cluster and never committed to Git.
 
-Platform plugin requirements are pinned in `dynamic-plugins.yaml` and override
-incomplete UI connection placeholders for the same packages at installation.
-The existing OCI Argo CD 1.0.2 backend and 2.4.3 frontend are retained.
+Platform plugin requirements are pinned in `dynamic-plugins.yaml`. On RHDH 2.1
+the Argo CD frontend is `bs_1.54.9__3.1.3` and the backend `bs_1.54.9__1.7.2`.
 
 All components use `backstage.io/kubernetes-id=<entity-name>` on workloads,
 Pod templates, PipelineRuns and Argo CD Applications. Catalog annotations use
@@ -403,9 +389,9 @@ and [Quarkus OpenAPI and Swagger UI](https://quarkus.io/version/3.40/guides/open
 
 ## Workload topology
 
-The platform requires the bundled Topology plugin (2.9.4 in the 1.9.7 image).
-Its Git-managed entry overrides the disabled Extensions choice and inherits the
-image's `entity.page.topology/cards` mount point. Open a service's **Topology**
+The platform enables the supported Topology plugin with
+`ref://backstage-community-plugin-topology` from the 2.1 catalog index. NFS
+discovers its entity tab from the package. Open a service's **Topology**
 tab to view workloads and Pods. The existing Kubernetes connection, entity-ID
 labels, Routes/Tekton custom resource configuration and reader permissions are
 reused; no broader credentials are needed.

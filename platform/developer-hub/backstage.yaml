@@ -4,13 +4,12 @@ metadata:
   name: developer-hub
   namespace: rhdh
 spec:
-  # RHDH 1.10 Operator enables a lightspeed flavour by default. It adds its own
-  # lightspeed-core and init-rag-data containers and registry.access lightspeed
-  # plugins, which collide with the Box1 Lightspeed sidecars below. Keep it off
-  # until the 2.1 Intelligent Assistant migration (box1-docs#169).
+  # RHDH 2.1 Intelligent Assistant flavour (default-on; listed for clarity). It
+  # adds the IA plugins and the lightspeed-core sidecar, configured for vLLM by
+  # lightspeed.yaml. The 1.10 flavour name 'lightspeed' no longer exists.
   flavours:
-    - name: lightspeed
-      enabled: false
+    - name: intelligent-assistant
+      enabled: true
   application:
     appConfig:
       mountPath: /opt/app-root/src
@@ -19,14 +18,15 @@ spec:
     dynamicPluginsConfigMapName: developer-hub-dynamic-plugins
     extraEnvs:
       envs:
-        # Extensions installation is supported only with a development runtime.
-        - name: NODE_ENV
-          value: development
         - name: NODE_EXTRA_CA_CERTS
           value: /platform/trust/ca-bundle.crt
       configMaps:
         # BOX1_ICON_LOGO data URI for the home banner.
         - name: developer-hub-branding
+        # vLLM endpoint settings for the Intelligent Assistant sidecar.
+        - name: developer-hub-lightspeed-env
+          containers:
+            - lightspeed-core
       secrets:
         - name: developer-hub-secrets
         - name: developer-hub-platform-secrets
@@ -35,6 +35,13 @@ spec:
         - name: developer-hub-gitlab-secrets
     extraFiles:
       mountPath: /opt/app-root/src
+      configMaps:
+        # Replaces the flavour's bundled lightspeed-stack.yaml (vllm enabled).
+        - name: developer-hub-lightspeed-stack
+          key: lightspeed-stack.yaml
+          mountPath: /app-root
+          containers:
+            - lightspeed-core
     route:
       enabled: true
       host: developer-hub.apps.ocp.box1.org
@@ -42,7 +49,7 @@ spec:
     patch:
       spec:
         replicas: 1
-        # One writer to the shared plugin cache and UI configuration file.
+        # One writer to the shared dynamic plugin cache.
         strategy:
           $patch: replace
           type: Recreate
@@ -59,25 +66,9 @@ spec:
                 name: dynamic-plugins-root
                 persistentVolumeClaim:
                   claimName: dynamic-plugins-root
-              - name: extensions-bootstrap
-                configMap:
-                  name: developer-hub-extensions-seed
               - name: platform-trust
                 configMap:
                   name: developer-hub-platform-trust
-              # Developer Lightspeed sidecars (lightspeed.yaml)
-              - name: lightspeed-stack
-                configMap:
-                  name: developer-hub-lightspeed-stack
-              - name: llama-stack-run
-                configMap:
-                  name: developer-hub-llama-stack
-              - name: lightspeed-shared
-                emptyDir:
-                  sizeLimit: 1Gi
-              - name: lightspeed-rag
-                emptyDir:
-                  sizeLimit: 4Gi
             containers:
               - name: backstage-backend
                 env:
@@ -90,60 +81,6 @@ spec:
                   - name: platform-trust
                     mountPath: /platform/trust
                     readOnly: true
-              - name: llama-stack
-                image: quay.io/redhat-ai-dev/llama-stack@sha256:3dab249bf3af8ccbbb2fc4b1117806ecd773cd275ce375ee557f205de889e341  # 0.1.4
-                envFrom:
-                  - configMapRef:
-                      name: developer-hub-llama-stack-env
-                resources:
-                  requests: {cpu: 250m, memory: 1Gi}
-                  limits: {cpu: "2", memory: 3Gi}
-                volumeMounts:
-                  - name: lightspeed-shared
-                    mountPath: /app-root/.llama
-                  - name: lightspeed-rag
-                    mountPath: /rag-content
-                  - name: llama-stack-run
-                    mountPath: /app-root/run.yaml
-                    subPath: run.yaml
-                    readOnly: true
-              - name: lightspeed-core
-                image: quay.io/lightspeed-core/lightspeed-stack@sha256:d17f7add7d7357f55d0555433a7b33b9227bc5c2604782126b03e845c24b4652  # 0.4.0
-                resources:
-                  requests: {cpu: 100m, memory: 256Mi}
-                  limits: {cpu: "1", memory: 1Gi}
-                volumeMounts:
-                  - name: lightspeed-stack
-                    mountPath: /app-root/lightspeed-stack.yaml
-                    subPath: lightspeed-stack.yaml
-                    readOnly: true
-                  - name: lightspeed-shared
-                    mountPath: /tmp/data/feedback
-                  - name: lightspeed-shared
-                    mountPath: /tmp/data/transcripts
-                  - name: lightspeed-shared
-                    mountPath: /tmp/data/conversations
-            initContainers:
-              - name: install-dynamic-plugins
-                # Runs the Extensions adapter around the image's installer. Registry auth
-                # comes from the Operator's dynamic-plugins-registry-auth Secret mount.
-                command:
-                  - python3
-                  - /extensions-bootstrap/install-extensions.py
-                volumeMounts:
-                  - name: extensions-bootstrap
-                    mountPath: /extensions-bootstrap
-                    readOnly: true
-              # RHDH product docs vector DB and embedding model for Lightspeed RAG.
-              - name: init-rag-data
-                image: quay.io/redhat-ai-dev/rag-content@sha256:e355c6d494317f4f418792bce4989e8a7d8bdc8d86468c7bfd5cba2faa1c03ba  # release-1.9-lcs
-                command:
-                  - sh
-                  - -c
-                  - mkdir -p /rag-content/vector_db && cp -r /rag/vector_db/rhdh_product_docs /rag-content/vector_db/ && cp -r /rag/embeddings_model /rag-content/
-                volumeMounts:
-                  - name: lightspeed-rag
-                    mountPath: /rag-content
   database:
     enableLocalDb: true
     authSecretName: developer-hub-db

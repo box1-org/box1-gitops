@@ -1,0 +1,25 @@
+# RHDH 2.1 Operator deploys default-deny NetworkPolicies for the Hub pod with
+# allow rules for DNS, 443/6443 egress, PostgreSQL, the router and metrics.
+# Box1-specific flows outside those rules are added here (box1-docs#169).
+# Hub egress on 443 already covers Keycloak, GitHub, Argo CD, Forgejo/GitLab
+# and registry.apps Routes; 6443 covers the Kubernetes API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: developer-hub-allow-vllm-egress
+  namespace: rhdh
+spec:
+  # Intelligent Assistant: lightspeed-core sidecar -> in-cluster vLLM (box1-coder).
+  podSelector:
+    matchLabels:
+      rhdh.redhat.com/app: backstage-developer-hub
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vllm
+      ports:
+        - port: 8000
+          protocol: TCP
