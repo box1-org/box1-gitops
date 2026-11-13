@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# GitLab CE proof (box1-docs#164 re-run, gaps in #167). Omnibus GitLab in one
+# pod (about 4 GiB), an idempotent bootstrap, and the GitLab CI/CD lane (ci/).
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: box1-gitlab
+    includeSelectors: false
+resources:
+  - namespaces.yaml
+  - rbac.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - route.yaml
+  - bootstrap-jobs.yaml
+  - ci/repository.yaml
+  - ci/rbac.yaml
+  - ci/registrar.yaml
+  - ci/tasks.yaml
+  - ci/argocd.yaml
+  - mirror/cronjob.yaml
+configMapGenerator:
+  - name: gitlab-params
+    namespace: gitlab
+    envs: [params.env]
+  - name: gitlab-omnibus
+    namespace: gitlab
+    files: [gitlab.rb]
+  - name: gitlab-scripts
+    namespace: gitlab
+    files: [seed-token.sh]
+  - name: gitlab-bootstrap
+    namespace: gitlab
+    files: [bootstrap/bootstrap.py]
+  - name: gitlab-workloads-seed
+    namespace: gitlab
+    files: [seed/.tekton__validate.yaml, seed/apps__README.md]
+  - name: gl-ci-scripts
+    namespace: box1-gl-ci
+    files: [ci/validate.py, ci/promote.py]
+  - name: gl-registrar
+    namespace: box1-gl-ci
+    files: [ci/registrar.py]
+  - name: github-mirror
+    namespace: gitlab
+    files: [mirror/mirror.py]
+generatorOptions:
+  disableNameSuffixHash: true
+replacements:
+  - source: {kind: ConfigMap, name: gitlab-params, fieldPath: data.GITLAB_HOST}
+    targets:
+      - select: {kind: Route, name: gitlab}
+        fieldPaths: [spec.host]

@@ -24,6 +24,8 @@ spec:
         - name: developer-hub-secrets
         - name: developer-hub-platform-secrets
         - name: developer-hub-lightspeed-secrets
+        # Written by the gitlab bootstrap Job (platform/gitlab).
+        - name: developer-hub-gitlab-secrets
     extraFiles:
       mountPath: /opt/app-root/src
     route:
