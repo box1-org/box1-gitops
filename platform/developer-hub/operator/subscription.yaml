@@ -4,9 +4,10 @@ metadata:
   name: rhdh
   namespace: rhdh-operator
 spec:
-  channel: fast-1.9
+  # RHDH 2.1 requires 1.10.z first (box1-docs#169). The redhat-operators-v422
+  # snapshot catalog stops at 1.9.7; redhat-operators carries fast-1.10 and fast-2.1.
+  channel: fast-1.10
   installPlanApproval: Manual
   name: rhdh
-  source: redhat-operators-v422
+  source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: rhdh-operator.v1.9.7

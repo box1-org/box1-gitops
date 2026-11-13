@@ -6,7 +6,7 @@ metadata:
   namespace: rhdh
 data:
   install-extensions.py: |
-    """Stage UI overrides at the main-config level for the RHDH 1.9 installer."""
+    """Stage UI overrides at the main-config level for the RHDH 1.9/1.10 installer."""
     import os
     import shutil
     import sys
@@ -28,12 +28,21 @@ data:
     if not isinstance(extensions, dict) or not isinstance(extensions.get("plugins"), list):
         raise ValueError("Extensions configuration must contain a plugins list")
 
-    # 1.9 rejects overrides duplicated between includes at the same level.
+    # 1.9/1.10 reject overrides duplicated between includes at the same level.
     # Promote the writable file's plugins into the installer's main plugins list.
     includes = [entry for entry in base.get("includes", []) if entry != str(extensions_file)]
     base["includes"] = list(dict.fromkeys(includes + extensions.get("includes", [])))
     # Required platform actions override duplicate UI choices; keep all other UI plugins.
-    plugins = {item["package"]: item for item in extensions["plugins"]}
+    # Drop UI entries for bundled wrappers the running image no longer ships
+    # (1.10 removed Tekton's); the installer would otherwise fail on the path.
+    ui_plugins = []
+    for item in extensions["plugins"]:
+        package = item.get("package", "")
+        if package.startswith("./dynamic-plugins/dist/") and not (app_root / package).exists():
+            print(f"Extensions adapter: skipping {package}; not in this image", flush=True)
+            continue
+        ui_plugins.append(item)
+    plugins = {item["package"]: item for item in ui_plugins}
     plugins.update({item["package"]: item for item in base.get("plugins", [])})
     base["plugins"] = list(plugins.values())
     staging = Path(tempfile.mkdtemp(prefix="extensions-installer-"))
